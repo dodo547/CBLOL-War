@@ -1504,6 +1504,134 @@
   color: #f0e6d2;
 }
 
+/* Box de Telemetria e Reconhecimento (Radar Tático) */
+.scouting-telemetry-box {
+  background: linear-gradient(135deg, rgba(8, 28, 44, 0.95) 0%, rgba(3, 14, 26, 0.95) 100%);
+  border: 1px solid rgba(10, 200, 185, 0.45);
+  box-shadow: 0 0 16px rgba(10, 200, 185, 0.15), inset 0 0 10px rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.scouting-telemetry-box::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--lol-blue-glow);
+  box-shadow: 0 0 8px var(--lol-blue-glow);
+}
+
+.scouting-telemetry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(10, 200, 185, 0.2);
+  padding-bottom: 6px;
+}
+
+.scouting-radar-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--lol-blue-glow);
+  text-transform: uppercase;
+}
+
+.scouting-live-signal {
+  font-size: 10px;
+  font-weight: 700;
+  color: #00ff73;
+  letter-spacing: 0.5px;
+  animation: pulse-signal 1.8s infinite;
+}
+
+@keyframes pulse-signal {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.scouting-intel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .scouting-intel-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+.scouting-intel-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.scouting-label {
+  color: #c8aa6e;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.scouting-value {
+  color: #e6f0fa;
+}
+
+/* Barra de Buffs Ativos no Scoreboard */
+.team-active-buffs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  min-height: 18px;
+}
+
+.active-buff-pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  animation: buff-fade-in 0.3s ease-out;
+}
+
+@keyframes buff-fade-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.active-buff-pill.blue {
+  background: rgba(10, 200, 185, 0.2);
+  border: 1px solid rgba(10, 200, 185, 0.5);
+  color: #3cdbd3;
+}
+
+.active-buff-pill.red {
+  background: rgba(232, 64, 87, 0.2);
+  border: 1px solid rgba(232, 64, 87, 0.5);
+  color: #ff7688;
+}
+
 @media (max-width: 768px) {
   .decision-status-row {
     grid-template-columns: 1fr;

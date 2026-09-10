@@ -1855,6 +1855,63 @@ export const CHAMPIONS = [
   },
 ];
 
+// Identificação precisa de perfis competitivos (Dano Mágico AP, Suporte Tanque e Cura/Sustain)
+export const AP_CHAMPION_IDS = new Set([
+  "Gwen", "Mordekaiser", "Rumble", "Singed", "Gragas", "Kennen", "Teemo", "Kayle",
+  "Akali", "Katarina", "LeBlanc", "Ekko", "Fizz", "Diana", "Kassadin", "Evelynn", "Nidalee",
+  "Ahri", "Anivia", "Annie", "AurelionSol", "Azir", "Cassiopeia", "Hwei", "Karma", "Karthus",
+  "Lissandra", "Lux", "Malzahar", "Neeko", "Orianna", "Ryze", "Swain", "Syndra", "Taliyah",
+  "TwistedFate", "Veigar", "Velkoz", "Vex", "Viktor", "Vladimir", "Xerath", "Ziggs", "Zoe",
+  "Brand", "Zyra", "Heimerdinger", "Fiddlesticks", "Lillia", "Shyvana", "Elise",
+  "Lulu", "Nami", "Janna", "Soraka", "Sona", "Yuumi", "Milio", "Seraphine", "Morgana", "Renata"
+]);
+
+export const TANK_SUPPORT_IDS = new Set([
+  "Nautilus", "Leona", "Braum", "Alistar", "Thresh", "Blitzcrank", "Rakan", "TahmKench", "Taric", "Rell"
+]);
+
+export const HIGH_SUSTAIN_IDS = new Set([
+  "Aatrox", "Fiora", "Warwick", "Vladimir", "Soraka", "Briar", "Irelia", "Swain", "Sylas", "DrMundo", "Zac", "Volibear", "Yuumi", "Olaf", "Illaoi"
+]);
+
+// Inicializa os metadados táticos de cada campeão
+CHAMPIONS.forEach(c => {
+  if (c.class === "Tank") {
+    c.damageType = "Tank";
+    c.subclass = (c.role === "support" || TANK_SUPPORT_IDS.has(c.id)) ? "TankSupport" : "Tank";
+  } else if (c.role === "support" || c.class === "Support") {
+    if (TANK_SUPPORT_IDS.has(c.id)) {
+      c.damageType = "Tank";
+      c.subclass = "TankSupport";
+    } else if (c.id === "Senna") {
+      c.damageType = "AD";
+      c.subclass = "Marksman";
+    } else if (c.id === "Pyke") {
+      c.damageType = "AD";
+      c.subclass = "ADAssassin";
+    } else {
+      c.damageType = "AP";
+      c.subclass = "Enchanter";
+    }
+  } else if (c.class === "Marksman") {
+    c.damageType = (c.id === "Corki") ? "AP" : "AD";
+    c.subclass = "Marksman";
+  } else if (c.class === "Mage") {
+    c.damageType = "AP";
+    c.subclass = "Mage";
+  } else if (c.class === "Assassin") {
+    c.damageType = AP_CHAMPION_IDS.has(c.id) ? "AP" : "AD";
+    c.subclass = c.damageType === "AP" ? "APAssassin" : "ADAssassin";
+  } else if (c.class === "Fighter") {
+    c.damageType = AP_CHAMPION_IDS.has(c.id) ? "AP" : "AD";
+    c.subclass = c.damageType === "AP" ? "APFighter" : "ADFighter";
+  } else {
+    c.damageType = AP_CHAMPION_IDS.has(c.id) ? "AP" : "AD";
+    c.subclass = c.class || "ADFighter";
+  }
+  c.hasSustain = HIGH_SUSTAIN_IDS.has(c.id);
+});
+
 // Helper para buscar campeão por ID ou Nome (com suporte a aliases como Wukong -> MonkeyKing)
 export function getChampionById(id) {
   if (!id) return null;

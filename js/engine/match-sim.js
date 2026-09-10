@@ -68,6 +68,12 @@ export class MatchSimulator {
     this.blueBaronUntil = 0;
     this.redBaronUntil = 0;
 
+    // Buffs Ativos / Efeitos Táticos com impacto matemático
+    this.activeBuffs = {
+      blue: [],
+      red: []
+    };
+
     // Cronômetros de Objetivos Oficiais
     this.nextDragonAt = 300; // 05:00
     this.nextBaronAt = 1200; // 20:00
@@ -137,6 +143,36 @@ export class MatchSimulator {
     if (this.blueTeam.stats.push < 55) {
       this.redTeam.stats.push += draftPenalty;
     }
+  }
+
+  _applyTeamBuff(side, buff) {
+    if (!this.activeBuffs) this.activeBuffs = { blue: [], red: [] };
+    if (!this.activeBuffs[side]) this.activeBuffs[side] = [];
+    this.activeBuffs[side] = this.activeBuffs[side].filter(b => b.id !== buff.id);
+    const expiresAt = buff.duration ? this.gameSeconds + buff.duration : null;
+    this.activeBuffs[side].push({
+      ...buff,
+      expiresAt
+    });
+  }
+
+  _getActiveBuffs(side) {
+    if (!this.activeBuffs || !this.activeBuffs[side]) return [];
+    this.activeBuffs[side] = this.activeBuffs[side].filter(b => !b.expiresAt || b.expiresAt > this.gameSeconds);
+    return this.activeBuffs[side];
+  }
+
+  _getTeamBuffModifiers(side) {
+    const buffs = this._getActiveBuffs(side);
+    let bonusCombat = 0;
+    let bonusSiege = 0;
+    let bonusDefense = 0;
+    for (const b of buffs) {
+      if (b.bonusCombat) bonusCombat += b.bonusCombat;
+      if (b.bonusSiege) bonusSiege += b.bonusSiege;
+      if (b.bonusDefense) bonusDefense += b.bonusDefense;
+    }
+    return { bonusCombat, bonusSiege, bonusDefense };
   }
 
   _initStructures(side) {
@@ -469,7 +505,10 @@ export class MatchSimulator {
         itemThresholds.forEach((threshold, idx) => {
           if ((member.goldEarned || 500) >= threshold && member.items.length <= idx) {
             const champ = getChampionById(member.id);
-            const item = getRecommendedItemForChampion(champ, idx);
+            const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
+            const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
+            const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
+            const item = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
             if (item) {
               member.items.push(item);
 
@@ -680,7 +719,7 @@ export class MatchSimulator {
     // 2. Decide se ocorre um Confronto Decisivo / Abate ou Troca de Rota
     const canFight = this.combatCooldown <= 0;
     const isUnderPressure = Math.abs(this.lanePressure) >= 30;
-    const fightChance = isUnderPressure ? 0.38 : 0.22;
+    const fightChance = isUnderPressure ? 0.22 : 0.12;
     const rollForFight = canFight && (Math.random() < fightChance);
 
     if (rollForFight) {
@@ -731,15 +770,14 @@ export class MatchSimulator {
     // 3. Campeões Vivos: Superioridade numérica imediata (crítico em lutas de objetivos)
     const blueAlive = Object.values(this.blueRosterState).filter(c => c.alive).length;
     const redAlive = Object.values(this.redRosterState).filter(c => c.alive).length;
-    const aliveDiff = blueAlive - redAlive;
-    const aliveModifier = Math.min(20, Math.max(-20, aliveDiff * 8));
+    const aliveModifier = (blueAlive - redAlive) * 12;
 
-    // 4. Se a jogada exige um papel vivo específico (ex: Caçador para roubo no Smite)
+    // 4. Se a jogada exige função específica viva (ex: jungle no smite)
     let rolePenalty = 0;
     if (context.requireRole) {
-      const roleChamp = this.blueRosterState[context.requireRole];
-      if (!roleChamp || !roleChamp.alive) {
-        rolePenalty = -25;
+      const bChamp = this.blueRosterState[context.requireRole];
+      if (!bChamp || !bChamp.alive) {
+        rolePenalty = -45;
       }
     }
 
@@ -755,6 +793,11 @@ export class MatchSimulator {
     // 7. Atributos da Organização (diferença real de composição e upgrades)
     const statModifier = Math.min(10, Math.max(-10, Math.round(statDiff * 0.35)));
 
+    // 8. Buffs Ativos e Efeitos Táticos
+    const bBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers("blue") : { bonusCombat: 0 };
+    const rBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers("red") : { bonusCombat: 0 };
+    const buffModifier = Math.min(15, Math.max(-15, Math.round((bBuffs.bonusCombat || 0) - (rBuffs.bonusCombat || 0))));
+
     // Atenuação de penalidades cumulativas quando em desvantagem (Mecânica Anti-Snowball):
     // No League competitivo, opções de Macro Seguro (Cross-map, visão defensiva, ceder objetivo)
     // funcionam de maneira consistente mesmo quando o time está atrás.
@@ -767,7 +810,7 @@ export class MatchSimulator {
     // Dificuldade progressiva justa: times em fases avançadas leem jogadas melhor
     const roundPenalty = [0, -2, -3, -5][this.roundIndex] || 0;
 
-    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + rolePenalty + roundPenalty;
+    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + buffModifier + rolePenalty + roundPenalty;
 
     // Pisos adaptados por fase (preserva possibilidade de virada, mas exige precisão no topo)
     const simpleFloors = [68, 65, 62, 58];
@@ -807,6 +850,11 @@ export class MatchSimulator {
         badge: "EARLY GAME • NÍVEL 1",
         title: "⚔️ ESTRATÉGIA DE NÍVEL 1 (INÍCIO DE PARTIDA)",
         subtitle: "As tropas chegaram às rotas. Escolha a postura inicial da sua equipe:",
+        scouting: {
+          intelTag: "📡 RADAR DE VISÃO NÍVEL 1",
+          enemyAction: "Adversários agrupando na entrada da bot lane para posicionar sentinelas de cobertura.",
+          recommendation: "Opção defensiva garante farm 100% limpo; emboscada no rio pega a rotação desprevenida."
+        },
         options: [
           {
             id: "defensive_vision",
@@ -868,6 +916,11 @@ export class MatchSimulator {
         badge: "CLÍMAX • DRAGÃO ANCIÃO",
         title: "🔥 O DRAGÃO ANCIÃO SURGIU NO RIFT (DECISIVO)!",
         subtitle: "O monstro mais letal do League concede Execução Instantânea. Qual a ordem final?",
+        scouting: {
+          intelTag: "📡 CLÍMAX DO RIFT • RECONHECIMENTO",
+          enemyAction: "5 campeões inimigos agrupados no covil tentando forçar o Dragão Ancião a qualquer custo.",
+          recommendation: "Teamfight decisiva define a série! Se estiverem sob pouca vida, a luta direta garante a vitória."
+        },
         options: [
           {
             id: "turtle_nexus",
@@ -930,6 +983,15 @@ export class MatchSimulator {
         badge: "CONFRONTO LENDÁRIO",
         title: "👑 O BARÃO NA'SHOR EMERGIU NO RIFT!",
         subtitle: "O bônus de Mão do Barão fortalece tropas e destrói bases. Como o time vai agir?",
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE BARÃO NA'SHOR",
+          enemyAction: this.lanePressure >= 0
+            ? "CBLOL mantendo sentinelas defensivas e tentando atrair seu time para uma armadilha no covil."
+            : "CBLOL iniciando o Barão em bloco com dano concentrado no monstro.",
+          recommendation: this.lanePressure >= 20
+            ? "O Rush de Split Push quebra a base rival enquanto eles perdem tempo no covil!"
+            : "Teamfight coordenada ou controle metódico de visão evitam que o rival feche a partida."
+        },
         options: [
           {
             id: "vision_siege",
@@ -993,6 +1055,15 @@ export class MatchSimulator {
         badge: "OBJETIVO NEUTRO",
         title: `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`,
         subtitle: `Ambas as equipes se aproximam pelo rio. Qual a decisão do seu time?`,
+        scouting: {
+          intelTag: "📡 RADAR DE OBJETIVO NEUTRO",
+          enemyAction: this.lanePressure >= 0
+            ? "Inimigos contestando visão no rio com desvantagem no avanço de tropas."
+            : "Inimigos já posicionados no covil com sentinelas de controle e prioridade de bot lane.",
+          recommendation: this.lanePressure >= 0
+            ? "Forçar a luta 5v5 aproveita a pressão de rotas a favor da sua equipe!"
+            : "Ceder o dragão para punir placas de torre do outro lado do mapa rende ouro garantido sem mortes."
+        },
         options: [
           {
             id: "cross_trade",
@@ -1054,6 +1125,11 @@ export class MatchSimulator {
         badge: "PRESSÃO DE EARLY GAME",
         title: "👁️ O ARAUTO DO VALE SURGIU NO RIO SUPERIOR!",
         subtitle: "O Olho do Arauto derruba barricadas de torre. Como vamos responder?",
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE EARLY GAME",
+          enemyAction: "Caçador e Top Laner adversários iniciando o Arauto, deixando a bot lane isolada 2v2.",
+          recommendation: "O Dive 4v2 na bot lane pune a ausência do caçador rival e derruba a primeira torre do jogo!"
+        },
         options: [
           {
             id: "vision_control",
@@ -1435,6 +1511,14 @@ export class MatchSimulator {
       if (isSuccess) {
         this._awardTeamGold("blue", 100);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._applyTeamBuff("blue", {
+          id: "vision_control",
+          name: "Sentinelas Estratégicas",
+          icon: "🛡️",
+          bonusDefense: 10,
+          bonusCombat: 6,
+          duration: 120
+        });
         this.onEvent({
           type: "skirmish",
           side: "blue",
@@ -1483,14 +1567,21 @@ export class MatchSimulator {
         this.blueScore.dragons++;
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 35);
+        this._applyTeamBuff("blue", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.blueScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.blueScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
 
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0]);
-        if (redAliveRoles.length > 1) this._recordKill("blue", "red", blueAliveRoles[1] || "adc", redAliveRoles[1]);
 
         this.onEvent({
           type: "dragon",
           side: "blue",
-          text: `🐲 VITÓRIA NO COVIL! ${this.blueTeam.name} venceu a teamfight, abateu 2 adversários e garantiu o Dragão ${dType}!`,
+          text: `🐲 VITÓRIA NO COVIL! ${this.blueTeam.name} venceu a teamfight e garantiu o Dragão ${dType}!`,
           time: this._formatTime()
         });
 
@@ -1500,21 +1591,28 @@ export class MatchSimulator {
           probability: prob,
           title: "DRAGÃO CONQUISTADO!",
           subtitle: `Teamfight Vitoriosa (${prob}% chance)`,
-          text: `Seu time forçou a luta no covil com precisão! O Dragão ${dType} foi garantido e 2 campeões do CBLOL foram eliminados!`
+          text: `Seu time forçou a luta no covil com precisão! O Dragão ${dType} foi garantido e o CBLOL recuou com baixas!`
         };
       } else {
         this.redScore.dragons++;
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 35);
         this._damageNextStructure("red", this.blueStructures, 30, false, 1.2);
+        this._applyTeamBuff("red", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.redScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.redScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
 
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0]);
-        if (blueAliveRoles.length > 1) this._recordKill("red", "blue", redAliveRoles[1] || "adc", blueAliveRoles[1]);
 
         this.onEvent({
           type: "dragon",
           side: "red",
-          text: `💀 DERROTA NO COVIL! O adversário virou a luta, garantiu o Dragão ${dType}, eliminou 2 membros do seu time e pressiona suas defesas!`,
+          text: `💀 DERROTA NO COVIL! O adversário virou a luta, garantiu o Dragão ${dType} e pressiona suas defesas!`,
           time: this._formatTime()
         });
 
@@ -1524,7 +1622,7 @@ export class MatchSimulator {
           probability: prob,
           title: "LUTA PERDIDA NO COVIL",
           subtitle: `O CBLOL Virou a Luta (${prob}% chance)`,
-          text: `O adversário contra-atacou no covil e garantiu o Dragão ${dType}. Dois dos seus campeões caíram e o time teve que recuar sob dano na torre.`
+          text: `O adversário contra-atacou no covil e garantiu o Dragão ${dType}. O time teve que recuar sob dano na torre.`
         };
       }
     } else if (choiceId === "steal") {
@@ -1545,6 +1643,14 @@ export class MatchSimulator {
         this.blueScore.dragons++;
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 20);
+        this._applyTeamBuff("blue", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.blueScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.blueScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
 
         const jName = this.blueRosterState[jRole].name;
         this.onEvent({
@@ -1567,6 +1673,14 @@ export class MatchSimulator {
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 20);
         this._damageNextStructure("red", this.blueStructures, 20, false, 1.0);
+        this._applyTeamBuff("red", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.redScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.redScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
 
         if (jAlive) {
           this._recordKill("red", "blue", redAliveRoles[0] || "mid", jRole, "Smite Falho", `🔴 O Caçador tentou o roubo mas foi executado no covil!`);
@@ -1717,9 +1831,17 @@ export class MatchSimulator {
         this._awardTeamGold("blue", (1200 + baronBounty));
         this.blueBaronUntil = this.gameSeconds + 210;
         this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
 
         const defaultBlueKiller = blueAliveRoles[0] || Object.keys(this.blueRosterState).find(r => this.blueRosterState[r].alive) || "mid";
-        redAliveRoles.slice(0, 3).forEach((r, idx) => {
+        redAliveRoles.slice(0, 2).forEach((r, idx) => {
           const kRole = blueAliveRoles.length > 0 ? blueAliveRoles[idx % blueAliveRoles.length] : defaultBlueKiller;
           this._recordKill("blue", "red", kRole, r);
         });
@@ -1735,9 +1857,9 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "BARÃO CONQUISTADO & ACE!",
+          title: "BARÃO CONQUISTADO!",
           subtitle: `Vitória Épica (${prob}% chance)`,
-          text: "Seu time executou uma luta perfeita no covil do Barão! 3 abates imediatos, buff do Barão conquistado e tropas marchando para o Nexus!"
+          text: "Seu time executou uma luta perfeita no covil do Barão! Abates imediatos, buff do Barão conquistado e tropas marchando para o Nexus!"
         };
       } else {
         this.redScore.barons++;
@@ -1745,9 +1867,17 @@ export class MatchSimulator {
         this.redBaronUntil = this.gameSeconds + 210;
         this.lanePressure = -100;
         this._damageNextStructure("red", this.blueStructures, 65, false, 2.0);
+        this._applyTeamBuff("red", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
 
         const defaultRedKiller = redAliveRoles[0] || Object.keys(this.redRosterState).find(r => this.redRosterState[r].alive) || "mid";
-        blueAliveRoles.slice(0, 3).forEach((r, idx) => {
+        blueAliveRoles.slice(0, 2).forEach((r, idx) => {
           const kRole = redAliveRoles.length > 0 ? redAliveRoles[idx % redAliveRoles.length] : defaultRedKiller;
           this._recordKill("red", "blue", kRole, r);
         });
@@ -1765,13 +1895,12 @@ export class MatchSimulator {
           probability: prob,
           title: "LUTA PERDIDA NO BARÃO",
           subtitle: `O CBLOL Garantiu o Monstro (${prob}% chance)`,
-          text: "O adversário dominou o covil, eliminou 3 dos seus campeões e conquistou o Barão Na'Shor, avançando com buff contra sua base."
+          text: "O adversário dominou o covil, garantiu abates e conquistou o Barão Na'Shor, avançando com buff contra sua base."
         };
       }
     } else if (choiceId === "bait") {
       if (isSuccess && redAliveRoles.length >= 2) {
         this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0], "Emboscada Fatal", `🔵 EMBOSCADA! Vítima pega de surpresa no mato do rio!`);
-        this._recordKill("blue", "red", blueAliveRoles[1] || "adc", redAliveRoles[1], "Foco Cirúrgico", `🔵 Eliminação imediata na entrada do covil!`);
 
         let baronBounty = 0;
         if (this.objectiveBountiesActive) {
@@ -1787,11 +1916,19 @@ export class MatchSimulator {
         this._awardTeamGold("blue", (1200 + baronBounty));
         this.blueBaronUntil = this.gameSeconds + 210;
         this.lanePressure = Math.min(100, this.lanePressure + 40);
+        this._applyTeamBuff("blue", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
 
         this.onEvent({
           type: "baron",
           side: "blue",
-          text: `👁️ EMBOSCADA CIRÚRGICA! O CBLOL caiu na armadilha do mato, perdeu 2 jogadores e cedeu o Barão com facilidade!`,
+          text: `👁️ EMBOSCADA CIRÚRGICA! O CBLOL caiu na armadilha do mato e cedeu o Barão com facilidade!`,
           time: this._formatTime()
         });
 
@@ -1801,7 +1938,7 @@ export class MatchSimulator {
           probability: prob,
           title: "EMBOSCADA DE MESTRE!",
           subtitle: `O Inimigo Mordeu a Isca (${prob}% chance)`,
-          text: "O CBLOL correu para checar o monstro e foi surpreendido no mato da entrada do rio! 2 abates limpos e Barão garantido com superioridade numérica!"
+          text: "O CBLOL correu para checar o monstro e foi surpreendido no mato da entrada do rio! Abate limpo e Barão garantido com superioridade numérica!"
         };
       } else {
         this.redScore.barons++;
@@ -1809,6 +1946,14 @@ export class MatchSimulator {
         this.redBaronUntil = this.gameSeconds + 180;
         this.lanePressure = Math.max(-100, this.lanePressure - 35);
         this._damageNextStructure("red", this.blueStructures, 45, false, 1.5);
+        this._applyTeamBuff("red", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
 
         this.onEvent({
           type: "baron",
@@ -1845,6 +1990,23 @@ export class MatchSimulator {
         this.redInhibRespawnAt = this.gameSeconds + 240;
         this.lanePressure = Math.min(100, this.lanePressure + 50);
 
+        this._applyTeamBuff("blue", {
+          id: "split_push",
+          name: "Pressão de Tropas",
+          icon: "🏰",
+          bonusSiege: 0.35,
+          bonusCombat: 5,
+          duration: 120
+        });
+        this._applyTeamBuff("red", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
+
         const target = this._getCurrentTargetStructure(this.redStructures);
         if (target) {
           target.currentHp = 0;
@@ -1872,6 +2034,15 @@ export class MatchSimulator {
         this._awardTeamGold("red", 1000);
         this.lanePressure = Math.max(-100, this.lanePressure - 45);
         this._damageNextStructure("red", this.blueStructures, 50, false, 1.5);
+        this._applyTeamBuff("red", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
+
         if (blueAliveRoles.length > 0) {
           this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Cercado na Base", `🔴 O split-pusher foi cercado na base inimiga e abatido!`);
         }
@@ -1899,6 +2070,15 @@ export class MatchSimulator {
         }
         this._awardTeamGold("blue", (200 + visionBounty));
         this.lanePressure = Math.min(100, this.lanePressure + 15);
+        this._applyTeamBuff("blue", {
+          id: "vision_control",
+          name: "Controle Territorial",
+          icon: "👁️",
+          bonusDefense: 15,
+          bonusCombat: 8,
+          duration: 120
+        });
+
         this.onEvent({
           type: "skirmish",
           side: "blue",
@@ -1948,6 +2128,15 @@ export class MatchSimulator {
         this.blueScore.elders = (this.blueScore.elders || 0) + 1;
         this._awardTeamGold("blue", (500 + bountyGold));
         this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
         redAliveRoles.forEach((r, idx) => {
           this._recordKill("blue", "red", blueAliveRoles[idx % blueAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
         });
@@ -1958,12 +2147,21 @@ export class MatchSimulator {
           probability: prob,
           title: "👑 DRAGÃO ANCIÃO & ACE SUPREMO!",
           subtitle: `O Golpe Final (${prob}% chance)`,
-          text: "O Aspecto do Dragão Ancião executou todos os campeões do CBLOL! Suas tropas avançam com fúria para destruir o Nexus!"
+          text: "O Aspecto do Dragão Ancião executou os campeões do CBLOL! Suas tropas avançam com fúria para destruir o Nexus!"
         };
       } else {
         this.redScore.elders = (this.redScore.elders || 0) + 1;
         this._awardTeamGold("red", 500);
         this.lanePressure = -100;
+        this._applyTeamBuff("red", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
         blueAliveRoles.forEach((r, idx) => {
           this._recordKill("red", "blue", redAliveRoles[idx % redAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
         });
@@ -1994,6 +2192,15 @@ export class MatchSimulator {
         this.blueScore.elders = (this.blueScore.elders || 0) + 1;
         this._awardTeamGold("blue", (400 + bountyGold));
         this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", jRole, redAliveRoles[0], "Execução do Ancião Roubado");
         return {
           success: true,
@@ -2008,6 +2215,15 @@ export class MatchSimulator {
         this._awardTeamGold("red", 400);
         this.lanePressure = -100;
         this._damageNextStructure("red", this.blueStructures, 70, false, 2.0);
+        this._applyTeamBuff("red", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
         if (jAlive) this._recordKill("red", "blue", redAliveRoles[0] || "mid", jRole);
         return {
           success: false,
@@ -2034,6 +2250,15 @@ export class MatchSimulator {
         this._awardTeamGold("red", 1500);
         this.lanePressure = -100;
         this._damageNextStructure("red", this.blueStructures, 80, false, 2.2);
+        this._applyTeamBuff("red", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
         blueAliveRoles.slice(0, 2).forEach((r, idx) => {
           this._recordKill("red", "blue", redAliveRoles[idx % redAliveRoles.length] || "mid", r);
         });
@@ -2102,6 +2327,14 @@ export class MatchSimulator {
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 28);
         this._damageNextStructure("blue", this.redStructures, 30, false, 1.5);
+        this._applyTeamBuff("blue", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
+
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", blueAliveRoles[0] || "top", redAliveRoles[0]);
 
         this.onEvent({
@@ -2124,6 +2357,14 @@ export class MatchSimulator {
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 30);
         this._damageNextStructure("red", this.blueStructures, 35, false, 1.4);
+        this._applyTeamBuff("red", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
+
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "top", blueAliveRoles[0]);
 
         this.onEvent({
@@ -2285,8 +2526,8 @@ export class MatchSimulator {
   }
 
   _triggerDecisiveCombat(winnerSide, loserSide, margin, isForcedCounter = false) {
-    // Intervalo de recarga de combate reduzido: lutas mais dinâmicas e perigosas
-    this.combatCooldown = 30;
+    // Intervalo de recarga de combate: pacing realista de CBLOL e Mundial (16 a 26 kills por partida)
+    this.combatCooldown = 75;
 
     const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
     const winnerRoster = winnerSide === "blue" ? this.blueRosterState : this.redRosterState;
@@ -2296,12 +2537,10 @@ export class MatchSimulator {
     const aliveVictimRoles = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     if (aliveVictimRoles.length === 0) return;
 
-    // Abates decisivos: escalonamento com base na margem de vitória da teamfight
+    // Abates decisivos: abates pontuais e estratégicos (1 abate por padrão, raramente 2 em margens extremas)
     let killsCount = 1;
-    if (margin > 14 && aliveVictimRoles.length >= 3) {
-      killsCount = 3; // Massacre / Wipe parcial
-    } else if (margin > 6 && aliveVictimRoles.length >= 2) {
-      killsCount = 2; // Double kill limpo
+    if (margin > 18 && aliveVictimRoles.length >= 2) {
+      killsCount = 2; // Vitória tática expressiva
     }
 
     for (let i = 0; i < killsCount; i++) {
@@ -2326,10 +2565,10 @@ export class MatchSimulator {
       this._recordKill(winnerSide, loserSide, killerRole, victimRole, null, customTxt);
     }
 
-    // Troca de abates (Trade Kill): Em ~24% das escaramuças equilibradas, o time sob ataque consegue punir na resposta
+    // Troca de abates (Trade Kill): Apenas em 10% dos confrontos equilibrados
     const loserAliveAfter = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     const winnerAliveAfter = Object.keys(winnerRoster).filter(r => winnerRoster[r].alive);
-    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.24) {
+    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.10) {
       const tradeVictimRole = winnerAliveAfter[Math.floor(Math.random() * winnerAliveAfter.length)];
       const tradeKillerRole = loserAliveAfter[Math.floor(Math.random() * loserAliveAfter.length)];
       const tKiller = loserRoster[tradeKillerRole];
@@ -2381,6 +2620,10 @@ export class MatchSimulator {
     // Se o jogador estiver em postura defensiva e for o atacado, reduz o dano sofrido
     const defenseBonus = (attackerSide === "red" && this.playerTactics === "defense") ? 0.82 : 1.0;
 
+    // Buffs de cerco e defesa
+    const attackerBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers(attackerSide) : { bonusSiege: 0 };
+    const defenderBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers(attackerSide === "blue" ? "red" : "blue") : { bonusDefense: 0 };
+
     // Dano base contra estruturas calibrado para permitir cerco sem derreter torres instantaneamente
     let baseDamage = (attackerPushStat * 4.2) - (defenderTankStat * 1.0) + (margin * 5);
     baseDamage = Math.max(280, Math.min(620, baseDamage));
@@ -2388,6 +2631,14 @@ export class MatchSimulator {
     if (hasSuper) baseDamage += 320;
     if (hasBaron) baseDamage += 400;
     if (isForcedCounter) baseDamage += 250;
+
+    // Bônus e mitigação de Buffs táticos
+    if (attackerBuffs.bonusSiege) {
+      baseDamage *= (1 + attackerBuffs.bonusSiege);
+    }
+    if (defenderBuffs.bonusDefense) {
+      baseDamage *= (1 - Math.min(0.5, defenderBuffs.bonusDefense * 0.01));
+    }
 
     // Barricadas antes de 14 min amortecem o impacto (redução de 20%)
     if (isEarlyGame && target.id === "t1") {
@@ -2672,6 +2923,10 @@ export class MatchSimulator {
       counterAttackCooldown: this.counterAttackCooldown,
       objectiveBountiesActive: this.objectiveBountiesActive,
       isComebackMode: isBehind,
+      activeBuffs: {
+        blue: this._getActiveBuffs("blue"),
+        red: this._getActiveBuffs("red")
+      },
       blue: {
         name: this.blueTeam.name,
         iconUrl: this.blueTeam.iconUrl,
@@ -2679,6 +2934,7 @@ export class MatchSimulator {
         structures: this.blueStructures,
         superMinions: this.blueSuperMinions,
         hasBaron: this.gameSeconds < this.blueBaronUntil,
+        buffs: this._getActiveBuffs("blue"),
         roster: this.blueRosterState
       },
       red: {
@@ -2689,6 +2945,7 @@ export class MatchSimulator {
         structures: this.redStructures,
         superMinions: this.redSuperMinions,
         hasBaron: this.gameSeconds < this.redBaronUntil,
+        buffs: this._getActiveBuffs("red"),
         roster: this.redRosterState
       }
     };

@@ -1,6 +1,7 @@
 // Gerenciador do Torneio CBLOL e Progressão de Séries (MD1, MD3, MD5) com Eleição de MVP
 import { CBLOL_TEAMS } from "../data/teams.js";
-import { getChampionById } from "../data/champions.js";
+import { getChampionById, getChampionsByRole, calculateTeamStats } from "../data/champions.js";
+import { PRO_PLAYERS } from "../data/players.js";
 
 export class TournamentManager {
   constructor(playerTeam) {
@@ -139,6 +140,71 @@ export class TournamentManager {
       }
     }
     return opp;
+  }
+
+  // Adapta dinamicamente o draft do time adversário entre os jogos de uma série (MD3 / MD5)
+  adaptOpponentRoster(opponent, gameNumber = 1, opponentLostPrev = false) {
+    if (!opponent) return null;
+
+    // Jogo 1 sempre usa a formação titular tradicional consolidada
+    if (gameNumber <= 1 && !opponentLostPrev && opponent.defaultRoster) {
+      opponent.roster = { ...opponent.defaultRoster };
+      if (typeof calculateTeamStats === "function") {
+        opponent.stats = calculateTeamStats(opponent.roster, opponent.upgrades || []);
+      }
+      return opponent.roster;
+    }
+
+    // A partir do Jogo 2 em diante ou após derrota, os Pro Players trocam para outros campeões de conforto
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    const newRoster = {};
+    const usedChamps = new Set();
+
+    roles.forEach(role => {
+      let chosen = null;
+      // 1. Busca o atleta titular escalado para esta função
+      const playerId = opponent.players ? opponent.players[role] : null;
+      const athlete = playerId
+        ? PRO_PLAYERS.find(p => p.id === playerId || p.nick.toLowerCase() === playerId.toLowerCase())
+        : null;
+
+      if (athlete && Array.isArray(athlete.signatureChampions) && athlete.signatureChampions.length > 0) {
+        // Rotaciona para outro campeão da signature pool do pro player
+        const shift = opponentLostPrev ? 1 : 0;
+        const availableSigs = athlete.signatureChampions.filter(c => !usedChamps.has(c));
+        if (availableSigs.length > 0) {
+          const idx = (gameNumber - 1 + shift) % availableSigs.length;
+          chosen = availableSigs[idx];
+        }
+      }
+
+      // 2. Se não conseguiu da signature pool, tenta o padrão caso não esteja repetido
+      if (!chosen && opponent.defaultRoster && opponent.defaultRoster[role] && !usedChamps.has(opponent.defaultRoster[role])) {
+        chosen = opponent.defaultRoster[role];
+      }
+
+      // 3. Fallback inteligente para a pool da função
+      if (!chosen) {
+        const rolePool = typeof getChampionsByRole === "function" ? getChampionsByRole(role) : [];
+        const available = rolePool.filter(c => !usedChamps.has(c.id));
+        if (available.length > 0) {
+          chosen = available[Math.floor(Math.random() * available.length)].id;
+        }
+      }
+
+      if (chosen) {
+        newRoster[role] = chosen;
+        usedChamps.add(chosen);
+      } else {
+        newRoster[role] = (opponent.defaultRoster && opponent.defaultRoster[role]) || "Aatrox";
+      }
+    });
+
+    opponent.roster = newRoster;
+    if (typeof calculateTeamStats === "function") {
+      opponent.stats = calculateTeamStats(opponent.roster, opponent.upgrades || []);
+    }
+    return opponent.roster;
   }
 
   // Simula 1 jogo de cada série de IA ativa na rodada atual (progresso dinâmico em tempo real)

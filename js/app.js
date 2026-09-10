@@ -108,6 +108,12 @@ class AppController {
     const pScore = currentMatch ? (isTeamA ? currentMatch.scoreA : currentMatch.scoreB) : 0;
     const oppScore = currentMatch ? (isTeamA ? currentMatch.scoreB : currentMatch.scoreA) : 0;
     const nextGameNum = currentMatch ? (currentMatch.scoreA + currentMatch.scoreB + 1) : 1;
+    const lastGame = currentMatch && currentMatch.games && currentMatch.games.length > 0 ? currentMatch.games[currentMatch.games.length - 1] : null;
+    const opponentLostPrev = lastGame ? lastGame.won : false;
+
+    if (this.tournament && opponent) {
+      this.tournament.adaptOpponentRoster(opponent, nextGameNum, opponentLostPrev);
+    }
 
     const matchInfo = {
       roundName,
@@ -157,9 +163,11 @@ class AppController {
         return;
       }
 
-      opponent.roster = opponent.roster || opponent.defaultRoster || {
-        top: "Aatrox", jungle: "LeeSin", mid: "Ahri", adc: "Jinx", support: "Thresh"
-      };
+      const currentMatch = this.tournament.getCurrentPlayerMatch();
+      const nextGameNum = currentMatch ? (currentMatch.scoreA + currentMatch.scoreB + 1) : 1;
+      const lastGame = currentMatch && currentMatch.games && currentMatch.games.length > 0 ? currentMatch.games[currentMatch.games.length - 1] : null;
+      const opponentLostPrev = lastGame ? lastGame.won : false;
+      this.tournament.adaptOpponentRoster(opponent, nextGameNum, opponentLostPrev);
 
       this.showView("arena");
 

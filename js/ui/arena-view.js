@@ -36,6 +36,7 @@ export class ArenaView {
                 <span>🐲 <strong id="blue-dragons">${state.blue.score.dragons}</strong></span>
                 <span>👑 <strong id="blue-barons">${state.blue.score.barons}</strong></span>
               </div>
+              <div class="team-active-buffs-bar" id="blue-active-buffs"></div>
             </div>
             <div class="score-kills" id="blue-kills" style="color: var(--lol-blue-team);">0</div>
           </div>
@@ -61,6 +62,7 @@ export class ArenaView {
                 <span>🐲 <strong id="red-dragons">${state.red.score.dragons}</strong></span>
                 <span>👑 <strong id="red-barons">${state.red.score.barons}</strong></span>
               </div>
+              <div class="team-active-buffs-bar" id="red-active-buffs"></div>
             </div>
             <div class="score-kills" id="red-kills" style="color: var(--lol-red-team);">0</div>
           </div>
@@ -445,6 +447,35 @@ export class ArenaView {
       } else {
         alertEl.classList.remove("active");
       }
+    }
+
+    // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
+    const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
+    const redBuffsEl = this.containerEl.querySelector("#red-active-buffs");
+
+    const renderBuffPills = (buffs, side) => {
+      if (!buffs || buffs.length === 0) return "";
+      return buffs.map(b => {
+        let remainingText = "";
+        if (b.expiresAt && state.gameSeconds) {
+          const rem = Math.max(0, b.expiresAt - state.gameSeconds);
+          remainingText = ` (${rem}s)`;
+        }
+        let desc = [];
+        if (b.bonusCombat) desc.push(`+${b.bonusCombat} Dano`);
+        if (b.bonusSiege) desc.push(`+${Math.round(b.bonusSiege * 100)}% Torres`);
+        if (b.bonusDefense) desc.push(`-${b.bonusDefense}% Dano Sofh.`);
+        const tooltip = desc.length > 0 ? desc.join(", ") : "Efeito Tático Ativo";
+
+        return `<span class="active-buff-pill ${side}" title="${b.name}: ${tooltip}">${b.icon || '⚡'} ${b.name}${remainingText}</span>`;
+      }).join("");
+    };
+
+    if (blueBuffsEl) {
+      blueBuffsEl.innerHTML = renderBuffPills(state.blue.buffs || (state.activeBuffs && state.activeBuffs.blue), "blue");
+    }
+    if (redBuffsEl) {
+      redBuffsEl.innerHTML = renderBuffPills(state.red.buffs || (state.activeBuffs && state.activeBuffs.red), "red");
     }
 
     // Atualiza status e itens dos campeões
@@ -1130,6 +1161,28 @@ export class ArenaView {
         advice = `⚔️ <strong>Confronto Equilibrado:</strong> Ambos os times estão em igualdade de recursos. O acerto desta decisão pode definir a liderança.`;
       }
 
+      let scoutingHtml = "";
+      if (decisionData.scouting) {
+        scoutingHtml = `
+          <div class="scouting-telemetry-box">
+            <div class="scouting-telemetry-header">
+              <span class="scouting-radar-tag">${decisionData.scouting.intelTag || '📡 TELEMETRIA & RECONHECIMENTO DO RIFT'}</span>
+              <span class="scouting-live-signal">● RECONHECIMENTO AO VIVO</span>
+            </div>
+            <div class="scouting-intel-grid">
+              <div class="scouting-intel-item">
+                <span class="scouting-label">Movimentação Observada:</span>
+                <span class="scouting-value">${decisionData.scouting.enemyAction}</span>
+              </div>
+              <div class="scouting-intel-item">
+                <span class="scouting-label">Recomendação da Comissão:</span>
+                <span class="scouting-value">${decisionData.scouting.recommendation}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       statusBar.innerHTML = `
         <div class="decision-status-row">
           <div class="decision-team-stat blue-side">
@@ -1157,6 +1210,7 @@ export class ArenaView {
             </div>
           </div>
         </div>
+        ${scoutingHtml}
         <div class="decision-advice-pill">${advice}</div>
       `;
     }
