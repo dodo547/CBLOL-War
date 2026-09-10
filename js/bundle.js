@@ -5125,13 +5125,148 @@ class MatchSimulator {
       return true;
     }
 
+    const goldDiff = this.blueScore.gold - this.redScore.gold;
+    const isAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
+    const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
+
     // 1. Dragão Ancião (Late Game >= 28:00 = 1680s, maior prioridade se vivo)
     if (!this.elderTaken && this.gameSeconds >= this.nextElderAt) {
       this.elderTaken = true;
 
-      const pTurtle = this._calculateSuccessProbability(72, "simple", "tank");
-      const pAllIn = this._calculateSuccessProbability(62, "tactical", "damage");
-      const pSteal = this._calculateSuccessProbability(50, "complex", "utility", { requireRole: "jungle" });
+      let elderEnemyAction = "";
+      let elderOptions = [];
+
+      if (isAhead) {
+        elderEnemyAction = "CBLOL acuado na base tentando vigiar o rio sob extrema desvantagem de ouro.";
+        elderOptions = [
+          {
+            id: "elder_rush",
+            icon: "⚡",
+            name: "Rush no Ancião & Fim no Nexus",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(78, "simple", "damage"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Ancião Derretido + Marcha Mortal ao Nexus",
+            failureConsequence: "Hesitação leve sem mortes no time",
+            desc: "Aproveitar o domínio total do mapa para queimar o Ancião rapidamente antes de qualquer reação adversária."
+          },
+          {
+            id: "elder_all_in",
+            icon: "💥",
+            name: "Cercar Covil & Ace Limpo",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(68, "tactical", "combat"),
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Aspecto do Dragão Ancião + ACE DEVASTADOR!",
+            failureConsequence: "CBLOL escapa para a base",
+            desc: "Aguardar a aproximação desesperada do CBLOL no rio para dizimar os 5 campeões e finalizar a partida."
+          },
+          {
+            id: "base_race",
+            icon: "🏰",
+            name: "Base Race Direto no Nexus Aberto",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(55, "complex", "push"),
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "Vitória Imediata por Destruição do Nexus",
+            failureConsequence: "Recall adversário a tempo com perda do monstro",
+            desc: "Ignorar o monstro e marchar pelo meio com todas as forças para explodir o Nexus exposto!"
+          }
+        ];
+      } else if (isBehind) {
+        elderEnemyAction = "CBLOL com 5 campeões cercando o covil e pressionando o Dragão Ancião com controle total de visão.";
+        elderOptions = [
+          {
+            id: "turtle_nexus",
+            icon: "🛡️",
+            name: "Defesa Fechada sob as Torres do Nexus",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(68, "simple", "tank"),
+            risk: "Risco Baixo",
+            riskClass: "low",
+            reward: "Absorção do Buff com Torres Vivas (+800g)",
+            failureConsequence: "Dano parcial nas defesas sem mortes totais",
+            desc: "Lutar sob a proteção dupla das torres gêmeas da base até a queima do Ancião expirar."
+          },
+          {
+            id: "elder_all_in",
+            icon: "⚔️",
+            name: "Batalha Desesperada de Virada 5v5",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(50, "tactical", "damage"),
+            risk: "Alto Risco",
+            riskClass: "medium",
+            reward: "Aspecto do Ancião + Virada Histórica",
+            failureConsequence: "Derrota no covil e contra-ataque letal",
+            desc: "Colidir em bloco num tudo-ou-nada no covil tentando um milagre coletivo antes do bônus cair."
+          },
+          {
+            id: "elder_smite_steal",
+            icon: "🎯",
+            name: "Roubo Heroico no Smite (Milagre)",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(45, "complex", "utility", { requireRole: "jungle" }),
+            risk: "Coin Flip",
+            riskClass: "high",
+            reward: "Roubo Milagroso do Ancião + Execução em Massa",
+            failureConsequence: "Caçador eliminado e monstro concedido",
+            desc: "O Caçador salta sozinho no covil tentando o roubo histórico no milésimo de segundo."
+          }
+        ];
+      } else {
+        // Even
+        elderEnemyAction = "5 campeões inimigos agrupados no covil disputando visão e prontos para a colisão final.";
+        elderOptions = [
+          {
+            id: "elder_zone",
+            icon: "🛡️",
+            name: "Zoneamento & Controle Territorial do Rio",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(72, "simple", "tank"),
+            risk: "Risco Baixo",
+            riskClass: "low",
+            reward: "Ancião Assegurado com Terreno Seguro",
+            failureConsequence: "Recuo ordenado com dano leve",
+            desc: "Manter postura defensiva na boca do rio, bloqueando a entrada do CBLOL com habilidades de desengaje."
+          },
+          {
+            id: "elder_all_in",
+            icon: "💥",
+            name: "Teamfight Decisiva 5v5 no Covil",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(60, "tactical", "damage"),
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Aspecto do Dragão Ancião + AVANÇO NO NEXUS!",
+            failureConsequence: "Derrota no covil e contra-ataque perigoso",
+            desc: "Batalha 5v5 definitiva. O time que vencer garante a queima e marcha para a vitória!"
+          },
+          {
+            id: "elder_smite_steal",
+            icon: "🎯",
+            name: "Roubo Cirúrgico no Smite (50/50)",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(50, "complex", "utility", { requireRole: "jungle" }),
+            risk: "Coin Flip",
+            riskClass: "high",
+            reward: "Roubo Milagroso do Ancião + Execução",
+            failureConsequence: "Caçador eliminado e monstro concedido",
+            desc: "O Caçador salta sozinho no covil tentando o roubo milimétrico no Golpe."
+          }
+        ];
+      }
 
       const decisionData = {
         id: "elder",
@@ -5141,50 +5276,9 @@ class MatchSimulator {
         subtitle: "O monstro mais letal do League concede Execução Instantânea. Qual a ordem final?",
         scouting: {
           intelTag: "📡 CLÍMAX DO RIFT • RECONHECIMENTO",
-          enemyAction: "5 campeões inimigos agrupados no covil tentando forçar o Dragão Ancião a qualquer custo.",
-          recommendation: "Teamfight decisiva define a série! Se estiverem sob pouca vida, a luta direta garante a vitória."
+          enemyAction: elderEnemyAction
         },
-        options: [
-          {
-            id: "turtle_nexus",
-            icon: "🛡️",
-            name: "Defesa Fechada sob as Torres do Nexus",
-            complexity: "simple",
-            complexityLabel: "🟢 Opção Segura",
-            probability: pTurtle,
-            risk: "Risco Baixo",
-            riskClass: "low",
-            reward: "Absorção do Buff com Defesas e Torres Vivas",
-            failureConsequence: "Dano parcial nas torres sem mortes totais",
-            desc: "Lutar sob a proteção dupla das torres gêmeas da base até a queima do Ancião expirar."
-          },
-          {
-            id: "elder_all_in",
-            icon: "💥",
-            name: "Teamfight Decisiva 5v5 no Covil",
-            complexity: "tactical",
-            complexityLabel: "🟡 Jogada Tática",
-            probability: pAllIn,
-            risk: "Alto Risco",
-            riskClass: "medium",
-            reward: "Aspecto do Dragão Ancião + AVANÇO NO NEXUS!",
-            failureConsequence: "Derrota no covil e contra-ataque perigoso",
-            desc: "Batalha 5v5 definitiva. O time que vencer garante a queima e marcha para a vitória!"
-          },
-          {
-            id: "elder_smite_steal",
-            icon: "🎯",
-            name: "Roubo Heroico no Smite (50/50)",
-            complexity: "complex",
-            complexityLabel: "🔴 Jogada Ousada",
-            probability: pSteal,
-            risk: "Coin Flip",
-            riskClass: "high",
-            reward: "Roubo Milagroso do Ancião + Execução em Massa",
-            failureConsequence: "Caçador eliminado e monstro concedido",
-            desc: "O Caçador salta sozinho no covil tentando o roubo histórico no milésimo de segundo."
-          }
-        ]
+        options: elderOptions
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -5196,33 +5290,106 @@ class MatchSimulator {
       this.nextBaronAt = this.gameSeconds + 360;
       this.nextDragonAt = Math.max(this.nextDragonAt, this.gameSeconds + 120); // Evita colisão de objetivos no mesmo tick
 
-      const pSiege = this._calculateSuccessProbability(76, "simple", "tank");
-      const pAllIn = this._calculateSuccessProbability(62, "tactical", "damage");
-      const pSplit = this._calculateSuccessProbability(52, "complex", "push");
+      let baronEnemyAction = "";
+      let baronOptions = [];
 
-      const decisionData = {
-        id: "baron",
-        meta: {},
-        badge: "CONFRONTO LENDÁRIO",
-        title: "👑 O BARÃO NA'SHOR EMERGIU NO RIFT!",
-        subtitle: "O bônus de Mão do Barão fortalece tropas e destrói bases. Como o time vai agir?",
-        scouting: {
-          intelTag: "📡 TELEMETRIA DE BARÃO NA'SHOR",
-          enemyAction: this.lanePressure >= 0
-            ? "CBLOL mantendo sentinelas defensivas e tentando atrair seu time para uma armadilha no covil."
-            : "CBLOL iniciando o Barão em bloco com dano concentrado no monstro.",
-          recommendation: this.lanePressure >= 20
-            ? "O Rush de Split Push quebra a base rival enquanto eles perdem tempo no covil!"
-            : "Teamfight coordenada ou controle metódico de visão evitam que o rival feche a partida."
-        },
-        options: [
+      if (isAhead) {
+        baronEnemyAction = "CBLOL preso na própria selva sem visão do covil, temendo ser pego de surpresa.";
+        baronOptions = [
+          {
+            id: "baron_rush",
+            icon: "⚡",
+            name: "Rush Veloz com Vantagem",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(78, "simple", "damage"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Mão do Barão Garantida (+1200g) + Push Total",
+            failureConsequence: "Recuo temporário sem mortes",
+            desc: "Queimar o Barão velozmente aproveitando o dano dos itens fechados e a superioridade de visão."
+          },
+          {
+            id: "baron_bait",
+            icon: "👑",
+            name: "Bait no Barão & Wipe do CBLOL",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(68, "tactical", "combat"),
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Abates no Covil + Barão Na'Shor + Fim de Jogo",
+            failureConsequence: "Inimigos escapam e Barão é resetado",
+            desc: "Iniciar o monstro para atrair os adversários em pânico e virar a luta com dano concentrado."
+          },
+          {
+            id: "split_rush",
+            icon: "🏰",
+            name: "Cerco 1-3-1 & Quebra de Inibidor",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(58, "complex", "push"),
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: "Inibidor Quebrado + Super Tropas na Base",
+            failureConsequence: "Split-pusher cercado na base rival",
+            desc: "Enquanto 4 membros pressionam o covil, seu duelista arromba as defesas da rota lateral e destrói o inibidor!"
+          }
+        ];
+      } else if (isBehind) {
+        baronEnemyAction = "CBLOL com controle total do rio superior e iniciando o Barão em bloco com dano concentrado.";
+        baronOptions = [
+          {
+            id: "vision_siege",
+            icon: "🛡️",
+            name: "Controle Defensivo & Defesa da Base",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(70, "simple", "tank"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Absorção sem Mortes + Farm Defensivo (+400g)",
+            failureConsequence: "Perda leve de torre externa sem mortes",
+            desc: "Limpar a selva defensiva, segurar as ondas de tropas na base e não conceder abates fáceis."
+          },
+          {
+            id: "all_in",
+            icon: "⚔️",
+            name: "Luta Desesperada de Virada no Covil",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(48, "tactical", "damage"),
+            risk: "Alto Risco",
+            riskClass: "medium",
+            reward: "Roubo do Barão + 2 Abates + Virada de Jogo",
+            failureConsequence: "CBLOL confirma o Barão e avança contra sua base",
+            desc: "Colidir com tudo em bloco 5v5 no covil tentando uma virada heroica antes que o monstro caia."
+          },
+          {
+            id: "split_rush",
+            icon: "🏰",
+            name: "Rush de Inibidor / Troca de Base",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(50, "complex", "push"),
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "Inibidor Quebrado + Super Tropas Aliadas",
+            failureConsequence: "Split-pusher cercado e Barão entregue",
+            desc: "Enquanto o rival se distrai no covil, suas tropas arrombam a rota lateral e tentam derrubar o inibidor!"
+          }
+        ];
+      } else {
+        // Even
+        baronEnemyAction = "Inimigos contestando visão na entrada do rio superior com sentinelas de controle.";
+        baronOptions = [
           {
             id: "vision_siege",
             icon: "🛡️",
             name: "Controle de Visão & Farm Seguro",
             complexity: "simple",
             complexityLabel: "🟢 Opção Segura",
-            probability: pSiege,
+            probability: this._calculateSuccessProbability(74, "simple", "tank"),
             risk: "Risco Mínimo",
             riskClass: "low",
             reward: "Barão Negado ao Rival + Farm das 3 Rotas (+700g)",
@@ -5235,7 +5402,7 @@ class MatchSimulator {
             name: "Batalha 5v5 no Covil do Barão",
             complexity: "tactical",
             complexityLabel: "🟡 Jogada Tática",
-            probability: pAllIn,
+            probability: this._calculateSuccessProbability(60, "tactical", "damage"),
             risk: "Médio Risco",
             riskClass: "medium",
             reward: "Mão do Barão (+Buff) + 2 Abates Limpos",
@@ -5243,19 +5410,32 @@ class MatchSimulator {
             desc: "Luta coordenada 5v5 pelo bônus mais importante da partida."
           },
           {
-            id: "split_rush",
-            icon: "🏰",
-            name: "Rush de Inibidor (Split Push)",
+            id: "baron_rush",
+            icon: "⚡",
+            name: "Iniciação Relâmpago no Barão",
             complexity: "complex",
             complexityLabel: "🔴 Jogada Ousada",
-            probability: pSplit,
-            risk: "Alto Retorno",
+            probability: this._calculateSuccessProbability(52, "complex", "combat"),
+            risk: "Alto Risco",
             riskClass: "high",
-            reward: "Inibidor Quebrado + Super Tropas na Base",
-            failureConsequence: "Split-pusher cercado na base rival",
-            desc: "Enquanto o rival se distrai no covil, suas tropas arrombam as defesas e quebram o inibidor!"
+            reward: "Barão Garantido de Surpresa + Pressão Total",
+            failureConsequence: "Adversário colapsa no covil com contestação",
+            desc: "Iniciar o Barão com tudo forçando o adversário a responder sob pânico e desorganização."
           }
-        ]
+        ];
+      }
+
+      const decisionData = {
+        id: "baron",
+        meta: {},
+        badge: "CONFRONTO LENDÁRIO",
+        title: "👑 O BARÃO NA'SHOR EMERGIU NO RIFT!",
+        subtitle: "O bônus de Mão do Barão fortalece tropas e destrói bases. Como o time vai agir?",
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE BARÃO NA'SHOR",
+          enemyAction: baronEnemyAction
+        },
+        options: baronOptions
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -5268,33 +5448,62 @@ class MatchSimulator {
       const dragons = ["Infernal (+Dano)", "da Montanha (+Armadura)", "do Oceano (+Cura)", "das Nuvens (+Mobilidade)", "Hextec (+Aceleração)"];
       const dType = dragons[Math.floor(Math.random() * dragons.length)];
 
-      const pTrade = this._calculateSuccessProbability(76, "simple", "push");
-      const pFight = this._calculateSuccessProbability(62, "tactical", "damage");
-      const pSteal = this._calculateSuccessProbability(50, "complex", "utility", { requireRole: "jungle" });
+      let dragonEnemyAction = "";
+      let dragonOptions = [];
 
-      const decisionData = {
-        id: "dragon",
-        meta: { dType },
-        badge: "OBJETIVO NEUTRO",
-        title: `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`,
-        subtitle: `Ambas as equipes se aproximam pelo rio. Qual a decisão do seu time?`,
-        scouting: {
-          intelTag: "📡 RADAR DE OBJETIVO NEUTRO",
-          enemyAction: this.lanePressure >= 0
-            ? "Inimigos contestando visão no rio com desvantagem no avanço de tropas."
-            : "Inimigos já posicionados no covil com sentinelas de controle e prioridade de bot lane.",
-          recommendation: this.lanePressure >= 0
-            ? "Forçar a luta 5v5 aproveita a pressão de rotas a favor da sua equipe!"
-            : "Ceder o dragão para punir placas de torre do outro lado do mapa rende ouro garantido sem mortes."
-        },
-        options: [
+      if (isAhead) {
+        dragonEnemyAction = "CBLOL recuado sob suas torres externas, sem coragem de contestar o rio inferior.";
+        dragonOptions = [
+          {
+            id: "dragon_rush",
+            icon: "⚡",
+            name: `Dominar Covil & Fazer Dragão Veloz`,
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(80, "simple", "damage"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: `Dragão ${dType} Garantido + Avanço Contínuo`,
+            failureConsequence: "Atraso leve na captura sem mortes",
+            desc: "Executar o monstro elemental rapidamente sem dar chance de reação e manter a pressão das rotas."
+          },
+          {
+            id: "dragon_bait",
+            icon: "🎯",
+            name: "Bait no Covil & Wipe no Rio",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(70, "tactical", "combat"),
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `2 Abates Limpos + Dragão ${dType}`,
+            failureConsequence: "Inimigos recuam e evitam a armadilha",
+            desc: "Iniciar o monstro para forçar o CBLOL a checar o rio escuro e aniquilá-los com sua superioridade de dano."
+          },
+          {
+            id: "fight",
+            icon: "🔥",
+            name: "Invadir Selva Inferior & Luta 5v5",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(62, "complex", "damage"),
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: `Massacre na Selva + Dragão ${dType} + Torres`,
+            failureConsequence: "Troca estendida com perda temporária de ritmo",
+            desc: "Invadir a selva adversária, caçar os defensores sob suas próprias sentinelas e levar o Dragão de bônus."
+          }
+        ];
+      } else if (isBehind) {
+        dragonEnemyAction = "Inimigos já posicionados no covil com sentinelas de controle e prioridade de bot lane.";
+        dragonOptions = [
           {
             id: "cross_trade",
             icon: "🏰",
             name: "Ceder Dragão & Destruir Barricadas",
             complexity: "simple",
             complexityLabel: "🟢 Opção Segura",
-            probability: pTrade,
+            probability: this._calculateSuccessProbability(75, "simple", "push"),
             risk: "Risco Mínimo",
             riskClass: "low",
             reward: "+600 Ouro em Placas de Torres sem Baixas",
@@ -5302,12 +5511,56 @@ class MatchSimulator {
             desc: "Abre mão do dragão deliberadamente para punir o mapa do outro lado e farmar placas de ouro."
           },
           {
+            id: "flank",
+            icon: "🗡️",
+            name: "Emboscada pelas Costas no Covil",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(50, "tactical", "combat"),
+            risk: "Alto Risco",
+            riskClass: "medium",
+            reward: `Abate no Atirador Inimigo + Roubo do Dragão ${dType}`,
+            failureConsequence: "Flanco interceptado e baixas sofridas",
+            desc: "Surpreender a retaguarda inimiga enquanto eles gastam recursos e feitiços no monstro elemental."
+          },
+          {
+            id: "steal",
+            icon: "🎯",
+            name: "Tentativa Heroica de Roubo no Smite",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(45, "complex", "utility", { requireRole: "jungle" }),
+            risk: "Coin Flip",
+            riskClass: "high",
+            reward: `Dragão ${dType} Roubado com time seguro`,
+            failureConsequence: "Smite falha e Caçador é abatido",
+            desc: "O time segura as rotas enquanto o Caçador salta sozinho no covil para tentar o roubo no Golpe."
+          }
+        ];
+      } else {
+        // Even
+        dragonEnemyAction = "Inimigos contestando visão no rio em igualdade de pressão de tropas.";
+        dragonOptions = [
+          {
+            id: "dragon_zone",
+            icon: "🛡️",
+            name: "Zoneamento & Controle Territorial do Rio",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(74, "simple", "tank"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: `Dragão ${dType} com Posse Segura (+200g)`,
+            failureConsequence: "Perda leve de tempo sem baixas",
+            desc: "Drenar a visão inimiga, garantir a entrada do rio com sentinelas e abater o monstro com segurança."
+          },
+          {
             id: "fight",
             icon: "⚔️",
             name: "Forçar Teamfight 5v5 no Rio",
             complexity: "tactical",
             complexityLabel: "🟡 Jogada Tática",
-            probability: pFight,
+            probability: this._calculateSuccessProbability(60, "tactical", "damage"),
             risk: "Médio Risco",
             riskClass: "medium",
             reward: `Dragão ${dType} + 2 Abates Inimigos`,
@@ -5315,19 +5568,32 @@ class MatchSimulator {
             desc: "Reunir o time inteiro no rio e disputar o monstro elemental em igualdade de condições."
           },
           {
-            id: "steal",
-            icon: "🎯",
-            name: "Tentativa de Roubo no Smite",
+            id: "flank",
+            icon: "🗡️",
+            name: "Flanco Cirúrgico no Atirador",
             complexity: "complex",
             complexityLabel: "🔴 Jogada Ousada",
-            probability: pSteal,
-            risk: "Coin Flip",
+            probability: this._calculateSuccessProbability(52, "complex", "damage"),
+            risk: "Alto Risco",
             riskClass: "high",
-            reward: `Dragão ${dType} Roubado com time nas rotas`,
-            failureConsequence: "Smite falha e Caçador é abatido",
-            desc: "O time segue farmando enquanto o Caçador salta sozinho no covil para tentar o roubo no Golpe."
+            reward: "Eliminação Instantânea do ADC + Dragão",
+            failureConsequence: "Sentinela revela flanqueador com punição",
+            desc: "Flanquear pela selva adversária para deletar o Atirador rival no início do confronto."
           }
-        ]
+        ];
+      }
+
+      const decisionData = {
+        id: "dragon",
+        meta: { dType },
+        badge: "OBJETIVO NEUTRO",
+        title: `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`,
+        subtitle: `Ambas as equipes disputam o objetivo. Qual a decisão do seu time?`,
+        scouting: {
+          intelTag: "📡 RADAR DE OBJETIVO NEUTRO",
+          enemyAction: dragonEnemyAction
+        },
+        options: dragonOptions
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -5338,29 +5604,106 @@ class MatchSimulator {
     if (!this.heraldTaken && this.gameSeconds >= 480 && this.gameSeconds < 840) {
       this.heraldTaken = true;
 
-      const pDef = this._calculateSuccessProbability(76, "simple", "tank");
-      const pFight = this._calculateSuccessProbability(62, "tactical", "push");
-      const pDive = this._calculateSuccessProbability(52, "complex", "damage");
+      let heraldEnemyAction = "";
+      let heraldOptions = [];
 
-      const decisionData = {
-        id: "herald",
-        meta: {},
-        badge: "PRESSÃO DE EARLY GAME",
-        title: "👁️ O ARAUTO DO VALE SURGIU NO RIO SUPERIOR!",
-        subtitle: "O Olho do Arauto derruba barricadas de torre. Como vamos responder?",
-        scouting: {
-          intelTag: "📡 TELEMETRIA DE EARLY GAME",
-          enemyAction: "Caçador e Top Laner adversários iniciando o Arauto, deixando a bot lane isolada 2v2.",
-          recommendation: "O Dive 4v2 na bot lane pune a ausência do caçador rival e derruba a primeira torre do jogo!"
-        },
-        options: [
+      if (isAhead) {
+        heraldEnemyAction = "CBLOL acuado sob as torres superiores temendo o avanço da sua equipe.";
+        heraldOptions = [
+          {
+            id: "herald_fight",
+            icon: "🛡️",
+            name: "Garantir Arauto com Domínio do Rio",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(80, "simple", "combat"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Arauto Assegurado + Cabeçada na Torre (+350g)",
+            failureConsequence: "Recuo ordenado sem perdas",
+            desc: "Reunir Top e Caçador para assegurar o monstro sob controle total da visão superior."
+          },
+          {
+            id: "herald_dive_mid",
+            icon: "⚔️",
+            name: "Arauto & Dive no Mid",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(68, "tactical", "damage"),
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Abate no Mid + Primeira Torre Central destruída (+400g)",
+            failureConsequence: "Desarme sob a torre rival com recuo",
+            desc: "Garantir o monstro e acelerar direto para a rota do meio, abatendo o adversário sob a torre!"
+          },
+          {
+            id: "dive_bot",
+            icon: "🏹",
+            name: "Dive 4v2 na Rota Inferior",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(60, "complex", "damage"),
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "2 Abates no Bot + Primeira Torre do Jogo (+650g)",
+            failureConsequence: "Torre defensiva pune com baixas aliadas",
+            desc: "Ignorar o Arauto e criar superioridade na bot lane para abater os rivais e levar a Primeira Torre!"
+          }
+        ];
+      } else if (isBehind) {
+        heraldEnemyAction = "CBLOL com 3 jogadores dominando o rio superior e fazendo o Arauto com tranquilidade.";
+        heraldOptions = [
+          {
+            id: "cross_trade_herald",
+            icon: "🛡️",
+            name: "Ceder Arauto & Farm Seguro de Barricadas",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: this._calculateSuccessProbability(72, "simple", "push"),
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Absorção sem Mortes + Ouro de Barricadas (+350g)",
+            failureConsequence: "Perda passageira de barricada sem mortes",
+            desc: "Concede o Arauto, recua sob a proteção da torre e cobra recursos na rota oposta com segurança."
+          },
+          {
+            id: "bush_trap",
+            icon: "🌿",
+            name: "Emboscada de Retorno no Arbusto",
+            complexity: "tactical",
+            complexityLabel: "🟡 Jogada Tática",
+            probability: this._calculateSuccessProbability(50, "tactical", "combat"),
+            risk: "Alto Risco",
+            riskClass: "medium",
+            reward: "Abate de Retorno + Roubo do Arauto",
+            failureConsequence: "Emboscada revelada por sentinela e torre danificada",
+            desc: "Aguardar a passagem dos inimigos no arbusto do rio para tentar uma eliminação de retorno."
+          },
+          {
+            id: "dive_bot",
+            icon: "🏹",
+            name: "Dive Desesperado 4v2 no Bot",
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: this._calculateSuccessProbability(48, "complex", "damage"),
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "2 Abates no Bot + Primeira Torre do Jogo",
+            failureConsequence: "Torre inimiga pune com baixas aliadas",
+            desc: "Descer com tudo na bot lane tentando a Primeira Torre antes que o Arauto colida no Top!"
+          }
+        ];
+      } else {
+        // Even
+        heraldEnemyAction = "Caçador e Top Laner adversários iniciando o Arauto, deixando a bot lane isolada 2v2.";
+        heraldOptions = [
           {
             id: "vision_control",
             icon: "🛡️",
             name: "Defesa sob a Torre & Farm Seguro",
             complexity: "simple",
             complexityLabel: "🟢 Opção Segura",
-            probability: pDef,
+            probability: this._calculateSuccessProbability(74, "simple", "tank"),
             risk: "Risco Mínimo",
             riskClass: "low",
             reward: "Absorção sem Dano + Ouro Seguro de Farm",
@@ -5373,7 +5716,7 @@ class MatchSimulator {
             name: "Batalha 3v3 no Rio Superior",
             complexity: "tactical",
             complexityLabel: "🟡 Jogada Tática",
-            probability: pFight,
+            probability: this._calculateSuccessProbability(60, "tactical", "combat"),
             risk: "Médio Risco",
             riskClass: "medium",
             reward: "Arauto Garantido + Cabeçada na Torre Rival",
@@ -5386,14 +5729,27 @@ class MatchSimulator {
             name: "Dive 4v2 na Rota Inferior",
             complexity: "complex",
             complexityLabel: "🔴 Jogada Ousada",
-            probability: pDive,
+            probability: this._calculateSuccessProbability(52, "complex", "damage"),
             risk: "Alto Risco",
             riskClass: "high",
             reward: "2 Abates no Bot + Primeira Torre do Jogo",
             failureConsequence: "Torre inimiga pune com baixas aliadas",
             desc: "Ignorar o Arauto e criar superioridade na bot lane para abater os rivais e levar a torre."
           }
-        ]
+        ];
+      }
+
+      const decisionData = {
+        id: "herald",
+        meta: {},
+        badge: "PRESSÃO DE EARLY GAME",
+        title: "👁️ O ARAUTO DO VALE SURGIU NO RIO SUPERIOR!",
+        subtitle: "O Olho do Arauto derruba barricadas de torre. Como vamos responder?",
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE EARLY GAME",
+          enemyAction: heraldEnemyAction
+        },
+        options: heraldOptions
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -5983,6 +6339,148 @@ class MatchSimulator {
           text: `Uma sentinela de controle revelou o trajeto do flanco. O CBLOL colapsou sobre o flanqueador, garantiu o Dragão ${dType} e danificou sua torre.`
         };
       }
+    } else if (choiceId === "dragon_rush") {
+      if (isSuccess) {
+        let bountyGold = 0;
+        if (this.objectiveBountiesActive) {
+          bountyGold = 250;
+          this.onEvent({
+            type: "objective_bounty",
+            side: "blue",
+            text: `🎯 RECOMPENSA DE OBJETIVO COLETADA! O Dragão rendeu +250 Ouro Global!`,
+            time: this._formatTime()
+          });
+        }
+        this.blueScore.dragons++;
+        this._awardTeamGold("blue", (200 + bountyGold));
+        this.lanePressure = Math.min(100, this.lanePressure + 30);
+        this._applyTeamBuff("blue", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.blueScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.blueScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
+
+        this.onEvent({
+          type: "dragon",
+          side: "blue",
+          text: `⚡ RUSH FULMINANTE! Seu time pulverizou o Dragão ${dType} com facilidade e segue avançando as rotas!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "DRAGÃO GARANTIDO COM MAESTRIA!",
+          subtitle: `Rush Veloz (${prob}% chance)`,
+          text: `Com controle absoluto do mapa, seu time queimou o Dragão ${dType} em segundos sem dar qualquer chance de resposta ao CBLOL!`
+        };
+      } else {
+        this.redScore.dragons++;
+        this._awardTeamGold("red", 150);
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        this._damageNextStructure("red", this.blueStructures, 15, false, 1.0);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "HESITAÇÃO NO DRAGÃO",
+          subtitle: `CBLOL Chegou a Tempo (${prob}% chance)`,
+          text: `O rush demorou mais que o esperado. O CBLOL contestou o covil e garantiu o Dragão ${dType} enquanto seu time recuava.`
+        };
+      }
+    } else if (choiceId === "dragon_bait") {
+      if (isSuccess && redAliveRoles.length >= 1) {
+        this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0], "Emboscada no Dragão", `🔵 BAIT PERFEITO! Adversário abatido ao checar o covil do Dragão!`);
+        if (redAliveRoles.length >= 2) {
+          this._recordKill("blue", "red", blueAliveRoles[1] || "adc", redAliveRoles[1], "Foco Cirúrgico");
+        }
+        this.blueScore.dragons++;
+        this._awardTeamGold("blue", 300);
+        this.lanePressure = Math.min(100, this.lanePressure + 40);
+        this._applyTeamBuff("blue", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.blueScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.blueScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
+
+        this.onEvent({
+          type: "dragon",
+          side: "blue",
+          text: `🎯 BAIT PERFEITO NO COVIL! O CBLOL mordeu a isca, foi eliminado e cedeu o Dragão ${dType}!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "BAIT EXECUTADO COM PERFEIÇÃO!",
+          subtitle: `Wipe no Rio (${prob}% chance)`,
+          text: `Seu time fingiu fazer o Dragão e virou com força total nos defensores rivais desavisados! Abates limpos e Dragão ${dType} garantido!`
+        };
+      } else {
+        this.redScore.dragons++;
+        this._awardTeamGold("red", 150);
+        this.lanePressure = Math.max(-100, this.lanePressure - 20);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "BAIT IGNORADO",
+          subtitle: `CBLOL Não Caiu na Isca (${prob}% chance)`,
+          text: `O adversário preferiu não contestar o covil diretamente e garantiu tempo para reverter a pressão de rotas.`
+        };
+      }
+    } else if (choiceId === "dragon_zone") {
+      if (isSuccess) {
+        this.blueScore.dragons++;
+        this._awardTeamGold("blue", 200);
+        this.lanePressure = Math.min(100, this.lanePressure + 20);
+        this._applyTeamBuff("blue", {
+          id: "dragon_buff",
+          name: `Alma Elemental (${this.blueScore.dragons}x)`,
+          icon: "🐉",
+          bonusCombat: this.blueScore.dragons * 5,
+          bonusSiege: 0.08,
+          duration: null
+        });
+
+        this.onEvent({
+          type: "dragon",
+          side: "blue",
+          text: `🛡️ ZONEAMENTO IMPECÁVEL! Seu time expulsou o CBLOL do rio inferior e garantiu o Dragão ${dType}!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "CONTROLE DE RIO & DRAGÃO!",
+          subtitle: `Zoneamento Metódico (${prob}% chance)`,
+          text: `Com sentinelas e controle de terreno perfeito, sua equipe expulsou os inimigos do rio e pegou o Dragão ${dType} com segurança total!`
+        };
+      } else {
+        this.redScore.dragons++;
+        this._awardTeamGold("red", 150);
+        this.lanePressure = Math.max(-100, this.lanePressure - 20);
+        this._damageNextStructure("red", this.blueStructures, 20, false, 1.0);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ZONEAMENTO QUEBRADO",
+          subtitle: `Invasão Rival (${prob}% chance)`,
+          text: `O CBLOL avançou com habilidades de longa distância, desfez o bloqueio do rio e roubou o Dragão ${dType}.`
+        };
+      }
     } else {
       // cross_trade
       if (isSuccess) {
@@ -6121,7 +6619,62 @@ class MatchSimulator {
           text: "O adversário dominou o covil, garantiu abates e conquistou o Barão Na'Shor, avançando com buff contra sua base."
         };
       }
-    } else if (choiceId === "bait") {
+    } else if (choiceId === "baron_rush") {
+      if (isSuccess) {
+        let baronBounty = 0;
+        if (this.objectiveBountiesActive) {
+          baronBounty = 350;
+          this.onEvent({
+            type: "objective_bounty",
+            side: "blue",
+            text: `🎯 RECOMPENSA DE OBJETIVO ÉPICA! O Barão rendeu +350 Ouro Global!`,
+            time: this._formatTime()
+          });
+        }
+        this.blueScore.barons++;
+        this._awardTeamGold("blue", (1200 + baronBounty));
+        this.blueBaronUntil = this.gameSeconds + 210;
+        this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "baron_hand",
+          name: "Mão do Barão",
+          icon: "👑",
+          bonusSiege: 0.5,
+          bonusCombat: 15,
+          duration: 180
+        });
+
+        this.onEvent({
+          type: "baron",
+          side: "blue",
+          text: `⚡ RUSH DE BARÃO IMPLACÁVEL! Seu time derreteu o monstro e garantiu a Mão do Barão antes do CBLOL reagir!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "BARÃO DERRETIDO EM SEGUNDOS!",
+          subtitle: `Rush Impecável (${prob}% chance)`,
+          text: "Sua equipe aproveitou a dominância de mapa para queimar o Barão velozmente! Buff ativo e avanço implacável contra as estruturas inimigas!"
+        };
+      } else {
+        this.redScore.barons++;
+        this._awardTeamGold("red", 1200);
+        this.redBaronUntil = this.gameSeconds + 210;
+        this.lanePressure = -80;
+        this._damageNextStructure("red", this.blueStructures, 45, false, 1.5);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "RUSH CONTESTADO NO BARÃO",
+          subtitle: `Roubo Inesperado (${prob}% chance)`,
+          text: "O Barão levou dano, mas o Caçador inimigo conseguiu entrar com precisão no covil e roubou o monstro no Smite!"
+        };
+      }
+    } else if (choiceId === "bait" || choiceId === "baron_bait") {
       if (isSuccess && redAliveRoles.length >= 2) {
         this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0], "Emboscada Fatal", `🔵 EMBOSCADA! Vítima pega de surpresa no mato do rio!`);
 
@@ -6345,7 +6898,105 @@ class MatchSimulator {
     const blueAliveRoles = Object.keys(this.blueRosterState).filter(r => this.blueRosterState[r].alive);
     const redAliveRoles = Object.keys(this.redRosterState).filter(r => this.redRosterState[r].alive);
 
-    if (choiceId === "elder_all_in") {
+    if (choiceId === "elder_rush") {
+      if (isSuccess) {
+        let bountyGold = 0;
+        if (this.objectiveBountiesActive) {
+          bountyGold = 350;
+          this.onEvent({
+            type: "objective_bounty",
+            side: "blue",
+            text: `🎯 RECOMPENSA DE OBJETIVO SUPREMA! Dragão Ancião rendeu +350 Ouro Global!`,
+            time: this._formatTime()
+          });
+        }
+        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._awardTeamGold("blue", (600 + bountyGold));
+        this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+
+        redAliveRoles.slice(0, 2).forEach((r, idx) => {
+          this._recordKill("blue", "red", blueAliveRoles[idx % blueAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
+        });
+        this._damageNextStructure("blue", this.redStructures, 100, false, 2.5);
+
+        this.onEvent({
+          type: "elder",
+          side: "blue",
+          text: `🔥 RUSH DE ANCIÃO COLOSSAL! O monstro foi derretido e seu time avança executando os rivais rumo ao Nexus!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "DRAGÃO ANCIÃO DERRETIDO!",
+          subtitle: `Rush Final Implacável (${prob}% chance)`,
+          text: "Sua equipe aproveitou a tremenda vantagem para exterminar o Dragão Ancião em segundos! O buff de execução garante o avanço final no Nexus!"
+        };
+      } else {
+        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._awardTeamGold("red", 500);
+        this.lanePressure = -80;
+        this._damageNextStructure("red", this.blueStructures, 60, false, 2.0);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ANCIÃO CONTESTADO NO ÚLTIMO SEGUNDO",
+          subtitle: `Desastre no Smite (${prob}% chance)`,
+          text: "O rush foi rápido, mas o Caçador adversário acertou o roubo e virou a luta com a execução do Ancião."
+        };
+      }
+    } else if (choiceId === "elder_zone") {
+      if (isSuccess) {
+        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._awardTeamGold("blue", 500);
+        this.lanePressure = 100;
+        this._applyTeamBuff("blue", {
+          id: "elder_buff",
+          name: "Aspecto do Ancião",
+          icon: "🔥",
+          bonusCombat: 35,
+          bonusSiege: 0.6,
+          duration: 150
+        });
+        this.onEvent({
+          type: "elder",
+          side: "blue",
+          text: `🛡️ ZONEAMENTO MESTRE NO ANCIÃO! O adversário foi mantido longe do covil e o Dragão Ancião foi assegurado!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "ZONEAMENTO PERFEITO & ANCIÃO GARANTIDO!",
+          subtitle: `Controle do Rio (${prob}% chance)`,
+          text: "Sua equipe bloqueou as entradas do rio, não deixou o CBLOL se aproximar e finalizou o Dragão Ancião sem sofrer perdas!"
+        };
+      } else {
+        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._awardTeamGold("red", 500);
+        this.lanePressure = -80;
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "COLAPSO NO RIO",
+          subtitle: `Invasão Inimiga (${prob}% chance)`,
+          text: "O CBLOL forçou a passagem no rio com ultimate global e roubou o Dragão Ancião."
+        };
+      }
+    } else if (choiceId === "elder_all_in") {
       if (isSuccess) {
         let bountyGold = 0;
         if (this.objectiveBountiesActive) {
@@ -6672,6 +7323,63 @@ class MatchSimulator {
           text: "A torre causou dano massivo aos invasores e o CBLOL virou a luta com 2 abates, aproveitando o Arauto para avançar nas rotas."
         };
       }
+    } else if (choiceId === "herald_dive_mid") {
+      if (isSuccess) {
+        let bountyGold = 0;
+        if (this.objectiveBountiesActive) {
+          bountyGold = 250;
+          this.onEvent({
+            type: "objective_bounty",
+            side: "blue",
+            text: `🎯 RECOMPENSA DE OBJETIVO COLETADA! O dive no mid rendeu +250 Ouro Global!`,
+            time: this._formatTime()
+          });
+        }
+        this.blueScore.heralds = (this.blueScore.heralds || 0) + 1;
+        this._awardTeamGold("blue", (400 + bountyGold));
+        this.lanePressure = Math.min(100, this.lanePressure + 40);
+        this._damageNextStructure("blue", this.redStructures, 65, false, 3.0);
+        this._applyTeamBuff("blue", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
+
+        const redMid = "mid";
+        if (this.redRosterState[redMid] && this.redRosterState[redMid].alive) {
+          this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redMid, "Dive Brutal no Mid");
+        }
+
+        this.onEvent({
+          type: "herald",
+          side: "blue",
+          text: `👁️ ARAUTO & DIVE NO MID! Seu time garantiu o Arauto e mergulhou na torre do mid eliminando o adversário!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "ARAUTO & DIVE DEVASTADOR NO MID!",
+          subtitle: `Domínio Total da Rota Central (${prob}% chance)`,
+          text: "Sua equipe pegou o Arauto e marchou direto para o meio, abatendo o Mid laner sob a torre e soltando a cabeçada colossal!"
+        };
+      } else {
+        this._awardTeamGold("red", 200);
+        this.lanePressure = Math.max(-100, this.lanePressure - 25);
+        if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Defesa de Torre");
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "DIVE NO MID FRUSTRADO",
+          subtitle: `Torre Defendida (${prob}% chance)`,
+          text: "O Mid inimigo usou o desarme sob a torre, resistiu ao dive e forçou o recuo da sua equipe."
+        };
+      }
     } else if (choiceId === "bush_trap") {
       if (isSuccess) {
         let bountyGold = 0;
@@ -6712,7 +7420,7 @@ class MatchSimulator {
         };
       }
     } else {
-      // vision_control
+      // vision_control / cross_trade_herald
       if (isSuccess) {
         let bountyGold = 0;
         if (this.objectiveBountiesActive) {
@@ -6736,9 +7444,11 @@ class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "ABSORÇÃO DEFENSIVA PERFEITA",
+          title: choiceId === "cross_trade_herald" ? "ABSORÇÃO & FARM DE BARRICADAS" : "ABSORÇÃO DEFENSIVA PERFEITA",
           subtitle: `Defesa sob a Torre (${prob}% chance)`,
-          text: "Sua equipe posicionou sentinelas, limpou a investida do Arauto com facilidade e coletou o ouro da onda com total segurança."
+          text: choiceId === "cross_trade_herald"
+            ? "Sua equipe concedeu o Arauto deliberadamente, recuou sob a torre e cobrou recursos farmando barricadas na rota oposta!"
+            : "Sua equipe posicionou sentinelas, limpou a investida do Arauto com facilidade e coletou o ouro da onda com total segurança."
         };
       } else {
         this._awardTeamGold("red", 150);
