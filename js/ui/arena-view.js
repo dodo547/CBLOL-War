@@ -76,11 +76,16 @@ export class ArenaView {
           </div>
         </div>
 
-        <!-- Barra de Controles de Reprodução e Postura Tática Orgânica -->
+        <!-- Barra de Controles de Reprodução e Postura Tática Interativa -->
         <div class="match-controls-bar">
-          <div class="tactical-actions-group" style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 11px; font-weight: 800; color: var(--lol-gold-1); text-transform: uppercase; letter-spacing: 0.5px;">Postura da Equipe:</span>
-            <div class="organic-tactics-badge" id="organic-tactics-badge">${state.tacticsLabel || '⚖️ Controle de Rotas'}</div>
+          <div class="tactical-actions-group">
+            <span class="tactics-group-title">🎯 Postura da Equipe:</span>
+            <div class="tactics-buttons-container" id="tactics-buttons-container">
+              <button class="tactic-btn ${this.sim.playerTactics === 'balanced' ? 'active' : ''}" data-tactic="balanced" title="Equilibrada: controle de rotas, farm e visão padrão">⚖️ Equilibrada</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: força lutas e emboscadas (+Dano, -Defesa)">⚔️ Agressiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'defense' ? 'active' : ''}" data-tactic="defense" title="Defensiva: joga sob as torres e absorve pressão (+Armadura, -Push)">🛡️ Defensiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'split' ? 'active' : ''}" data-tactic="split" title="Split Push: foca em derreter torres e puxar rotas laterais (+Push, -Dano TF)">🏰 Split Push</button>
+            </div>
           </div>
 
           <div class="speed-buttons-group">
@@ -418,10 +423,12 @@ export class ArenaView {
       }
     }
 
-    // Atualiza badge de postura tática orgânica
-    const tacticsBadge = this.containerEl.querySelector("#organic-tactics-badge");
-    if (tacticsBadge && state.tacticsLabel) {
-      tacticsBadge.textContent = state.tacticsLabel;
+    // Atualiza estado ativo dos botões de postura tática
+    const currentTactic = state.playerTactics || (this.sim && this.sim.playerTactics);
+    if (currentTactic) {
+      this.containerEl.querySelectorAll(".tactic-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-tactic") === currentTactic);
+      });
     }
 
     // Alerta de Recompensas de Objetivo (Comeback Mechanics)
@@ -1364,6 +1371,19 @@ export class ArenaView {
   }
 
   _bindControls() {
+    // Botões de Postura Tática da Equipe em Tempo Real
+    this.containerEl.querySelectorAll(".tactic-btn[data-tactic]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        sound.playClick();
+        const tactic = btn.getAttribute("data-tactic");
+        if (tactic && this.sim && !this.sim.isFinished) {
+          this.sim.setTactics(tactic, true);
+          this.containerEl.querySelectorAll(".tactic-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+        }
+      });
+    });
+
     // Botões de Velocidade
     this.containerEl.querySelectorAll(".speed-btn[data-speed]").forEach(btn => {
       btn.addEventListener("click", () => {

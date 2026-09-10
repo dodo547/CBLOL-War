@@ -4245,6 +4245,7 @@ class MatchSimulator {
     // Postura Tática Orgânica e Automática da Equipe
     this.playerTactics = "balanced";
     this.tacticsLabel = "⚖️ Controle de Rotas";
+    this.manualTactics = false; // Controle manual ativo pelo jogador via botões do HUD
     this.combatCooldown = 0; // recarga entre lutas com mortes (pacing realista de abates)
 
     // Placar e Ouro: Início com 500g por campeão = 2.500g por equipe
@@ -4437,6 +4438,9 @@ class MatchSimulator {
   }
 
   _updateOrganicTactics() {
+    // Se o jogador definiu manualmente a postura através dos controles, sua escolha é 100% respeitada!
+    if (this.manualTactics) return;
+
     const hasBaron = this.gameSeconds < this.blueBaronUntil;
     const blueAlive = Object.values(this.blueRosterState).filter(c => c.alive).length;
     const redAlive = Object.values(this.redRosterState).filter(c => c.alive).length;
@@ -4470,19 +4474,23 @@ class MatchSimulator {
     return splitChamps.includes(String(top.id).toLowerCase());
   }
 
-  setTactics(tacticKey) {
+  setTactics(tacticKey, isManual = true) {
     this.playerTactics = tacticKey;
+    if (isManual) {
+      this.manualTactics = true;
+    }
     const names = {
-      balanced: "Equilibrada (Padrão)",
-      aggressive: "⚔️ Agressiva / Luta Total (+Dano)",
-      defense: "🛡️ Defensiva / Sob a Torre (+Resistência)",
-      split: "🏰 Split Push / Foco em Torres (+Push)",
+      balanced: "⚖️ Equilibrada",
+      aggressive: "⚔️ Agressiva (+Dano)",
+      defense: "🛡️ Defensiva (+Armadura)",
+      split: "🏰 Split Push (+Torres)",
       objective: "👑 Foco em Barão & Dragões"
     };
+    this.tacticsLabel = names[tacticKey] || tacticKey;
     this.onEvent({
       type: "tactics",
       side: "blue",
-      text: `📋 Postura Tática alterada para: ${names[tacticKey] || tacticKey}!`,
+      text: `📋 Postura Tática definida para: ${names[tacticKey] || tacticKey}!`,
       time: this._formatTime()
     });
   }
@@ -4914,7 +4922,15 @@ class MatchSimulator {
     });
 
     // 2. Decide se ocorre um Confronto Decisivo / Abate ou Troca de Rota
+    const isLaningPhase = this.gameSeconds < 840;
     const canFight = this.combatCooldown <= 0;
+
+    // Na fase de rotas, ocorrem duelos e ganks específicos de rotas (Top, Mid, Bot)
+    if (isLaningPhase && canFight && Math.random() < 0.28) {
+      const skirmishHappened = this._triggerLaneSkirmish();
+      if (skirmishHappened) return;
+    }
+
     const isUnderPressure = Math.abs(this.lanePressure) >= 30;
     const fightChance = isUnderPressure ? 0.22 : 0.12;
     const rollForFight = canFight && (Math.random() < fightChance);
@@ -5004,10 +5020,20 @@ class MatchSimulator {
       gameDeficitModifiers = Math.max(-12, gameDeficitModifiers);
     }
 
+    // 9. Sinergia da Postura Tática com a decisão tomada
+    let tacticModifier = 0;
+    if (this.playerTactics === "aggressive" && (statType === "damage" || complexity === "tactical")) {
+      tacticModifier = 6;
+    } else if (this.playerTactics === "defense" && (statType === "tank" || complexity === "simple")) {
+      tacticModifier = 6;
+    } else if (this.playerTactics === "split" && (statType === "push" || complexity === "complex")) {
+      tacticModifier = 8;
+    }
+
     // Dificuldade progressiva justa: times em fases avançadas leem jogadas melhor
     const roundPenalty = [0, -2, -3, -5][this.roundIndex] || 0;
 
-    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + buffModifier + rolePenalty + roundPenalty;
+    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + buffModifier + rolePenalty + roundPenalty + tacticModifier;
 
     // Pisos adaptados por fase (preserva possibilidade de virada, mas exige precisão no topo)
     const simpleFloors = [68, 65, 62, 58];
@@ -5972,14 +5998,14 @@ class MatchSimulator {
         }
         this.redScore.dragons++;
         this._awardTeamGold("red", 150);
-        this._awardTeamGold("blue", (200 + bountyGold));
-        this.lanePressure = Math.min(100, this.lanePressure + 30);
-        this._damageNextStructure("blue", this.redStructures, 35, false, 1.5);
+        this._awardTeamGold("blue", (600 + bountyGold));
+        this.lanePressure = Math.min(100, this.lanePressure + 35);
+        this._damageNextStructure("blue", this.redStructures, 70, false, 2.5);
 
         this.onEvent({
           type: "plate",
           side: "blue",
-          text: `🏰 CROSS-MAP EXEMPLAR! Enquanto o rival fazia o Dragão, seu time destruiu defesas opostas e faturou ouro!`,
+          text: `🏰 CROSS-MAP EXEMPLAR! Enquanto o rival fazia o Dragão, seu time arrombou 4 barricadas da torre oposta e faturou +600g!`,
           time: this._formatTime()
         });
 
@@ -6204,12 +6230,9 @@ class MatchSimulator {
           duration: 180
         });
 
-        const target = this._getCurrentTargetStructure(this.redStructures);
-        if (target) {
-          target.currentHp = 0;
-          target.destroyed = true;
-          this.onStructureDestroyed("red", target.id);
-        }
+        // Destrói instantaneamente a estrutura com ouro e ativa Super Minions
+        this._destroyCurrentStructure("blue", this.redStructures, 500);
+        this.blueSuperMinions = true;
 
         this.onEvent({
           type: "inhibitor_destroyed",
@@ -6521,9 +6544,9 @@ class MatchSimulator {
           });
         }
         this.blueScore.heralds = (this.blueScore.heralds || 0) + 1;
-        this._awardTeamGold("blue", (150 + bountyGold));
+        this._awardTeamGold("blue", (350 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 28);
-        this._damageNextStructure("blue", this.redStructures, 30, false, 1.5);
+        this._damageNextStructure("blue", this.redStructures, 50, false, 3.0);
         this._applyTeamBuff("blue", {
           id: "herald_buff",
           name: "Olho do Arauto",
@@ -6594,7 +6617,8 @@ class MatchSimulator {
           });
         }
         this._awardTeamGold("red", 150);
-        this._awardTeamGold("blue", (200 + bountyGold));
+        // Destrói a Primeira Torre (T1) vermelha instantaneamente garantindo a promessa de escolha
+        this._destroyCurrentStructure("blue", this.redStructures, 250 + bountyGold);
         this.lanePressure = Math.min(100, this.lanePressure + 35);
 
         const redAdc = "adc";
@@ -6606,12 +6630,10 @@ class MatchSimulator {
           this._recordKill("blue", "red", blueAliveRoles[1] || "adc", redSupp, "Execução sob a Torre");
         }
 
-        this._damageNextStructure("blue", this.redStructures, 35, false, 1.8);
-
         this.onEvent({
           type: "dive",
           side: "blue",
-          text: `🏹 DIVE ESPETACULAR NO BOT! O seu time mergulhou na bot lane, abateu a dupla adversária e abriu defesas!`,
+          text: `🏹 DIVE ESPETACULAR NO BOT! O seu time mergulhou na bot lane, abateu a dupla adversária e derrubou a Primeira Torre do jogo! (+650g)`,
           time: this._formatTime()
         });
 
@@ -6722,9 +6744,118 @@ class MatchSimulator {
     }
   }
 
+  _triggerLaneSkirmish() {
+    const lanes = ["top", "mid", "bot"];
+    const lane = lanes[Math.floor(Math.random() * lanes.length)];
+
+    const bTop = this.blueRosterState.top;
+    const rTop = this.redRosterState.top;
+    const bJg = this.blueRosterState.jungle;
+    const rJg = this.redRosterState.jungle;
+    const bMid = this.blueRosterState.mid;
+    const rMid = this.redRosterState.mid;
+    const bAdc = this.blueRosterState.adc;
+    const rAdc = this.redRosterState.adc;
+    const bSupp = this.blueRosterState.support;
+    const rSupp = this.redRosterState.support;
+
+    const tacticBonus = (this.playerTactics === "aggressive") ? 7 : ((this.playerTactics === "defense") ? -4 : 0);
+
+    if (lane === "top") {
+      if (!bTop || !bTop.alive || !rTop || !rTop.alive) return false;
+      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + (Math.random() * 26);
+      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 26);
+      if (bPower > rPower + 4) {
+        this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this.combatCooldown = 45;
+        return true;
+      } else if (rPower > bPower + 4) {
+        this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        this.combatCooldown = 45;
+        return true;
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `🛡️ Troca agressiva na rota do topo! ${bTop.name} e ${rTop.name} gastaram feitiços e recuaram com pouca vida.`,
+          time: this._formatTime()
+        });
+        this.combatCooldown = 25;
+        return true;
+      }
+    } else if (lane === "mid") {
+      if (!bMid || !bMid.alive || !rMid || !rMid.alive) return false;
+      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + (Math.random() * 26);
+      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + (Math.random() * 26);
+      if (bPower > rPower + 4) {
+        const isGank = bJg && bJg.alive && Math.random() < 0.45;
+        const kRole = isGank ? "jungle" : "mid";
+        const kTxt = isGank
+          ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
+          : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
+        this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this.combatCooldown = 45;
+        return true;
+      } else if (rPower > bPower + 4) {
+        const isGank = rJg && rJg.alive && Math.random() < 0.45;
+        const kRole = isGank ? "jungle" : "mid";
+        const kTxt = isGank
+          ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
+          : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
+        this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        this.combatCooldown = 45;
+        return true;
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `🛡️ Duelo mágico equilibrado na rota do meio! Ambos os magos recuaram para farmar.`,
+          time: this._formatTime()
+        });
+        this.combatCooldown = 25;
+        return true;
+      }
+    } else {
+      // bot lane
+      if (!bAdc || !bAdc.alive || !rAdc || !rAdc.alive) return false;
+      const bSuppAlive = bSupp && bSupp.alive;
+      const rSuppAlive = rSupp && rSupp.alive;
+      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + (Math.random() * 28);
+      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + (Math.random() * 28);
+      if (bPower > rPower + 4) {
+        const victimRole = rSuppAlive && Math.random() < 0.55 ? "support" : "adc";
+        const victimName = this.redRosterState[victimRole].name;
+        this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this.combatCooldown = 45;
+        return true;
+      } else if (rPower > bPower + 4) {
+        const victimRole = bSuppAlive && Math.random() < 0.55 ? "support" : "adc";
+        const victimName = this.blueRosterState[victimRole].name;
+        this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
+        this.lanePressure = Math.max(-100, this.lanePressure - 12);
+        this.combatCooldown = 45;
+        return true;
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `🛡️ Troca intensa no 2v2 da bot lane! Curas e barreiras foram ativadas e as duplas reposicionaram.`,
+          time: this._formatTime()
+        });
+        this.combatCooldown = 25;
+        return true;
+      }
+    }
+  }
+
   _triggerDecisiveCombat(winnerSide, loserSide, margin, isForcedCounter = false) {
     // Intervalo de recarga de combate: pacing realista de CBLOL e Mundial (16 a 26 kills por partida)
-    this.combatCooldown = 75;
+    this.combatCooldown = 50;
 
     const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
     const winnerRoster = winnerSide === "blue" ? this.blueRosterState : this.redRosterState;
@@ -6762,16 +6893,16 @@ class MatchSimulator {
       this._recordKill(winnerSide, loserSide, killerRole, victimRole, null, customTxt);
     }
 
-    // Troca de abates (Trade Kill): Apenas em 10% dos confrontos equilibrados
+    // Troca de abates (Trade Kill): Em ~40% dos confrontos equilibrados o time perdedor revida e leva um abate
     const loserAliveAfter = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     const winnerAliveAfter = Object.keys(winnerRoster).filter(r => winnerRoster[r].alive);
-    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.10) {
+    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.40) {
       const tradeVictimRole = winnerAliveAfter[Math.floor(Math.random() * winnerAliveAfter.length)];
       const tradeKillerRole = loserAliveAfter[Math.floor(Math.random() * loserAliveAfter.length)];
       const tKiller = loserRoster[tradeKillerRole];
       const tVictim = winnerRoster[tradeVictimRole];
       const tTxt = (tKiller && tVictim)
-        ? `⚔️ [RESPOSTA] ${tKiller.name} revidou na luta e abateu ${tVictim.name}!`
+        ? `⚔️ [RESPOSTA] ${tKiller.name} revidou na luta e abateu ${tVictim.name} antes de cair!`
         : null;
       this._recordKill(loserSide, winnerSide, tradeKillerRole, tradeVictimRole, null, tTxt);
     }
@@ -6794,6 +6925,91 @@ class MatchSimulator {
       text: texts[Math.floor(Math.random() * texts.length)],
       time: this._formatTime()
     });
+  }
+
+  _destroyCurrentStructure(attackerSide, targetStructures, bonusTeamGold = 0) {
+    const target = this._getCurrentTargetStructure(targetStructures);
+    if (!target) return;
+    target.plates = 0;
+    target.currentHp = 0;
+    target.destroyed = true;
+
+    let bountyBonus = 0;
+    if (attackerSide === "blue" && this.objectiveBountiesActive && target.id !== "nexus") {
+      bountyBonus = 300;
+      this.onEvent({
+        type: "objective_bounty",
+        side: "blue",
+        text: `🎯 RECOMPENSA DE OBJETIVO COLETADA! A equipe derrubou a ${target.name} e garantiu +300 Ouro Global de Virada!`,
+        time: this._formatTime()
+      });
+    }
+
+    const attackerScore = attackerSide === "blue" ? this.blueScore : this.redScore;
+    const totalAward = target.goldValue + bountyBonus + bonusTeamGold;
+    attackerScore.gold += totalAward;
+
+    const attackerRosterObj = attackerSide === "blue" ? this.blueRosterState : this.redRosterState;
+    const aliveAttackers = Object.values(attackerRosterObj).filter(c => c.alive);
+    const splitTurretGold = Math.round(totalAward / Math.max(1, aliveAttackers.length));
+    aliveAttackers.forEach(c => {
+      c.goldEarned = (c.goldEarned || 500) + splitTurretGold;
+      c.turrets = (c.turrets || 0) + 1;
+    });
+
+    if (target.id === "inhib") {
+      attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
+      if (attackerSide === "blue") {
+        this.blueSuperMinions = true;
+        this.redInhibRespawnAt = this.gameSeconds + 240;
+      } else {
+        this.redSuperMinions = true;
+        this.blueInhibRespawnAt = this.gameSeconds + 240;
+      }
+      this.onEvent({
+        type: "inhibitor_destroyed",
+        side: attackerSide,
+        text: `🏰 INIBIDOR DESTRUÍDO! O ${target.name} ${attackerSide === "blue" ? "Vermelho" : "Azul"} ruiu! Super Tropas ativadas!`,
+        time: this._formatTime()
+      });
+    } else if (target.id === "nexus") {
+      this.onEvent({
+        type: "nexus_destroyed",
+        side: attackerSide,
+        text: `🚨 O NEXUS ${attackerSide === "blue" ? "VERMELHO" : "AZUL"} EXPLODIU! GG WP!`,
+        time: this._formatTime()
+      });
+    } else {
+      attackerScore.towers = (attackerScore.towers || 0) + 1;
+      const firstBrick = (target.id === "t1" && !this._firstBrickGiven);
+      if (firstBrick) {
+        this._firstBrickGiven = true;
+        attackerScore.gold += 250;
+        this.onEvent({
+          type: "tower_destroyed",
+          side: attackerSide,
+          text: `🏰 PRIMEIRA TORRE DO JOGO (FIRST BRICK)! A ${target.name} ${attackerSide === "blue" ? "Vermelha" : "Azul"} caiu! (+250 Ouro Bônus)`,
+          time: this._formatTime()
+        });
+      } else {
+        this.onEvent({
+          type: "tower_destroyed",
+          side: attackerSide,
+          text: `🏰 A ${target.name} ${attackerSide === "blue" ? "Vermelha" : "Azul"} foi DESTRUÍDA!`,
+          time: this._formatTime()
+        });
+      }
+    }
+
+    this.onStructureHit(attackerSide === "blue" ? "red" : "blue", target.id, 0, target.maxHp);
+    this.onStructureDestroyed(attackerSide === "blue" ? "red" : "blue", target.id);
+
+    if (attackerSide === "blue") {
+      this.lanePressure = Math.max(20, this.lanePressure + 25);
+    } else {
+      this.lanePressure = Math.min(-20, this.lanePressure - 25);
+    }
+    this._syncTeamGold();
   }
 
   _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0) {
@@ -8728,11 +8944,16 @@ class ArenaView {
           </div>
         </div>
 
-        <!-- Barra de Controles de Reprodução e Postura Tática Orgânica -->
+        <!-- Barra de Controles de Reprodução e Postura Tática Interativa -->
         <div class="match-controls-bar">
-          <div class="tactical-actions-group" style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 11px; font-weight: 800; color: var(--lol-gold-1); text-transform: uppercase; letter-spacing: 0.5px;">Postura da Equipe:</span>
-            <div class="organic-tactics-badge" id="organic-tactics-badge">${state.tacticsLabel || '⚖️ Controle de Rotas'}</div>
+          <div class="tactical-actions-group">
+            <span class="tactics-group-title">🎯 Postura da Equipe:</span>
+            <div class="tactics-buttons-container" id="tactics-buttons-container">
+              <button class="tactic-btn ${this.sim.playerTactics === 'balanced' ? 'active' : ''}" data-tactic="balanced" title="Equilibrada: controle de rotas, farm e visão padrão">⚖️ Equilibrada</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: força lutas e emboscadas (+Dano, -Defesa)">⚔️ Agressiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'defense' ? 'active' : ''}" data-tactic="defense" title="Defensiva: joga sob as torres e absorve pressão (+Armadura, -Push)">🛡️ Defensiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'split' ? 'active' : ''}" data-tactic="split" title="Split Push: foca em derreter torres e puxar rotas laterais (+Push, -Dano TF)">🏰 Split Push</button>
+            </div>
           </div>
 
           <div class="speed-buttons-group">
@@ -9070,10 +9291,12 @@ class ArenaView {
       }
     }
 
-    // Atualiza badge de postura tática orgânica
-    const tacticsBadge = this.containerEl.querySelector("#organic-tactics-badge");
-    if (tacticsBadge && state.tacticsLabel) {
-      tacticsBadge.textContent = state.tacticsLabel;
+    // Atualiza estado ativo dos botões de postura tática
+    const currentTactic = state.playerTactics || (this.sim && this.sim.playerTactics);
+    if (currentTactic) {
+      this.containerEl.querySelectorAll(".tactic-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-tactic") === currentTactic);
+      });
     }
 
     // Alerta de Recompensas de Objetivo (Comeback Mechanics)
@@ -10016,6 +10239,19 @@ class ArenaView {
   }
 
   _bindControls() {
+    // Botões de Postura Tática da Equipe em Tempo Real
+    this.containerEl.querySelectorAll(".tactic-btn[data-tactic]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        sound.playClick();
+        const tactic = btn.getAttribute("data-tactic");
+        if (tactic && this.sim && !this.sim.isFinished) {
+          this.sim.setTactics(tactic, true);
+          this.containerEl.querySelectorAll(".tactic-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+        }
+      });
+    });
+
     // Botões de Velocidade
     this.containerEl.querySelectorAll(".speed-btn[data-speed]").forEach(btn => {
       btn.addEventListener("click", () => {
