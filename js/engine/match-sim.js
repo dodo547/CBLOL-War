@@ -672,27 +672,37 @@ export class MatchSimulator {
       redDefendingBonus = 14;
     }
 
-    let blueBasePower = ((bStats.damage + tacticDmg) * 0.28 +
-                         (bStats.tank + tacticTank) * 0.24 +
-                         (bStats.utility) * 0.20 +
-                         (bStats.scaling) * scalingFactor +
+    const bDmgStat = (bStats && (bStats.damage || bStats.combat)) || 75;
+    const bTankStat = (bStats && (bStats.tank || bStats.defense)) || 75;
+    const bUtilStat = (bStats && (bStats.utility || bStats.macro)) || 75;
+    const bScaleStat = (bStats && (bStats.scaling || bStats.combat)) || 75;
+
+    const rDmgStat = (rStats && (rStats.damage || rStats.combat)) || 75;
+    const rTankStat = (rStats && (rStats.tank || rStats.defense)) || 75;
+    const rUtilStat = (rStats && (rStats.utility || rStats.macro)) || 75;
+    const rScaleStat = (rStats && (rStats.scaling || rStats.combat)) || 75;
+
+    let blueBasePower = ((bDmgStat + tacticDmg) * 0.28 +
+                         (bTankStat + tacticTank) * 0.24 +
+                         (bUtilStat) * 0.20 +
+                         (bScaleStat) * scalingFactor +
                          blueGoldBonus +
                          blueDefendingBonus +
                          (blueHasBaron ? 16 : 0) +
                          (this.blueSuperMinions ? 12 : 0)) * blueManpowerMod;
 
-    let redBasePower = ((rStats.damage) * 0.28 +
-                        (rStats.tank) * 0.24 +
-                        (rStats.utility) * 0.20 +
-                        (rStats.scaling) * scalingFactor +
-                        redGoldBonus +
-                        redDefendingBonus +
-                        (redHasBaron ? 16 : 0) +
-                        (this.redSuperMinions ? 12 : 0)) * redManpowerMod;
+    let redBasePower = ((rDmgStat) * 0.28 +
+                         (rTankStat) * 0.24 +
+                         (rUtilStat) * 0.20 +
+                         (rScaleStat) * scalingFactor +
+                         redGoldBonus +
+                         redDefendingBonus +
+                         (redHasBaron ? 16 : 0) +
+                         (this.redSuperMinions ? 12 : 0)) * redManpowerMod;
 
-    // Rolagem com variabilidade realista do League (±15% de variação em jogadas e outplays simétricas)
-    const blueRoll = blueBasePower * (0.85 + Math.random() * 0.30);
-    const redRoll = redBasePower * (0.85 + Math.random() * 0.30);
+    // Rolagem com variabilidade realista do League (±12% de variação em jogadas e outplays simétricas)
+    const blueRoll = blueBasePower * (0.88 + Math.random() * 0.24);
+    const redRoll = redBasePower * (0.88 + Math.random() * 0.24);
     const diff = blueRoll - redRoll;
 
     // Dinamismo cadenciado da Pressão de Rota (Lane Momentum)
@@ -729,19 +739,19 @@ export class MatchSimulator {
     const canFight = this.combatCooldown <= 0;
 
     // Na fase de rotas, ocorrem duelos e ganks específicos de rotas (Top, Mid, Bot)
-    if (isLaningPhase && canFight && Math.random() < 0.28) {
+    if (isLaningPhase && canFight && Math.random() < 0.20) {
       const skirmishHappened = this._triggerLaneSkirmish();
       if (skirmishHappened) return;
     }
 
-    const isUnderPressure = Math.abs(this.lanePressure) >= 30;
-    const fightChance = isUnderPressure ? 0.22 : 0.12;
+    const isUnderPressure = Math.abs(this.lanePressure) >= 35;
+    const fightChance = isUnderPressure ? 0.16 : 0.09;
     const rollForFight = canFight && (Math.random() < fightChance);
 
     if (rollForFight) {
-      if (diff > 2.5) {
+      if (diff > 5.5) {
         this._triggerDecisiveCombat("blue", "red", Math.abs(diff), false);
-      } else if (diff < -2.5) {
+      } else if (diff < -5.5) {
         // Contra-ataque orgânico do jogador sob extrema pressão quando em postura defensiva
         if (this.lanePressure <= -40 && this.playerTactics === "defense" && Math.random() < 0.25) {
           this.onEvent({
@@ -757,6 +767,7 @@ export class MatchSimulator {
         }
       } else {
         this._triggerSkirmishEqual();
+        this.combatCooldown = 30;
       }
     } else {
       // Escaramuça sem mortes: apenas tropas profundas sob a torre causam leve dano de cerco
@@ -2823,7 +2834,7 @@ export class MatchSimulator {
           duration: 150
         });
 
-        redAliveRoles.forEach((r, idx) => {
+        redAliveRoles.slice(0, 3).forEach((r, idx) => {
           this._recordKill("blue", "red", blueAliveRoles[idx % blueAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
         });
         this._damageNextStructure("blue", this.redStructures, 100, false, 2.5);
@@ -2831,7 +2842,7 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "👑 DRAGÃO ANCIÃO & ACE SUPREMO!",
+          title: "👑 DRAGÃO ANCIÃO & VITÓRIA NO COVIL!",
           subtitle: `O Golpe Final (${prob}% chance)`,
           text: "O Aspecto do Dragão Ancião executou os campeões do CBLOL! Suas tropas avançam com fúria para destruir o Nexus!"
         };
@@ -2848,7 +2859,7 @@ export class MatchSimulator {
           duration: 150
         });
 
-        blueAliveRoles.forEach((r, idx) => {
+        blueAliveRoles.slice(0, 3).forEach((r, idx) => {
           this._recordKill("red", "blue", redAliveRoles[idx % redAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
         });
         this._damageNextStructure("red", this.blueStructures, 100, false, 2.5);
@@ -2856,7 +2867,7 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "O CBLOL EXECUTOU O TIME INTEIRO!",
+          title: "O CBLOL EXECUTOU SEUS CAMPEÕES!",
           subtitle: `Derrota no Ancião (${prob}% chance)`,
           text: "O adversário conquistou o Ancião e a queima executou toda a sua equipe. O CBLOL avança diretamente contra seu Nexus!"
         };
@@ -3284,21 +3295,21 @@ export class MatchSimulator {
     const bSupp = this.blueRosterState.support;
     const rSupp = this.redRosterState.support;
 
-    const tacticBonus = (this.playerTactics === "aggressive") ? 7 : ((this.playerTactics === "defense") ? -4 : 0);
+    const tacticBonus = (this.playerTactics === "aggressive") ? 5 : ((this.playerTactics === "defense") ? -4 : 0);
 
     if (lane === "top") {
       if (!bTop || !bTop.alive || !rTop || !rTop.alive) return false;
-      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + (Math.random() * 26);
-      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 26);
-      if (bPower > rPower + 4) {
+      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
+      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 20);
+      if (bPower > rPower + 8.5) {
         this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
-      } else if (rPower > bPower + 4) {
+      } else if (rPower > bPower + 8.5) {
         this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
         this.lanePressure = Math.max(-100, this.lanePressure - 10);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
       } else {
         this.onEvent({
@@ -3307,32 +3318,32 @@ export class MatchSimulator {
           text: `🛡️ Troca agressiva na rota do topo! ${bTop.name} e ${rTop.name} gastaram feitiços e recuaram com pouca vida.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 25;
+        this.combatCooldown = 30;
         return true;
       }
     } else if (lane === "mid") {
       if (!bMid || !bMid.alive || !rMid || !rMid.alive) return false;
-      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + (Math.random() * 26);
-      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + (Math.random() * 26);
-      if (bPower > rPower + 4) {
-        const isGank = bJg && bJg.alive && Math.random() < 0.45;
+      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
+      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + (Math.random() * 20);
+      if (bPower > rPower + 8.5) {
+        const isGank = bJg && bJg.alive && Math.random() < 0.35;
         const kRole = isGank ? "jungle" : "mid";
         const kTxt = isGank
           ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
           : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
         this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
-      } else if (rPower > bPower + 4) {
-        const isGank = rJg && rJg.alive && Math.random() < 0.45;
+      } else if (rPower > bPower + 8.5) {
+        const isGank = rJg && rJg.alive && Math.random() < 0.35;
         const kRole = isGank ? "jungle" : "mid";
         const kTxt = isGank
           ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
           : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
         this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         this.lanePressure = Math.max(-100, this.lanePressure - 10);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
       } else {
         this.onEvent({
@@ -3341,7 +3352,7 @@ export class MatchSimulator {
           text: `🛡️ Duelo mágico equilibrado na rota do meio! Ambos os magos recuaram para farmar.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 25;
+        this.combatCooldown = 30;
         return true;
       }
     } else {
@@ -3349,21 +3360,21 @@ export class MatchSimulator {
       if (!bAdc || !bAdc.alive || !rAdc || !rAdc.alive) return false;
       const bSuppAlive = bSupp && bSupp.alive;
       const rSuppAlive = rSupp && rSupp.alive;
-      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + (Math.random() * 28);
-      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + (Math.random() * 28);
-      if (bPower > rPower + 4) {
-        const victimRole = rSuppAlive && Math.random() < 0.55 ? "support" : "adc";
+      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
+      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + (Math.random() * 20);
+      if (bPower > rPower + 8.5) {
+        const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
         this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
         this.lanePressure = Math.min(100, this.lanePressure + 12);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
-      } else if (rPower > bPower + 4) {
-        const victimRole = bSuppAlive && Math.random() < 0.55 ? "support" : "adc";
+      } else if (rPower > bPower + 8.5) {
+        const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
         this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
         this.lanePressure = Math.max(-100, this.lanePressure - 12);
-        this.combatCooldown = 45;
+        this.combatCooldown = 60;
         return true;
       } else {
         this.onEvent({
@@ -3372,15 +3383,15 @@ export class MatchSimulator {
           text: `🛡️ Troca intensa no 2v2 da bot lane! Curas e barreiras foram ativadas e as duplas reposicionaram.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 25;
+        this.combatCooldown = 30;
         return true;
       }
     }
   }
 
   _triggerDecisiveCombat(winnerSide, loserSide, margin, isForcedCounter = false) {
-    // Intervalo de recarga de combate: pacing realista de CBLOL e Mundial (16 a 26 kills por partida)
-    this.combatCooldown = 50;
+    // Intervalo de recarga de combate: pacing realista de CBLOL e Mundial (12 a 18 kills por partida)
+    this.combatCooldown = 65;
 
     const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
     const winnerRoster = winnerSide === "blue" ? this.blueRosterState : this.redRosterState;
@@ -3392,7 +3403,7 @@ export class MatchSimulator {
 
     // Abates decisivos: abates pontuais e estratégicos (1 abate por padrão, raramente 2 em margens extremas)
     let killsCount = 1;
-    if (margin > 18 && aliveVictimRoles.length >= 2) {
+    if (margin > 24 && aliveVictimRoles.length >= 2) {
       killsCount = 2; // Vitória tática expressiva
     }
 
@@ -3418,10 +3429,10 @@ export class MatchSimulator {
       this._recordKill(winnerSide, loserSide, killerRole, victimRole, null, customTxt);
     }
 
-    // Troca de abates (Trade Kill): Em ~40% dos confrontos equilibrados o time perdedor revida e leva um abate
+    // Troca de abates (Trade Kill): Em ~20% dos confrontos equilibrados o time perdedor revida e leva um abate
     const loserAliveAfter = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     const winnerAliveAfter = Object.keys(winnerRoster).filter(r => winnerRoster[r].alive);
-    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.40) {
+    if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.20) {
       const tradeVictimRole = winnerAliveAfter[Math.floor(Math.random() * winnerAliveAfter.length)];
       const tradeKillerRole = loserAliveAfter[Math.floor(Math.random() * loserAliveAfter.length)];
       const tKiller = loserRoster[tradeKillerRole];
@@ -3438,6 +3449,7 @@ export class MatchSimulator {
   }
 
   _triggerSkirmishEqual() {
+    this.combatCooldown = Math.max(this.combatCooldown, 25);
     const texts = [
       "⚔️ Disputa de rota equilibrada! Tropas limpas e equipes reposicionam.",
       "🛡️ Troca cautelosa de dano pelo rio sem abates.",
