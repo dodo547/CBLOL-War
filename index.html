@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <title>CBLOL Chronicles: Batalha pelo Nexus | League of Legends Minigame</title>
+  
+  <!-- Estilos Hextech e Arena do LoL -->
+  <link rel="stylesheet" href="css/lol-theme.css" />
+  <link rel="stylesheet" href="css/arena.css" />
+  
+  <link rel="icon" href="https://ddragon.leagueoflegends.com/cdn/14.20.1/img/profileicon/633.png" type="image/png" />
+</head>
+<body>
+
+  <!-- Barra Superior Hextech -->
+  <header class="lol-header">
+    <div class="brand-wrapper">
+      <span class="cblol-badge">CBLOL</span>
+      <h1 class="app-title">Batalha pelo Nexus</h1>
+    </div>
+
+    <div class="header-actions">
+      <button id="mute-btn" class="icon-btn" title="Alternar Efeitos Sonoros">
+        🔊 Som: Ligado
+      </button>
+      <button id="new-run-btn" class="icon-btn" title="Reiniciar Campanha">
+        🔄 Nova Campanha
+      </button>
+    </div>
+  </header>
+
+  <!-- Container Principal com as Telas / Views -->
+  <main class="main-container">
+
+    <!-- VIEW 1: Montagem da Equipe & Draft de 5 Campeões -->
+    <section id="view-builder" class="view-section active">
+      <!-- Injetado por TeamCreatorView -->
+    </section>
+
+    <!-- VIEW 2: Chaveamento dos Playoffs do CBLOL -->
+    <section id="view-bracket" class="view-section">
+      <!-- Injetado por BracketView -->
+    </section>
+
+    <!-- VIEW 3: Arena de Simulação (Torres, Inibidores e Nexus) -->
+    <section id="view-arena" class="view-section">
+      <!-- Injetado por ArenaView -->
+    </section>
+
+    <!-- VIEW 4: Seleção de Aprimoramentos Hextech entre Fases -->
+    <section id="view-upgrades" class="view-section">
+      <!-- Injetado por AppController -->
+    </section>
+
+    <!-- VIEW 5: Consagração e Taça do CBLOL (Campeão) -->
+    <section id="view-champion" class="view-section">
+      <!-- Injetado por AppController -->
+    </section>
+
+    <!-- VIEW 6: Tela de Eliminação / Derrota -->
+    <section id="view-eliminated" class="view-section">
+      <!-- Injetado por AppController -->
+    </section>
+
+    <!-- Notificação e Legenda Flutuante de Voz do Campeão (Voice Quote Toast) -->
+    <div class="champion-voice-toast" id="champ-voice-toast">
+      <div class="voice-toast-avatar">
+        <img id="toast-champ-img" src="" alt="" />
+      </div>
+      <div class="voice-toast-info">
+        <div class="voice-toast-header">
+          <span class="voice-toast-name" id="toast-champ-name"></span>
+          <span class="voice-toast-role" id="toast-champ-role"></span>
+          <span class="voice-toast-badge">🔊 Fala de Escolha</span>
+        </div>
+        <div class="voice-toast-quote" id="toast-champ-quote"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Script Principal Universal (Funciona tanto via servidor HTTP quanto abrindo o index.html direto no navegador) -->
+  <script src="js/bundle.js"></script>
+</body>
+</html>

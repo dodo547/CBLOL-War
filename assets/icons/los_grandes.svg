@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="los-bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff7b1a" />
+      <stop offset="100%" stop-color="#e04e00" />
+    </radialGradient>
+    <linearGradient id="los-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#ffe2b3" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#los-bg)" stroke="#111111" stroke-width="3"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="#ffe066" stroke-width="1.5" stroke-opacity="0.6"/>
+  <g transform="translate(64, 64) scale(0.95)" text-anchor="middle" dominant-baseline="central">
+    <text x="0" y="3" font-family="'Beaufort for LOL', 'Cinzel', 'Montserrat', 'Arial Black', sans-serif" font-weight="900" font-size="34" fill="#0c0e14" letter-spacing="1">LØS</text>
+    <text x="0" y="0" font-family="'Beaufort for LOL', 'Cinzel', 'Montserrat', 'Arial Black', sans-serif" font-weight="900" font-size="34" fill="url(#los-gold)" letter-spacing="1">LØS</text>
+  </g>
+  <path d="M 28 88 Q 64 102 100 88" fill="none" stroke="#0c0e14" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 32 86 Q 64 98 96 86" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+</svg>

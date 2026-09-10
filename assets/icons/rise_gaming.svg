@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="rise-bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a8a" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </radialGradient>
+    <linearGradient id="rise-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#rise-bg)" stroke="#38bdf8" stroke-width="2.5"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="#bae6fd" stroke-width="1" stroke-opacity="0.4"/>
+  <!-- Asas ascendentes -->
+  <polygon points="64,22 88,52 74,52 64,36 54,52 40,52" fill="url(#rise-cyan)"/>
+  <g transform="translate(64, 76)" text-anchor="middle" dominant-baseline="central">
+    <text x="0" y="2" font-family="'Beaufort for LOL', 'Montserrat', sans-serif" font-weight="900" font-size="22" fill="#082f49" letter-spacing="2">RISE</text>
+    <text x="0" y="0" font-family="'Beaufort for LOL', 'Montserrat', sans-serif" font-weight="900" font-size="22" fill="#7dd3fc" letter-spacing="2">RISE</text>
+  </g>
+</svg>

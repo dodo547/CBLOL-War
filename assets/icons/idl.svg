@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="idl-bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2e1065" />
+      <stop offset="100%" stop-color="#0f051d" />
+    </radialGradient>
+    <linearGradient id="idl-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#idl-bg)" stroke="#eab308" stroke-width="3"/>
+  <circle cx="64" cy="64" r="57" fill="none" stroke="#fef08a" stroke-width="1" stroke-opacity="0.5"/>
+  <!-- Coroa / Palmeira estilizada -->
+  <path d="M 42 46 L 64 26 L 86 46 L 76 54 L 64 38 L 52 54 Z" fill="url(#idl-gold)"/>
+  <circle cx="64" cy="22" r="4" fill="#fef08a"/>
+  <g transform="translate(64, 78)" text-anchor="middle" dominant-baseline="central">
+    <text x="0" y="2" font-family="'Beaufort for LOL', 'Cinzel', 'Montserrat', sans-serif" font-weight="900" font-size="26" fill="#1e0a3d" letter-spacing="2">IDL</text>
+    <text x="0" y="0" font-family="'Beaufort for LOL', 'Cinzel', 'Montserrat', sans-serif" font-weight="900" font-size="26" fill="url(#idl-gold)" letter-spacing="2">IDL</text>
+  </g>
+  <text x="64" y="102" font-family="sans-serif" font-weight="700" font-size="8" fill="#fbbf24" text-anchor="middle" letter-spacing="1">ILHA DAS LENDAS</text>
+</svg>

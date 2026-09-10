@@ -1,0 +1,1427 @@
+/* =========================================================
+   LEAGUE OF LEGENDS - CLIENT HEXTECH THEME
+   CBLOL Chronicles: Batalha pelo Nexus
+   ========================================================= */
+
+:root {
+  --lol-bg-darkest: #010a13;
+  --lol-bg-dark: #091428;
+  --lol-bg-card: rgba(10, 20, 40, 0.85);
+  --lol-bg-card-hover: rgba(16, 32, 64, 0.95);
+  
+  --lol-gold-1: #f0e6d2;
+  --lol-gold-2: #c8aa6e;
+  --lol-gold-3: #785a28;
+  --lol-gold-4: #463714;
+  
+  --lol-blue-glow: #0ac8b9;
+  --lol-blue-dark: #005a82;
+  --lol-blue-team: #1da1f2;
+
+  --lol-red-glow: #ff4655;
+  --lol-red-dark: #7a1523;
+  --lol-red-team: #e84057;
+
+  --lol-border-gold: 1px solid var(--lol-gold-3);
+  --lol-border-glow: 1px solid var(--lol-blue-glow);
+  
+  --lol-shadow-hex: 0 0 15px rgba(10, 200, 185, 0.25);
+  --lol-shadow-gold: 0 0 20px rgba(200, 170, 110, 0.35);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body {
+  background-color: var(--lol-bg-darkest);
+  background-image: 
+    radial-gradient(circle at 50% 20%, rgba(10, 200, 185, 0.08) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(200, 170, 110, 0.05) 0%, transparent 50%),
+    linear-gradient(180deg, #010a13 0%, #051329 50%, #010a13 100%);
+  color: #cdbe91;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Scrollbar Hextech */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #050d1a;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--lol-gold-3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lol-gold-2);
+}
+
+/* =========================================================
+   BARRA SUPERIOR (HEADER / NAVBAR)
+   ========================================================= */
+.lol-header {
+  height: 64px;
+  background: linear-gradient(180deg, #091428 0%, rgba(9, 20, 40, 0.8) 100%);
+  border-bottom: 2px solid var(--lol-gold-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.brand-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cblol-badge {
+  background: linear-gradient(135deg, #e51b24, #111);
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #ffd700;
+  letter-spacing: 1.5px;
+  box-shadow: 0 0 10px rgba(229, 27, 36, 0.5);
+}
+
+.app-title {
+  font-size: 20px;
+  letter-spacing: 2px;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #ffffff 0%, var(--lol-gold-1) 30%, var(--lol-gold-2) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 2px 10px rgba(200, 170, 110, 0.2);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--lol-gold-3);
+  color: var(--lol-gold-2);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.icon-btn:hover {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--lol-gold-2);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(200, 170, 110, 0.3);
+}
+
+/* =========================================================
+   CONTAINER PRINCIPAL E VIEWS
+   ========================================================= */
+.main-container {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 24px;
+  min-height: calc(100vh - 64px);
+}
+
+.view-section {
+  display: none;
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.view-section.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================================
+   BOTÕES HEXTECH DO LEAGUE OF LEGENDS
+   ========================================================= */
+.lol-btn {
+  background: linear-gradient(180deg, #1e3a5f 0%, #0e1e32 100%);
+  color: #f0e6d2;
+  border: 1px solid var(--lol-gold-3);
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 0 8px rgba(10, 200, 185, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.lol-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #0ac8b9 0%, #005a82 100%);
+  color: #ffffff;
+  border-color: #f0e6d2;
+  box-shadow: 0 0 20px rgba(10, 200, 185, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.lol-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.lol-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.lol-btn-primary {
+  background: linear-gradient(180deg, #1f4e79 0%, #0b223d 100%);
+  border: 2px solid var(--lol-gold-2);
+  padding: 14px 34px;
+  font-size: 15px;
+}
+.lol-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #c8aa6e 0%, #785a28 100%);
+  color: #010a13;
+  box-shadow: 0 0 25px rgba(200, 170, 110, 0.7);
+  border-color: #ffffff;
+}
+
+.lol-btn-danger {
+  background: linear-gradient(180deg, #7a1523 0%, #3a080f 100%);
+  border-color: #e84057;
+}
+.lol-btn-danger:hover:not(:disabled) {
+  background: linear-gradient(180deg, #e84057 0%, #901726 100%);
+  box-shadow: 0 0 20px rgba(232, 64, 87, 0.6);
+}
+
+.lol-btn-secondary {
+  background: rgba(10, 20, 40, 0.8);
+  border: 1px solid var(--lol-gold-3);
+  color: var(--lol-gold-2);
+}
+.lol-btn-secondary:hover:not(:disabled) {
+  background: rgba(200, 170, 110, 0.15);
+  border-color: var(--lol-gold-2);
+  color: #fff;
+}
+
+/* =========================================================
+   TELA 1: CRIAÇÃO DA EQUIPE & DRAFT
+   ========================================================= */
+.builder-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 980px) {
+  .builder-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.team-setup-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 980px) {
+  .team-setup-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tag-quick-name {
+  background: rgba(200, 170, 110, 0.12);
+  border: 1px solid var(--lol-gold-3);
+  color: var(--lol-gold-2);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tag-quick-name:hover {
+  background: rgba(200, 170, 110, 0.25);
+  border-color: var(--lol-gold-1);
+  color: #fff;
+}
+
+/* Box de História e Lore da Campanha */
+.story-lore-box {
+  background: linear-gradient(135deg, rgba(9, 20, 40, 0.9) 0%, rgba(1, 10, 19, 0.95) 100%);
+  border: 1px solid var(--lol-gold-3);
+  border-left: 4px solid var(--lol-gold-1);
+  border-radius: 6px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.story-badge {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--lol-blue-glow);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.story-title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 1px;
+  margin: 0 0 8px 0;
+}
+
+.story-paragraph {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #cdbe91;
+  margin: 0 0 8px 0;
+}
+.story-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.story-paragraph strong {
+  color: #fff;
+}
+
+/* Box Como Funciona o Jogo */
+.how-it-works-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.guide-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(1, 10, 19, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 6px;
+  padding: 10px 14px;
+  transition: all 0.2s ease;
+}
+
+.guide-step-item:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+  background: rgba(10, 200, 185, 0.05);
+}
+
+.guide-step-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.guide-step-content strong {
+  display: block;
+  font-size: 13px;
+  color: var(--lol-gold-1);
+  margin-bottom: 2px;
+}
+
+.guide-step-content p {
+  font-size: 12px;
+  color: #cdbe91;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Barra de Etapas dos Playoffs */
+.tournament-track-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  text-align: center;
+}
+
+.track-step {
+  border-radius: 4px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.track-step.step-qualify {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.track-step.step-qualify .track-step-num { color: #4ade80; }
+
+.track-step.step-quartas {
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+.track-step.step-quartas .track-step-num { color: #60a5fa; }
+
+.track-step.step-semis {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.track-step.step-semis .track-step-num { color: #f59e0b; }
+
+.track-step.step-final {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+.track-step.step-final .track-step-num { color: #f43f5e; }
+
+.track-step-num {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.track-step-desc {
+  font-size: 10px;
+  color: #cdbe91;
+}
+
+.card-hextech {
+  background: var(--lol-bg-card);
+  border: 1px solid var(--lol-gold-3);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(10, 200, 185, 0.05);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-hextech::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--lol-gold-2), transparent);
+}
+
+.card-header-inner {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-title {
+  font-size: 16px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--lol-gold-1);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* Formulário de Time */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--lol-gold-2);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.lol-input {
+  width: 100%;
+  background: rgba(1, 10, 19, 0.8);
+  border: 1px solid var(--lol-gold-3);
+  padding: 10px 14px;
+  color: #fff;
+  font-size: 14px;
+  border-radius: 4px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.lol-input:focus {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 12px rgba(10, 200, 185, 0.4);
+}
+
+/* Categorias e Seletor de Ícone */
+.icon-filter-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-tab-btn {
+  background: rgba(1, 10, 19, 0.85);
+  border: 1px solid var(--lol-gold-3, #785a28);
+  color: #a09b8c;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.icon-tab-btn:hover {
+  border-color: var(--lol-gold-1, #f0e6d2);
+  color: #f0e6d2;
+  background: rgba(10, 20, 40, 0.9);
+}
+
+.icon-tab-btn.active {
+  background: rgba(200, 155, 60, 0.22);
+  border-color: var(--lol-gold-1, #f0e6d2);
+  color: var(--lol-gold-1, #f0e6d2);
+  box-shadow: 0 0 8px rgba(200, 155, 60, 0.4);
+}
+
+.icon-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.summoner-icon-item {
+  aspect-ratio: 1;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #010a13;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.summoner-icon-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.summoner-icon-item:hover {
+  transform: scale(1.06);
+  border-color: var(--lol-gold-2);
+  box-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
+}
+
+.summoner-icon-item.selected {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 14px rgba(10, 200, 185, 0.8);
+}
+
+/* Resumo dos Stats da Equipe */
+.team-stats-box {
+  margin-top: 18px;
+  background: rgba(1, 10, 19, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  padding: 14px;
+  border-radius: 4px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.stat-row:last-child {
+  margin-bottom: 0;
+}
+
+.stat-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 12px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #005a82, var(--lol-blue-glow));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.stat-bar-fill.gold {
+  background: linear-gradient(90deg, #785a28, var(--lol-gold-2));
+}
+
+/* =========================================================
+   DRAFT DE CAMPEÕES (ROSTER SLOTS)
+   ========================================================= */
+.roster-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 768px) {
+  .roster-slots-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.roster-slot-card {
+  background: rgba(9, 20, 40, 0.9);
+  border: 1px solid var(--lol-gold-3);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  min-height: 220px;
+}
+
+.roster-slot-card:hover {
+  border-color: var(--lol-gold-2);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.7);
+}
+
+.roster-slot-card.active-slot {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 15px rgba(10, 200, 185, 0.5);
+  background: rgba(10, 25, 50, 0.95);
+}
+
+.role-badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--lol-gold-2);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.slot-avatar-wrap {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 2px solid var(--lol-gold-3);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 10px;
+  background: #010a13;
+}
+
+.slot-avatar-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.slot-empty-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: var(--lol-gold-3);
+}
+
+.slot-champ-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.slot-champ-title {
+  font-size: 10px;
+  color: #889bb0;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Modal / Gaveta de Seleção de Campeões */
+.pool-section {
+  background: rgba(1, 10, 19, 0.6);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.pool-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pool-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.pool-tab-btn {
+  background: transparent;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  color: #889bb0;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pool-tab-btn.active, .pool-tab-btn:hover {
+  background: var(--lol-gold-3);
+  color: #fff;
+  border-color: var(--lol-gold-2);
+}
+
+.champions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.champion-card-item {
+  background: rgba(9, 20, 40, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.champion-card-item:hover {
+  border-color: var(--lol-gold-2);
+  background: rgba(16, 32, 64, 0.9);
+  transform: scale(1.04);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+
+.champion-card-item.in-team {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+  cursor: not-allowed;
+}
+
+.champ-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 4px;
+  border: 1px solid var(--lol-gold-3);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.champ-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.champ-card-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f0e6d2;
+  text-align: center;
+}
+
+.champ-card-role {
+  font-size: 10px;
+  color: var(--lol-blue-glow);
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   TELA 2: CHAVEAMENTO DO TORNEIO (BRACKET)
+   ========================================================= */
+.bracket-wrapper {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  padding: 24px 0;
+  position: relative;
+}
+
+@media (max-width: 1100px) {
+  .bracket-wrapper {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
+@media (max-width: 650px) {
+  .bracket-wrapper {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.bracket-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.bracket-round-title {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--lol-gold-1);
+  margin-bottom: 24px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--lol-gold-3);
+}
+
+.bracket-matches-list {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  flex: 1;
+  gap: 24px;
+}
+
+.bracket-match-card {
+  background: var(--lol-bg-card);
+  border: 1px solid var(--lol-gold-3);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.bracket-match-card.is-player-match {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 16px rgba(10, 200, 185, 0.35);
+}
+
+.bracket-match-card.active-match {
+  border: 2px solid var(--lol-gold-2);
+  box-shadow: 0 0 20px rgba(200, 170, 110, 0.6);
+}
+
+.match-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin: 6px 10px 4px 10px;
+}
+.match-status-badge.live-parallel {
+  background: rgba(230, 37, 52, 0.22);
+  border: 1px solid #e62534;
+  color: #ff5566;
+  animation: pulseLiveBadge 1.4s infinite;
+}
+.match-status-badge.player-turn {
+  background: rgba(10, 200, 185, 0.2);
+  border: 1px solid var(--lol-blue-glow);
+  color: var(--lol-blue-glow);
+}
+.match-status-badge.finished {
+  background: rgba(200, 170, 110, 0.15);
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  color: var(--lol-gold-2);
+}
+@keyframes pulseLiveBadge {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(0.98); }
+}
+
+.bracket-team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(1, 10, 19, 0.5);
+}
+.bracket-team-row:last-child {
+  border-bottom: none;
+}
+
+.bracket-team-row.winner {
+  background: rgba(10, 200, 185, 0.15);
+}
+.bracket-team-row.winner .team-name {
+  color: #fff;
+  font-weight: 800;
+}
+
+.bracket-team-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.team-emblem-mini {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--lol-gold-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 900;
+  color: #fff;
+  overflow: hidden;
+}
+.team-emblem-mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cdbe91;
+}
+
+.team-score {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--lol-gold-1);
+}
+
+/* =========================================================
+   TELA 4: UPGRADES HEXTECH
+   ========================================================= */
+.upgrades-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin: 32px 0;
+}
+
+@media (max-width: 800px) {
+  .upgrades-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.upgrade-card {
+  background: var(--lol-bg-card);
+  border: 1px solid var(--lol-gold-3);
+  border-radius: 6px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+}
+
+.upgrade-card:hover {
+  border-color: var(--lol-blue-glow);
+  transform: translateY(-5px);
+  box-shadow: 0 0 20px rgba(10, 200, 185, 0.4);
+}
+
+.upgrade-icon-large {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.upgrade-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--lol-gold-1);
+  margin-bottom: 10px;
+}
+
+.upgrade-desc {
+  font-size: 13px;
+  color: #a09b8c;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.upgrade-rarity {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(200, 170, 110, 0.2);
+  color: var(--lol-gold-2);
+}
+
+/* =========================================================
+   TELA 5: VITÓRIA FINAL / TAÇA DO CBLOL & DERROTA
+   ========================================================= */
+.ceremony-box {
+  text-align: center;
+  max-width: 680px;
+  margin: 40px auto;
+  padding: 40px;
+}
+
+.trophy-stage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.trophy-halo {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.45) 0%, rgba(200, 170, 110, 0.15) 50%, transparent 70%);
+  animation: rotateHalo 10s linear infinite;
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+@keyframes rotateHalo {
+  0% { transform: scale(0.9) rotate(0deg); opacity: 0.7; }
+  50% { transform: scale(1.15) rotate(180deg); opacity: 1; }
+  100% { transform: scale(0.9) rotate(360deg); opacity: 0.7; }
+}
+
+.trophy-image {
+  font-size: 88px;
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 24px rgba(255, 215, 0, 0.75));
+  animation: floatTrophy 3s ease-in-out infinite;
+}
+
+@keyframes floatTrophy {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.ceremony-title {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.ceremony-title.gold {
+  background: linear-gradient(180deg, #fff 0%, #ffd700 50%, #c8aa6e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+}
+
+.ceremony-title.red {
+  color: var(--lol-red-glow);
+  text-shadow: 0 0 20px rgba(255, 70, 85, 0.6);
+}
+
+.ceremony-subtitle {
+  font-size: 16px;
+  color: #cdbe91;
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.mvp-card {
+  background: rgba(9, 20, 40, 0.8);
+  border: 1px solid var(--lol-gold-2);
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+/* Toast / Legenda da Fala de Escolha do Campeão (Champion VO Subtitle) */
+.champion-voice-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(30px);
+  background: linear-gradient(180deg, rgba(9, 20, 40, 0.96) 0%, rgba(5, 12, 24, 0.98) 100%);
+  border: 1px solid var(--lol-gold-2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85), 0 0 20px rgba(10, 200, 185, 0.35);
+  border-radius: 8px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 620px;
+  width: calc(100% - 32px);
+}
+
+.champion-voice-toast.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.voice-toast-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--lol-gold-1);
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(200, 170, 110, 0.5);
+  background: #010a13;
+}
+
+.voice-toast-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.voice-toast-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.voice-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.voice-toast-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.voice-toast-role {
+  font-size: 11px;
+  color: var(--lol-gold-2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.voice-toast-badge {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--lol-blue-glow);
+  background: rgba(10, 200, 185, 0.15);
+  border: 1px solid rgba(10, 200, 185, 0.4);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.voice-toast-quote {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--lol-gold-1);
+  line-height: 1.4;
+  text-shadow: 0 0 8px rgba(200, 170, 110, 0.3);
+}
+
+/* ========================================================
+   ESTILOS DO SISTEMA DE PRO PLAYERS DO CBLOL (DREAM TEAM)
+   ======================================================== */
+.pro-roster-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 860px) {
+  .pro-roster-slots-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+}
+
+.pro-slot-card {
+  background: linear-gradient(180deg, rgba(9, 20, 40, 0.8) 0%, rgba(1, 10, 19, 0.95) 100%);
+  border: 1px solid var(--lol-gold-3);
+  border-radius: 6px;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  text-align: center;
+}
+
+.pro-slot-card:hover {
+  border-color: var(--lol-gold-1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.pro-slot-card.active {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 14px rgba(10, 200, 185, 0.45);
+  background: linear-gradient(180deg, rgba(10, 200, 185, 0.12) 0%, rgba(1, 10, 19, 0.95) 100%);
+}
+
+.pro-slot-role-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--lol-gold-1);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.pro-slot-avatar-wrap {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid var(--lol-gold-2);
+  overflow: hidden;
+  position: relative;
+  background: #010a13;
+  box-shadow: 0 0 8px rgba(0,0,0,0.6);
+}
+
+.pro-slot-avatar-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.pro-slot-card.active .pro-slot-avatar-wrap {
+  border-color: var(--lol-blue-glow);
+  box-shadow: 0 0 10px rgba(10, 200, 185, 0.5);
+}
+
+.pro-slot-nick {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.pro-slot-legend-tag {
+  font-size: 9px;
+  font-weight: 800;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 1px 5px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Grid de Catálogo de Jogadores */
+.pro-player-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.pro-player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+  max-height: 290px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pro-player-card {
+  background: rgba(1, 10, 19, 0.75);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.pro-player-card:hover {
+  border-color: var(--lol-gold-1);
+  background: rgba(10, 200, 185, 0.05);
+  transform: translateY(-2px);
+}
+
+.pro-player-card.selected {
+  border-color: var(--lol-blue-glow);
+  background: rgba(10, 200, 185, 0.12);
+  box-shadow: 0 0 10px rgba(10, 200, 185, 0.3);
+}
+
+.pro-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pro-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--lol-gold-3);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #091428;
+}
+
+.pro-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.pro-card-titles {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pro-card-nick {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pro-card-team {
+  font-size: 11px;
+  color: var(--lol-gold-2);
+}
+
+.pro-card-trait {
+  font-size: 11px;
+  color: var(--lol-blue-glow);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pro-card-signatures {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #cdbe91;
+}
+
+.sig-chip {
+  background: rgba(200, 170, 110, 0.15);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  color: #fff;
+}
+
+.pro-card-quote {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--lol-gold-1);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
