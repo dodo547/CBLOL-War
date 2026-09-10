@@ -5074,62 +5074,160 @@ class MatchSimulator {
     if (!this.level1Taken && this.gameSeconds >= 90 && this.gameSeconds <= 120) {
       this.level1Taken = true;
 
-      const pDef = this._calculateSuccessProbability(78, "simple", "tank");
-      const pRiver = this._calculateSuccessProbability(64, "tactical", "utility");
-      const pInvade = this._calculateSuccessProbability(52, "complex", "damage");
+      // Telemetrias Dinâmicas de Início de Partida (Scouting)
+      const scoutingActions = [
+        "Sentinelas do rio indicam que o CBLOL prepara cobertura na rota inferior e vigia o buff azul.",
+        "Radar acusa o Top Laner rival avançando sozinho para cravar sentinela no mato do rio.",
+        "O Caçador adversário está agrupando com a bot lane para dar leash no Buff Vermelho.",
+        "Linha defensiva inimiga posicionada em leque nas entradas da selva superior."
+      ];
+      const selectedScouting = scoutingActions[Math.floor(Math.random() * scoutingActions.length)];
+
+      // Pool de Opções Seguras (1 sorteada)
+      const safePool = [
+        {
+          id: "defensive_5point",
+          icon: "🛡️",
+          name: "Guarda das Entradas & Sentinelas (5-Point)",
+          complexity: "simple",
+          complexityLabel: "🟢 Opção Segura",
+          probability: this._calculateSuccessProbability(82, "simple", "tank"),
+          risk: "Risco Mínimo",
+          riskClass: "low",
+          reward: "Início Seguro + Farm Protegido (+120g) + Buff de Visão",
+          failureConsequence: "Leve avanço de tropas rival na torre sem mortes",
+          desc: "Cada jogador vigia uma entrada da selva (Top, Mid e Bot) e planta sentinelas de rio, cobrindo 100% dos acessos para anular qualquer invasão adversária."
+        },
+        {
+          id: "deep_ward_scout",
+          icon: "👁️",
+          name: "Sentinela Profunda no Buff Inimigo & Recuo Seguro",
+          complexity: "simple",
+          complexityLabel: "🟢 Opção Segura",
+          probability: this._calculateSuccessProbability(78, "simple", "utility"),
+          risk: "Risco Mínimo",
+          riskClass: "low",
+          reward: "Rastreamento do Caçador + Telemetria de Gank (+120g)",
+          failureConsequence: "Sentinela destruída com ligeira perda de pressão",
+          desc: "Avançar sorrateiramente aos 00:50 para cravar uma sentinela profunda no Red/Blue adversário e recuar para farmar sob total proteção."
+        },
+        {
+          id: "lane_defense_freeze",
+          icon: "🏰",
+          name: "Controle Defensivo do Tribush & Bloqueio de Invasão",
+          complexity: "simple",
+          complexityLabel: "🟢 Opção Segura",
+          probability: this._calculateSuccessProbability(80, "simple", "tank"),
+          risk: "Risco Mínimo",
+          riskClass: "low",
+          reward: "Controle da Onda de Tropas + Bloqueio de Invasão (+130g)",
+          failureConsequence: "Onda de tropas desfavorável na rota inferior",
+          desc: "Travar a entrada do rio inferior com a bot lane e preparar o controle seguro da primeira onda de tropas rente à torre aliada."
+        }
+      ];
+
+      // Pool de Opções Táticas / Equilibradas (1 sorteada)
+      const tacticalPool = [
+        {
+          id: "invade_bot",
+          icon: "🎯",
+          name: "Invasão no Bot Side & Roubo de Buff",
+          complexity: "tactical",
+          complexityLabel: "🟡 Jogada Tática",
+          probability: this._calculateSuccessProbability(68, "tactical", "utility"),
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "First Blood (+400g) OU Roubo Limpo do Buff Inferior (+200g)",
+          failureConsequence: "Inimigos defendem agrupados; gasto de feitiços de invocador",
+          desc: "Avançar em grupo pelo rio inferior em direção ao buff do caçador rival para surpreender defensores ou roubar o primeiro monstro da selva."
+        },
+        {
+          id: "river_bush",
+          icon: "🌿",
+          name: "Emboscada Tática no Arbusto do Rio (Pixel Bush)",
+          complexity: "tactical",
+          complexityLabel: "🟡 Jogada Tática",
+          probability: this._calculateSuccessProbability(65, "tactical", "damage"),
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "Abate Limpo sem perdas (+350g) + Controle do Rio",
+          failureConsequence: "Troca neutra de feitiços e recuo sem mortes",
+          desc: "Aguardar em bloco no arbusto do rio para interceptar o Mid Laner ou Suporte adversário checando a visão no desespero."
+        },
+        {
+          id: "vertical_jungle",
+          icon: "🔄",
+          name: "Início de Selva Vertical & Inversão de Quadrantes",
+          complexity: "tactical",
+          complexityLabel: "🟡 Jogada Tática",
+          probability: this._calculateSuccessProbability(66, "tactical", "push"),
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "Divisão Vertical da Selva (+220g) + Atraso do Caçador Rival",
+          failureConsequence: "Caçador rival colapsa com suporte da rota",
+          desc: "Acompanhar o caçador para invadir e iniciar direto no quadrante oposto da selva adversária, dividindo o mapa verticalmente."
+        }
+      ];
+
+      // Pool de Opções Ousadas / Agressivas (1 sorteada)
+      const aggressivePool = [
+        {
+          id: "invade_top",
+          icon: "🔥",
+          name: "Invasão Agressiva no Top Side & Emboscada no Mato Triplo",
+          complexity: "complex",
+          complexityLabel: "🔴 Jogada Ousada",
+          probability: this._calculateSuccessProbability(54, "complex", "damage"),
+          risk: "Alto Risco / Alto Retorno",
+          riskClass: "high",
+          reward: "First Blood Mortal (+400g) OU Buff Roubado + Flash Queimado",
+          failureConsequence: "CBLOL colapsa no Top: risco de First Blood desfavorável",
+          desc: "Infiltrar pela selva superior e arbusto triplo do topo antes do spawn para emboscar o Top Laner ou Caçador rival."
+        },
+        {
+          id: "lane_bush_cheese",
+          icon: "⚡",
+          name: "Armadilha no Arbusto da Rota Inferior (Lane Cheese)",
+          complexity: "complex",
+          complexityLabel: "🔴 Jogada Ousada",
+          probability: this._calculateSuccessProbability(55, "complex", "damage"),
+          risk: "Alto Risco / Alto Retorno",
+          riskClass: "high",
+          reward: "First Blood no Bot (+400g) OU Dano Massivo e Recuo Forçado",
+          failureConsequence: "Rivais contornam e punem com pressão de onda",
+          desc: "Atirador e Suporte entram escondidos no primeiro mato da rota inferior para desferir rajada mortal no nível 1."
+        },
+        {
+          id: "red_buff_invade",
+          icon: "⚔️",
+          name: "All-In Agressivo no Buff Vermelho com Flash",
+          complexity: "complex",
+          complexityLabel: "🔴 Jogada Ousada",
+          probability: this._calculateSuccessProbability(52, "complex", "damage"),
+          risk: "Alto Risco / Alto Retorno",
+          riskClass: "high",
+          reward: "First Blood na Selva (+400g) + Buff Vermelho Roubado (+250g)",
+          failureConsequence: "Contragolpe em 4 do CBLOL: desvantagem inicial",
+          desc: "Invadir em velocidade máxima o Buff Vermelho adversário forçando confronto imediato 4v3 e queima de feitiços de invocador."
+        }
+      ];
+
+      const safeOption = safePool[Math.floor(Math.random() * safePool.length)];
+      const tacticalOption = tacticalPool[Math.floor(Math.random() * tacticalPool.length)];
+      const aggressiveOption = aggressivePool[Math.floor(Math.random() * aggressivePool.length)];
 
       const decisionData = {
         id: "level1",
         meta: {},
-        badge: "EARLY GAME • NÍVEL 1",
+        badge: "EARLY GAME • NÍVEL 1 (01:30)",
         title: "⚔️ ESTRATÉGIA DE NÍVEL 1 (INÍCIO DE PARTIDA)",
-        subtitle: "As tropas chegaram às rotas. Escolha a postura inicial da sua equipe:",
+        subtitle: "As tropas chegaram às rotas. Escolha a postura inicial da sua equipe antes do spawn dos monstros:",
         scouting: {
           intelTag: "📡 RADAR DE VISÃO NÍVEL 1",
-          enemyAction: "Adversários agrupando na entrada da bot lane para posicionar sentinelas de cobertura.",
-          recommendation: "Opção defensiva garante farm 100% limpo; emboscada no rio pega a rotação desprevenida."
+          enemyAction: selectedScouting,
+          recommendation: ""
         },
-        options: [
-          {
-            id: "defensive_vision",
-            icon: "🛡️",
-            name: "Farm Seguro & Sentinelas de Entrada",
-            complexity: "simple",
-            complexityLabel: "🟢 Opção Segura",
-            probability: pDef,
-            risk: "Risco Mínimo",
-            riskClass: "low",
-            reward: "Farm limpo nas 3 rotas + Visão defensiva (+250g)",
-            failureConsequence: "Leve pressão do rival na rota sem baixas",
-            desc: "Posicionar sentinelas nas entradas e farmar as primeiras ondas sob total segurança."
-          },
-          {
-            id: "river_bush",
-            icon: "🌿",
-            name: "Emboscada Tática no Arbusto do Rio",
-            complexity: "tactical",
-            complexityLabel: "🟡 Jogada Tática",
-            probability: pRiver,
-            risk: "Médio Risco",
-            riskClass: "medium",
-            reward: "Abate Limpo sem perdas + Controle do Rio (+300g)",
-            failureConsequence: "Troca neutra de feitiços sem mortes",
-            desc: "Aguardar o adversário desatento no arbusto do rio para garantir o primeiro abate."
-          },
-          {
-            id: "invade",
-            icon: "🔥",
-            name: "Invasão Agressiva na Selva Inimiga",
-            complexity: "complex",
-            complexityLabel: "🔴 Jogada Ousada",
-            probability: pInvade,
-            risk: "Alto Risco",
-            riskClass: "high",
-            reward: "First Blood (+400g) + Buff Roubado",
-            failureConsequence: "CBLOL antecipa: sofre First Blood e recuo",
-            desc: "Avançar em grupo na selva rival antes do spawn para tentar roubar o bônus e o abate."
-          }
-        ]
+        options: [safeOption, tacticalOption, aggressiveOption]
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -6037,70 +6135,29 @@ class MatchSimulator {
   }
 
   _resolveLevel1Decision(choiceId, isSuccess, roll, prob) {
+    // Compatibilidade com IDs legados
+    if (choiceId === "defensive_vision") choiceId = "defensive_5point";
+    if (choiceId === "invade" || choiceId === "invade_buff") choiceId = "invade_top";
+
     const blueAliveRoles = Object.keys(this.blueRosterState).filter(r => this.blueRosterState[r].alive);
     const redAliveRoles = Object.keys(this.redRosterState).filter(r => this.redRosterState[r].alive);
+    const bTop = blueAliveRoles.includes("top") ? "top" : (blueAliveRoles[0] || "top");
+    const bJg = blueAliveRoles.includes("jungle") ? "jungle" : (blueAliveRoles[0] || "jungle");
+    const bMid = blueAliveRoles.includes("mid") ? "mid" : (blueAliveRoles[0] || "mid");
+    const bAdc = blueAliveRoles.includes("adc") ? "adc" : (blueAliveRoles[0] || "adc");
+    const bSupp = blueAliveRoles.includes("support") ? "support" : (blueAliveRoles[0] || "support");
 
-    if (choiceId === "invade") {
+    const rTop = redAliveRoles.includes("top") ? "top" : (redAliveRoles[0] || "top");
+    const rJg = redAliveRoles.includes("jungle") ? "jungle" : (redAliveRoles[0] || "jungle");
+    const rMid = redAliveRoles.includes("mid") ? "mid" : (redAliveRoles[0] || "mid");
+    const rAdc = redAliveRoles.includes("adc") ? "adc" : (redAliveRoles[0] || "adc");
+    const rSupp = redAliveRoles.includes("support") ? "support" : (redAliveRoles[0] || "support");
+
+    // ==========================================
+    // 1. OPÇÕES SEGURAS (SAFE 5-POINT / VISION / FREEZE)
+    // ==========================================
+    if (choiceId === "defensive_5point") {
       if (isSuccess) {
-        this._awardTeamGold("blue", 100);
-        this.lanePressure = Math.min(100, this.lanePressure + 25);
-        if (redAliveRoles.length > 0) {
-          this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0], "First Blood na Invasão", `⚡ FIRST BLOOD! ${this.blueTeam.name} invadiu a selva rival e abateu ${this.redRosterState[redAliveRoles[0]].name}! (+400g)`);
-        }
-        return {
-          success: true,
-          roll,
-          probability: prob,
-          title: "FIRST BLOOD NA INVASÃO!",
-          subtitle: `Sucesso (${prob}% de chance)`,
-          text: `Invasão agressiva impecável! Seu time pegou a rotação adversária de guarda baixa, conquistou o First Blood (+400g) e roubou o primeiro buff da partida!`
-        };
-      } else {
-        this._awardTeamGold("red", 100);
-        this.lanePressure = Math.max(-100, this.lanePressure - 25);
-        if (blueAliveRoles.length > 0) {
-          this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Emboscada Nível 1", `💀 O CBLOL esperava a invasão e garantiu o First Blood sobre seu time! (+400g)`);
-        }
-        return {
-          success: false,
-          roll,
-          probability: prob,
-          title: "INVASÃO EMBOSCADA!",
-          subtitle: `Falha no teste (${prob}% chance)`,
-          text: `O CBLOL antecipou a movimentação e esperava em bloco no mato. Sua equipe sofreu o First Blood e precisou recuar com desvantagem inicial.`
-        };
-      }
-    } else if (choiceId === "river_bush") {
-      if (isSuccess) {
-        this.lanePressure = Math.min(100, this.lanePressure + 18);
-        if (redAliveRoles.length > 0) {
-          this._recordKill("blue", "red", blueAliveRoles[0] || "support", redAliveRoles[0], "Emboscada no Rio");
-        }
-        return {
-          success: true,
-          roll,
-          probability: prob,
-          title: "EMBOSCADA NO RIO!",
-          subtitle: `Vitória tática (${prob}% chance)`,
-          text: `A iniciação no arbusto do rio pegou o adversário em cheio! Um abate limpo garantido antes dos 2 minutos sem qualquer baixa aliada!`
-        };
-      } else {
-        this._awardTeamGold("red", 100);
-        this.lanePressure = Math.max(-100, this.lanePressure - 15);
-        return {
-          success: false,
-          roll,
-          probability: prob,
-          title: "DISPUTA EQUILIBRADA NO RIO",
-          subtitle: `Escaramuça desfavorável (${prob}% chance)`,
-          text: `O adversário reagiu rápido com feitiços de invocador, expulsou seu time do rio e garantiu vantagem territorial no início.`
-        };
-      }
-    } else {
-      // defensive_vision
-      if (isSuccess) {
-        this._awardTeamGold("blue", 100);
-        this.lanePressure = Math.min(100, this.lanePressure + 10);
         this._applyTeamBuff("blue", {
           id: "vision_control",
           name: "Sentinelas Estratégicas",
@@ -6109,20 +6166,254 @@ class MatchSimulator {
           bonusCombat: 6,
           duration: 120
         });
-        this.onEvent({
-          type: "skirmish",
-          side: "blue",
-          text: `🛡️ VISÃO IMPECÁVEL! Sentinelas estrategicamente posicionadas garantiram farm limpo e início de jogo seguro. (+100g)`,
-          time: this._formatTime()
+
+        // Sorteio de evento aleatório no sucesso
+        if (Math.random() < 0.50) {
+          // Evento A: Detecção e anulação de invasão rival
+          this._awardTeamGold("blue", 130);
+          this.lanePressure = Math.min(100, this.lanePressure + 10);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `🛡️ ALERTA DE INVASÃO! As sentinelas da cobertura 5-Point detectaram a tentativa de avanço do CBLOL no rio. Seu time expulsou os invasores sem perdas! (+130g)`,
+            time: this._formatTime()
+          });
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "INVASÃO ADVERSÁRIA ANULADA!",
+            subtitle: `Execução Perfeita (${prob}% chance)`,
+            text: `As sentinelas da cobertura 5-point flagraram a aproximação inimiga no rio inferior. Seu time reagiu em bloco, expulsou os invasores sem sofrer dano e garantiu o farm limpo inicial (+130g)!`
+          };
+        } else {
+          // Evento B: Início metódico e farm limpo
+          this._awardTeamGold("blue", 140);
+          this.lanePressure = Math.min(100, this.lanePressure + 8);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `🛡️ COBERTURA 5-POINT IMPECÁVEL! Entradas vigiadas e visão garantida. Suas rotas iniciaram com farm 100% limpo! (+140g)`,
+            time: this._formatTime()
+          });
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "INÍCIO METÓDICO & SEGURO",
+            subtitle: `Execução Perfeita (${prob}% chance)`,
+            text: `Cada jogador vigiou perfeitamente sua entrada da selva. Sem surpresas ou riscos, suas rotas acumularam vantagem de tropas e farm limpo (+140g)!`
+          };
+        }
+      } else {
+        this._awardTeamGold("red", 100);
+        this.lanePressure = Math.max(-100, this.lanePressure - 8);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "PRESSÃO DE ROTAS DO CBLOL",
+          subtitle: `Leve atraso de tropas (${prob}% chance)`,
+          text: `O adversário avançou a primeira onda de tropas sob sua torre sem baixas, acumulando leve vantagem inicial de ouro (+100g).`
+        };
+      }
+    } else if (choiceId === "deep_ward_scout") {
+      if (isSuccess) {
+        this._applyTeamBuff("blue", {
+          id: "vision_control",
+          name: "Telemetria da Selva",
+          icon: "👁️",
+          bonusDefense: 8,
+          bonusCombat: 5,
+          duration: 120
+        });
+
+        if (Math.random() < 0.50) {
+          this._awardTeamGold("blue", 120);
+          this.lanePressure = Math.min(100, this.lanePressure + 12);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `👁️ TELEMETRIA AVANÇADA! A sentinela profunda revelou o início de selva do Caçador rival. Rotas avisadas contra ganks precoces! (+120g)`,
+            time: this._formatTime()
+          });
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "ROTAÇÃO ADVERSÁRIA DESVENDADA!",
+            subtitle: `Visão Cirúrgica (${prob}% chance)`,
+            text: `A sentinela profunda cravada no buff revelou exatamente a rota do Caçador adversário! Suas rotas jogam cientes, anulando qualquer tentativa de emboscada precoce (+120g).`
+          };
+        } else {
+          this._awardTeamGold("blue", 160);
+          this.lanePressure = Math.min(100, this.lanePressure + 10);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `👁️ SENTINELA & ROUBO CIRÚRGICO! O suporte plantou a sentinela profunda e ainda roubou um monstro menor na saída! (+160g)`,
+            time: this._formatTime()
+          });
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "SENTINELA & ROUBO CIRÚRGICO!",
+            subtitle: `Infiltração com Sucesso (${prob}% chance)`,
+            text: `Sentinela cravada com precisão no buff rival e ainda garantiu o abate de um monstro menor na saída, atrasando a rotação do caçador adversário (+160g)!`
+          };
+        }
+      } else {
+        this._awardTeamGold("red", 100);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "SENTINELA DETECTADA",
+          subtitle: `Aproximação avistada (${prob}% chance)`,
+          text: `O suporte adversário interceptou o avanço e destruiu a sentinela no rio, forçando seu time a recuar sob ligeira pressão (-10 pressão).`
+        };
+      }
+    } else if (choiceId === "lane_defense_freeze") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 130);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._applyTeamBuff("blue", {
+          id: "vision_control",
+          name: "Controle de Onda",
+          icon: "🏰",
+          bonusDefense: 10,
+          bonusCombat: 4,
+          duration: 120
         });
         return {
           success: true,
           roll,
           probability: prob,
-          title: "INÍCIO METÓDICO & SEGURO",
-          subtitle: `Execução Perfeita (${prob}% chance)`,
-          text: `Seu time cobriu todas as entradas da selva com sentinelas. Sem surpresas ou riscos, suas rotas acumularam vantagem de tropas e farm limpo!`
+          title: "CONTROLE DE TRIBUSH & FREEZE!",
+          subtitle: `Linha de Tropas Perfeita (${prob}% chance)`,
+          text: `A rota inferior bloqueou qualquer investida pelo rio e congelou as tropas sob a torre aliada, garantindo farm seguro e negando recursos ao rival (+130g)!`
         };
+      } else {
+        this._awardTeamGold("red", 100);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ONDA DESFAVORÁVEL",
+          subtitle: `Empurrão de tropas (${prob}% chance)`,
+          text: `A primeira onda de tropas empurrou desfavoravelmente para a torre adversária, cedendo leve prioridade para a dupla rival (+100g).`
+        };
+      }
+    }
+
+    // ==========================================
+    // 2. OPÇÕES TÁTICAS / EQUILIBRADAS (BOT INVADE / RIVER BUSH / VERTICAL)
+    // ==========================================
+    else if (choiceId === "invade_bot") {
+      if (isSuccess) {
+        if (Math.random() < 0.50 && redAliveRoles.length > 0) {
+          // Evento A: First Blood no Bot Laner ou Suporte
+          this._awardTeamGold("blue", 200);
+          this.lanePressure = Math.min(100, this.lanePressure + 18);
+          const victimRole = redAliveRoles.includes("support") ? "support" : (redAliveRoles.includes("adc") ? "adc" : rMid);
+          const killerRole = blueAliveRoles.includes("adc") ? "adc" : bSupp;
+          const kName = this.blueRosterState[killerRole].name;
+          const vName = this.redRosterState[victimRole].name;
+
+          this._recordKill("blue", "red", killerRole, victimRole, "First Blood na Invasão Bot", `⚡ FIRST BLOOD NO BOT! Invasão cirúrgica no rio inferior! ${kName} abateu ${vName}! (+400g)`);
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "FIRST BLOOD NA INVASÃO DO BOT!",
+            subtitle: `Emboscada Fulminante (${prob}% chance)`,
+            text: `Avanço em bloco perfeito! Sua equipe pegou a dupla rival de surpresa no rio inferior, garantiu o First Blood (+400g) e tomou o controle do quadrante inferior!`
+          };
+        } else {
+          // Evento B: Roubo limpo de Buff & Selva Vertical
+          this._awardTeamGold("blue", 220);
+          this.lanePressure = Math.min(100, this.lanePressure + 14);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `🎯 BUFF ROUBADO NO BOT! O CBLOL recuou e cedeu o buff inferior sem contestar! Caçador azul garante selva vertical e ouro bônus (+220g)!`,
+            time: this._formatTime()
+          });
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "BUFF ROUBADO & SELVA VERTICAL!",
+            subtitle: `Domínio de Selva (${prob}% chance)`,
+            text: `Os adversários recuaram para as torres diante da invasão. Seu Caçador limpou o buff inferior rival de graça (+220g) e estabeleceu a divisão vertical da selva!`
+          };
+        }
+      } else {
+        // Falha no Bot Invade
+        if (roll < (prob * 0.45) && blueAliveRoles.length > 0 && redAliveRoles.length > 0) {
+          // Falha crítica: First Blood para o rival
+          this._awardTeamGold("red", 150);
+          this.lanePressure = Math.max(-100, this.lanePressure - 20);
+          const victimRole = blueAliveRoles.includes("support") ? "support" : blueAliveRoles[0];
+          const killerRole = redAliveRoles.includes("adc") ? "adc" : redAliveRoles[0];
+          this._recordKill("red", "blue", killerRole, victimRole, "Contragolpe Nível 1", `💀 CONTRAGOLPE NO BOT! O CBLOL esperava no mato e garantiu o First Blood! (+400g)`);
+
+          return {
+            success: false,
+            roll,
+            probability: prob,
+            title: "CONTRAGOLPE NO BOT!",
+            subtitle: `Emboscada Invertida (${prob}% chance)`,
+            text: `O CBLOL esperava em bloco no mato da tribush com sentinela de controle. Sua equipe sofreu o First Blood e precisou recuar com desvantagem inicial.`
+          };
+        } else {
+          // Falha normal: Recuo com queima de feitiços sem baixas
+          this._awardTeamGold("red", 100);
+          this.lanePressure = Math.max(-100, this.lanePressure - 15);
+          return {
+            success: false,
+            roll,
+            probability: prob,
+            title: "INVASÃO FRUSTRADA NO BOT",
+            subtitle: `Recuo sob pressão (${prob}% chance)`,
+            text: `O adversário colapsou com 4 jogadores; seu time queimou feitiços de invocador para escapar com vida, cedendo leve pressão de rota (-15 pressão).`
+          };
+        }
+      }
+    } else if (choiceId === "river_bush") {
+      if (isSuccess) {
+        if (Math.random() < 0.50 && redAliveRoles.length > 0) {
+          this._awardTeamGold("blue", 180);
+          this.lanePressure = Math.min(100, this.lanePressure + 16);
+          const victimRole = redAliveRoles.includes("mid") ? "mid" : rSupp;
+          const killerRole = blueAliveRoles.includes("mid") ? "mid" : bSupp;
+          this._recordKill("blue", "red", killerRole, victimRole, "Emboscada no Rio", `⚡ FIRST BLOOD NO RIO! Emboscada no arbusto do rio pegou o rival desatento! (+400g)`);
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "FIRST BLOOD NO RIO!",
+            subtitle: `Vitória Tática (${prob}% chance)`,
+            text: `A emboscada no arbusto do rio pegou o adversário em cheio! Um First Blood limpo garantido antes dos 2 minutos sem qualquer baixa aliada!`
+          };
+        } else {
+          this._awardTeamGold("blue", 200);
+          this.lanePressure = Math.min(100, this.lanePressure + 14);
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "DOMÍNIO DO RIO & FLASHES QUEIMADOS!",
+            subtitle: `Pressão Psicológica (${prob}% chance)`,
+            text: `A emboscada assustou o rival, que foi forçado a queimar Flashes defensivos em pânico. Domínio completo do rio sem gastar recursos (+200g)!`
+          };
+        }
       } else {
         this._awardTeamGold("red", 100);
         this.lanePressure = Math.max(-100, this.lanePressure - 12);
@@ -6130,12 +6421,212 @@ class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "PRESSÃO DE ROTAS DO CBLOL",
-          subtitle: `Perda de terreno (${prob}% chance)`,
-          text: `O adversário avançou as tropas na sua torre e negou sentinelas no rio, acumulando vantagem de ouro inicial (+100g).`
+          title: "DISPUTA EQUILIBRADA NO RIO",
+          subtitle: `Escaramuça Desfavorável (${prob}% chance)`,
+          text: `O adversário checou com habilidade à distância, repeliu sua equipe e garantiu vantagem territorial no início.`
+        };
+      }
+    } else if (choiceId === "vertical_jungle") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 240);
+        this.lanePressure = Math.min(100, this.lanePressure + 16);
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "SELVA VERTICAL CONQUISTADA!",
+          subtitle: `Divisão de Mapa (${prob}% chance)`,
+          text: `Inversão cirúrgica de quadrantes! Seu Caçador farmou o buff e os campos rivais de graça, desestabilizando o plano inicial do adversário (+240g)!`
+        };
+      } else {
+        this._awardTeamGold("red", 120);
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ROTAÇÃO ADVERSÁRIA RESPONDEU",
+          subtitle: `Retirada Forçada (${prob}% chance)`,
+          text: `As rotas adversárias responderam rápido à investida na selva, forçando seu caçador a fugir sem o buff.`
         };
       }
     }
+
+    // ==========================================
+    // 3. OPÇÕES OUSADAS / AGRESSIVAS (TOP INVADE / LANE CHEESE / RED BUFF ALL-IN)
+    // ==========================================
+    else if (choiceId === "invade_top") {
+      if (isSuccess) {
+        if (Math.random() < 0.55 && redAliveRoles.length > 0) {
+          // Evento A: First Blood letal no Top Laner
+          this._awardTeamGold("blue", 200);
+          this.lanePressure = Math.min(100, this.lanePressure + 22);
+          const victimRole = redAliveRoles.includes("top") ? "top" : rJg;
+          const killerRole = blueAliveRoles.includes("top") ? "top" : bJg;
+          const kName = this.blueRosterState[killerRole].name;
+          const vName = this.redRosterState[victimRole].name;
+
+          this._recordKill("blue", "red", killerRole, victimRole, "First Blood no Top", `⚡ FIRST BLOOD NO TOPO! Invasão avassaladora no mato triplo! ${kName} pulverizou ${vName}! (+400g)`);
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "FIRST BLOOD ESMAGADOR NO TOP!",
+            subtitle: `Jogada Ousada Impecável (${prob}% chance)`,
+            text: `Invasão agressiva de alto calibre! Seu time emboscou o Top Laner rival no mato triplo, garantiu o First Blood (+400g) e dominou todo o quadrante superior!`
+          };
+        } else {
+          // Evento B: Roubo do Buff Superior + Flash do Top Laner Queimado
+          this._awardTeamGold("blue", 220);
+          this.lanePressure = Math.min(100, this.lanePressure + 16);
+          this.onEvent({
+            type: "skirmish",
+            side: "blue",
+            text: `🔥 BUFF SUPERIOR ROUBADO! O Top Laner adversário queimou Flash pela parede e o Caçador azul garantiu o buff superior rival (+220g)!`,
+            time: this._formatTime()
+          });
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "BUFF SUPERIOR ROUBADO & FLASH QUEIMADO!",
+            subtitle: `Vantagem Estratégica (${prob}% chance)`,
+            text: `O Top Laner adversário queimou o Flash em pânico pela parede para não cair. Seu time limpou o buff superior do Caçador rival e assumiu a ponta do mapa (+220g)!`
+          };
+        }
+      } else {
+        // Falha no Top Invade
+        if (roll < (prob * 0.50) && blueAliveRoles.length > 0 && redAliveRoles.length > 0) {
+          this._awardTeamGold("red", 150);
+          this.lanePressure = Math.max(-100, this.lanePressure - 22);
+          const victimRole = blueAliveRoles.includes("top") ? "top" : blueAliveRoles[0];
+          const killerRole = redAliveRoles.includes("top") ? "top" : redAliveRoles[0];
+
+          this._recordKill("red", "blue", killerRole, victimRole, "Contragolpe no Top", `💀 EMBOSCADA NO TOP! O CBLOL antecipou a investida e garantiu o First Blood sobre seu time! (+400g)`);
+
+          return {
+            success: false,
+            roll,
+            probability: prob,
+            title: "INVASÃO REPELIDA NO TOP!",
+            subtitle: `Contragolpe Fatal (${prob}% chance)`,
+            text: `O CBLOL antecipou a movimentação no topo e aguardava em bloco. Sua equipe sofreu o First Blood e precisou recuar sob pesada desvantagem.`
+          };
+        } else {
+          this._awardTeamGold("red", 100);
+          this.lanePressure = Math.max(-100, this.lanePressure - 16);
+          return {
+            success: false,
+            roll,
+            probability: prob,
+            title: "RETIRADA FORÇADA NO TOP",
+            subtitle: `Emboscada Frustrada (${prob}% chance)`,
+            text: `A emboscada no mato triplo foi descoberta; seu time recuou sob pressão de rota sem sofrer mortes (-16 pressão).`
+          };
+        }
+      }
+    } else if (choiceId === "lane_bush_cheese") {
+      if (isSuccess) {
+        if (Math.random() < 0.55 && redAliveRoles.length > 0) {
+          this._awardTeamGold("blue", 200);
+          this.lanePressure = Math.min(100, this.lanePressure + 20);
+          const victimRole = redAliveRoles.includes("adc") ? "adc" : rSupp;
+          const killerRole = blueAliveRoles.includes("adc") ? "adc" : bSupp;
+          const kName = this.blueRosterState[killerRole].name;
+          const vName = this.redRosterState[victimRole].name;
+
+          this._recordKill("blue", "red", killerRole, victimRole, "Lane Cheese no Bot", `⚡ FIRST BLOOD NA ROTA! Trap no primeiro arbusto pulverizou ${vName}! (+400g)`);
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "FIRST BLOOD COM LANE CHEESE!",
+            subtitle: `Armadilha Perfeita (${prob}% chance)`,
+            text: `A emboscada no primeiro arbusto da rota inferior funcionou com perfeição! O Atirador rival foi deletado antes de tocar na primeira tropa (+400g)!`
+          };
+        } else {
+          this._awardTeamGold("blue", 180);
+          this.lanePressure = Math.min(100, this.lanePressure + 15);
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "RECALL FORÇADO NO NÍVEL 1!",
+            subtitle: `Dano Devastador (${prob}% chance)`,
+            text: `A rajada inicial do mato deixou o Atirador rival com 10% de vida, forçando-o a dar recall imediato e perder duas ondas inteiras (+180g)!`
+          };
+        }
+      } else {
+        this._awardTeamGold("red", 100);
+        this.lanePressure = Math.max(-100, this.lanePressure - 14);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ARMADILHA EVITADA",
+          subtitle: `Inimigos Recuaram (${prob}% chance)`,
+          text: `A bot lane adversária contornou o arbusto com segurança e empurrou as primeiras tropas sob a torre aliada (-14 pressão).`
+        };
+      }
+    } else if (choiceId === "red_buff_invade") {
+      if (isSuccess) {
+        if (Math.random() < 0.60 && redAliveRoles.length > 0) {
+          this._awardTeamGold("blue", 240);
+          this.lanePressure = Math.min(100, this.lanePressure + 24);
+          const victimRole = redAliveRoles.includes("jungle") ? "jungle" : rSupp;
+          const killerRole = blueAliveRoles.includes("jungle") ? "jungle" : bMid;
+
+          this._recordKill("blue", "red", killerRole, victimRole, "Abate no Red Buff", `⚡ FIRST BLOOD NO RED! Caçador rival foi abatido dentro do próprio covil! (+400g)`);
+
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "FIRST BLOOD NO RED & BUFF ROUBADO!",
+            subtitle: `Blitzkrieg Brutal (${prob}% chance)`,
+            text: `Invasão fulminante no Buff Vermelho! O Caçador adversário foi abatido dentro do covil (+400g) e seu time garantiu o bônus vermelho (+240g)!`
+          };
+        } else {
+          this._awardTeamGold("blue", 220);
+          this.lanePressure = Math.min(100, this.lanePressure + 18);
+          return {
+            success: true,
+            roll,
+            probability: prob,
+            title: "BUFF VERMELHO ROUBADO!",
+            subtitle: `Invasão Limpa (${prob}% chance)`,
+            text: `O Caçador rival percebeu a investida a tempo e fugiu para o Blue, entregando o Buff Vermelho de graça para sua equipe (+220g)!`
+          };
+        }
+      } else {
+        this._awardTeamGold("red", 150);
+        this.lanePressure = Math.max(-100, this.lanePressure - 24);
+        if (blueAliveRoles.length > 0 && redAliveRoles.length > 0) {
+          this._recordKill("red", "blue", redAliveRoles[0], blueAliveRoles[0], "Defesa do Buff Vermelho");
+        }
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "ALL-IN FRUSTRADO NO RED",
+          subtitle: `Colapso do CBLOL (${prob}% chance)`,
+          text: `O CBLOL fechou as saídas do covil em 4 jogadores e garantiu o First Blood sobre sua equipe.`
+        };
+      }
+    }
+
+    // Fallback padrão de segurança
+    return {
+      success: true,
+      roll,
+      probability: prob,
+      title: "INÍCIO DE PARTIDA CONCLUÍDO",
+      subtitle: "Fase de rotas iniciada",
+      text: "As equipes tomaram suas posições e a fase de rotas começou oficialmente."
+    };
   }
 
   _resolveDragonDecision(choiceId, dType, isSuccess, roll, prob) {
