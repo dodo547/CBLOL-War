@@ -456,6 +456,40 @@ export class ArenaView {
       }
     }
 
+    // Sincronização em tempo real das estruturas do mapa (evita qualquer descompasso visual)
+    const syncStructures = (structures, side) => {
+      if (!structures) return;
+      structures.forEach(struct => {
+        const el = this.containerEl.querySelector(`#struct-${side}-${struct.id}`);
+        if (!el) return;
+        if (struct.destroyed) {
+          if (!el.classList.contains("destroyed")) {
+            el.classList.add("destroyed");
+          }
+          const text = el.querySelector(".structure-hp-text");
+          if (text && text.textContent !== "DESTRUÍDO") text.textContent = "DESTRUÍDO";
+          const fill = el.querySelector(".structure-hp-fill");
+          if (fill && fill.style.width !== "0%") fill.style.width = "0%";
+          const plateBadge = el.querySelector(".structure-plates-badge");
+          if (plateBadge) plateBadge.remove();
+        } else {
+          if (el.classList.contains("destroyed")) {
+            el.classList.remove("destroyed"); // caso o inibidor tenha renascido
+          }
+          const pct = Math.max(0, Math.round((struct.currentHp / struct.maxHp) * 100));
+          const fill = el.querySelector(".structure-hp-fill");
+          if (fill) {
+            fill.style.width = `${pct}%`;
+            fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
+          }
+          const text = el.querySelector(".structure-hp-text");
+          if (text) text.textContent = `${struct.currentHp}`;
+        }
+      });
+    };
+    if (state.blue && state.blue.structures) syncStructures(state.blue.structures, "blue");
+    if (state.red && state.red.structures) syncStructures(state.red.structures, "red");
+
     // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
     const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
     const redBuffsEl = this.containerEl.querySelector("#red-active-buffs");
@@ -1180,10 +1214,6 @@ export class ArenaView {
               <div class="scouting-intel-item">
                 <span class="scouting-label">Movimentação Observada:</span>
                 <span class="scouting-value">${decisionData.scouting.enemyAction}</span>
-              </div>
-              <div class="scouting-intel-item">
-                <span class="scouting-label">Recomendação da Comissão:</span>
-                <span class="scouting-value">${decisionData.scouting.recommendation}</span>
               </div>
             </div>
           </div>

@@ -6209,8 +6209,6 @@ class MatchSimulator {
         this.redScore.barons++;
         this._awardTeamGold("red", 1000);
         this._awardTeamGold("blue", (250 + splitBounty));
-        this.blueSuperMinions = true;
-        this.redInhibRespawnAt = this.gameSeconds + 240;
         this.lanePressure = Math.min(100, this.lanePressure + 50);
 
         this._applyTeamBuff("blue", {
@@ -6230,14 +6228,28 @@ class MatchSimulator {
           duration: 180
         });
 
-        // Destrói instantaneamente a estrutura com ouro e ativa Super Minions
-        this._destroyCurrentStructure("blue", this.redStructures, 500);
-        this.blueSuperMinions = true;
+        // Destrói as estruturas do avanço da rota até derrubar o Inibidor adversário de fato
+        let reachedInhib = false;
+        while (true) {
+          const target = this._getCurrentTargetStructure(this.redStructures);
+          if (!target || target.id === "nexus_t1" || target.id === "nexus_t2" || target.id === "nexus") break;
+          const isTargetInhib = (target.id === "inhib");
+          this._destroyCurrentStructure("blue", this.redStructures, isTargetInhib ? 500 : 150);
+          if (isTargetInhib) {
+            reachedInhib = true;
+            break;
+          }
+        }
+
+        // Se o inibidor já estava destruído antes, pressiona as torres do Nexus
+        if (!reachedInhib) {
+          this._damageNextStructure("blue", this.redStructures, 60, false, 2.0);
+        }
 
         this.onEvent({
-          type: "inhibitor_destroyed",
+          type: "split",
           side: "blue",
-          text: `🏰 SPLIT PUSH LENDÁRIO! Enquanto o rival fazia o Barão, suas tropas arrombaram a base e implodiram as defesas! (+Super Tropas)`,
+          text: `🏰 SPLIT PUSH LENDÁRIO! Enquanto o rival fazia o Barão, suas tropas arrombaram a rota lateral e implodiram defesas da base!`,
           time: this._formatTime()
         });
 
@@ -9324,6 +9336,40 @@ class ArenaView {
       }
     }
 
+    // Sincronização em tempo real das estruturas do mapa (evita qualquer descompasso visual)
+    const syncStructures = (structures, side) => {
+      if (!structures) return;
+      structures.forEach(struct => {
+        const el = this.containerEl.querySelector(`#struct-${side}-${struct.id}`);
+        if (!el) return;
+        if (struct.destroyed) {
+          if (!el.classList.contains("destroyed")) {
+            el.classList.add("destroyed");
+          }
+          const text = el.querySelector(".structure-hp-text");
+          if (text && text.textContent !== "DESTRUÍDO") text.textContent = "DESTRUÍDO";
+          const fill = el.querySelector(".structure-hp-fill");
+          if (fill && fill.style.width !== "0%") fill.style.width = "0%";
+          const plateBadge = el.querySelector(".structure-plates-badge");
+          if (plateBadge) plateBadge.remove();
+        } else {
+          if (el.classList.contains("destroyed")) {
+            el.classList.remove("destroyed"); // caso o inibidor tenha renascido
+          }
+          const pct = Math.max(0, Math.round((struct.currentHp / struct.maxHp) * 100));
+          const fill = el.querySelector(".structure-hp-fill");
+          if (fill) {
+            fill.style.width = `${pct}%`;
+            fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
+          }
+          const text = el.querySelector(".structure-hp-text");
+          if (text) text.textContent = `${struct.currentHp}`;
+        }
+      });
+    };
+    if (state.blue && state.blue.structures) syncStructures(state.blue.structures, "blue");
+    if (state.red && state.red.structures) syncStructures(state.red.structures, "red");
+
     // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
     const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
     const redBuffsEl = this.containerEl.querySelector("#red-active-buffs");
@@ -10048,10 +10094,6 @@ class ArenaView {
               <div class="scouting-intel-item">
                 <span class="scouting-label">Movimentação Observada:</span>
                 <span class="scouting-value">${decisionData.scouting.enemyAction}</span>
-              </div>
-              <div class="scouting-intel-item">
-                <span class="scouting-label">Recomendação da Comissão:</span>
-                <span class="scouting-value">${decisionData.scouting.recommendation}</span>
               </div>
             </div>
           </div>

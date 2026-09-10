@@ -2012,8 +2012,6 @@ export class MatchSimulator {
         this.redScore.barons++;
         this._awardTeamGold("red", 1000);
         this._awardTeamGold("blue", (250 + splitBounty));
-        this.blueSuperMinions = true;
-        this.redInhibRespawnAt = this.gameSeconds + 240;
         this.lanePressure = Math.min(100, this.lanePressure + 50);
 
         this._applyTeamBuff("blue", {
@@ -2033,14 +2031,28 @@ export class MatchSimulator {
           duration: 180
         });
 
-        // Destrói instantaneamente a estrutura com ouro e ativa Super Minions
-        this._destroyCurrentStructure("blue", this.redStructures, 500);
-        this.blueSuperMinions = true;
+        // Destrói as estruturas do avanço da rota até derrubar o Inibidor adversário de fato
+        let reachedInhib = false;
+        while (true) {
+          const target = this._getCurrentTargetStructure(this.redStructures);
+          if (!target || target.id === "nexus_t1" || target.id === "nexus_t2" || target.id === "nexus") break;
+          const isTargetInhib = (target.id === "inhib");
+          this._destroyCurrentStructure("blue", this.redStructures, isTargetInhib ? 500 : 150);
+          if (isTargetInhib) {
+            reachedInhib = true;
+            break;
+          }
+        }
+
+        // Se o inibidor já estava destruído antes, pressiona as torres do Nexus
+        if (!reachedInhib) {
+          this._damageNextStructure("blue", this.redStructures, 60, false, 2.0);
+        }
 
         this.onEvent({
-          type: "inhibitor_destroyed",
+          type: "split",
           side: "blue",
-          text: `🏰 SPLIT PUSH LENDÁRIO! Enquanto o rival fazia o Barão, suas tropas arrombaram a base e implodiram as defesas! (+Super Tropas)`,
+          text: `🏰 SPLIT PUSH LENDÁRIO! Enquanto o rival fazia o Barão, suas tropas arrombaram a rota lateral e implodiram defesas da base!`,
           time: this._formatTime()
         });
 
