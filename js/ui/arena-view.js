@@ -2079,6 +2079,8 @@ export class ArenaView {
           <div class="choice-card-header">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span class="choice-card-icon">${opt.icon || '⚔️'}</span>
+              ${opt.badge ? `<span class="decision-custom-badge" style="background: rgba(200, 155, 60, 0.2); border: 1px solid #c89b3c; color: #f0e6d2; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px;">${opt.badge}</span>` : ''}
+              ${opt.gankTarget ? `<span class="gank-target-badge" style="background: rgba(0, 180, 216, 0.25); border: 1px solid #00b4d8; color: #90e0ef; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px;">🎯 GANK 03:00: ${opt.gankTarget.toUpperCase()}</span>` : ''}
               ${opt.zoneLabel ? `<span class="zone-badge zone-${opt.zone || 'map'}">${opt.zoneLabel}</span>` : ''}
               <span class="complexity-badge ${opt.complexity || 'tactical'}">${opt.complexityLabel || opt.risk}</span>
             </div>

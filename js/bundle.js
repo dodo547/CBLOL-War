@@ -5497,6 +5497,14 @@ class MatchSimulator {
     this.blueJgTargetCampId = null;
     this.redJgTargetCampId = null;
 
+    // Sistema Competitivo de Rota Inicial do Caçador, Invasão Nível 1 e Gank aos 3 Minutos
+    this.blueJgStartChoice = null; // "start_blue_buff" | "start_red_buff" | "invade_team" | "invade_vertical"
+    this.redJgStartChoice = Math.random() < 0.5 ? "start_red_buff" : "start_blue_buff";
+    this.earlyGankTargetLane = null; // "bot" | "top" | "mid"
+    this.redEarlyGankTargetLane = this.redJgStartChoice === "start_red_buff" ? "top" : "bot";
+    this.earlyGankExecuted = false;
+    this.level1InvadeResolved = false;
+
     // Estados dos campeões e pro players
     this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam, "blue");
     this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam, "red");
@@ -6376,6 +6384,9 @@ class MatchSimulator {
     // Atualiza acampamentos da selva, status e farm dos caçadores
     this._updateJungleCamps(deltaSeconds);
 
+    // Verifica e executa o gank planejado dos caçadores aos 03:00 (180s)
+    this._checkEarly3MinGank();
+
     // Atualiza sentinelas/trinkets, posições orgânicas dos campeões e cálculo de névoa de guerra
     this._updateWards();
     this._updateChampionPositions();
@@ -7002,164 +7013,90 @@ class MatchSimulator {
       return false;
     }
 
-    // 0. Estratégia de Nível 1 (aos 01:30 = 90s, apenas 1 vez por partida)
-    if (!this.level1Taken && this.gameSeconds >= 90 && this.gameSeconds <= 120) {
+    // 0. Estratégia de Nível 1 e Rota Inicial do Caçador (aos 00:04 de jogo, início imediato da partida)
+    if (!this.level1Taken && this.gameSeconds >= 4 && this.gameSeconds <= 24) {
       this.level1Taken = true;
 
-      // Telemetrias Dinâmicas de Início de Partida (Scouting)
-      const scoutingActions = [
-        "Sentinelas do rio indicam que o CBLOL prepara cobertura na rota inferior e vigia o buff azul.",
-        "Radar acusa o Top Laner rival avançando sozinho para cravar sentinela no mato do rio.",
-        "O Caçador adversário está agrupando com a bot lane para dar leash no Buff Vermelho.",
-        "Linha defensiva inimiga posicionada em leque nas entradas da selva superior."
-      ];
-      const selectedScouting = scoutingActions[Math.floor(Math.random() * scoutingActions.length)];
+      const isRedStartingTop = (this.redJgStartChoice === "start_red_buff");
+      const selectedScouting = isRedStartingTop
+        ? "Radar indica que o Top Laner rival vigia a entrada do rio superior e o Caçador adversário prepara início no Buff Vermelho."
+        : "Sentinelas do rio inferior acusam a bot lane inimiga agrupada para dar leash no Buff Azul na selva inferior.";
 
-      // Pool de Opções Seguras (1 sorteada)
-      const safePool = [
+      const options = [
         {
-          id: "defensive_5point",
-          icon: "🛡️",
-          name: "Guarda das Entradas & Sentinelas (5-Point)",
+          id: "start_blue_buff",
+          icon: "🔵",
+          name: "Iniciar no Buff Azul (Pathing Rumo ao Bot)",
+          gankTarget: "bot",
+          badge: "🎯 GANK NO BOT (03:00)",
           complexity: "simple",
-          complexityLabel: "🟢 Opção Segura",
-          probability: this._calculateSuccessProbability(82, "simple", "tank"),
+          complexityLabel: "🟢 Rota Padrão",
+          probability: this._calculateSuccessProbability(86, "simple", "utility"),
           risk: "Risco Mínimo",
           riskClass: "low",
-          reward: "Início Seguro + Farm Protegido (+120g) + Buff de Visão",
-          failureConsequence: "Leve avanço de tropas rival na torre sem mortes",
-          desc: "Cada jogador vigia uma entrada da selva (Top, Mid e Bot) e planta sentinelas de rio, cobrindo 100% dos acessos para anular qualquer invasão adversária."
+          reward: "Aceleração de Mana + Gank 3v2 no Bot aos 03:00 (+Abate/Placas de Torre)",
+          failureConsequence: "Gank neutralizado se a bot lane adversária recuar sob a torre",
+          desc: "Inicia limpando a Sentinela Azul, limpa o quadrante superior e desce o mapa para emboscar a Rota Inferior com nível 3 aos 3 minutos de jogo."
         },
         {
-          id: "deep_ward_scout",
-          icon: "👁️",
-          name: "Sentinela Profunda no Buff Inimigo & Recuo Seguro",
+          id: "start_red_buff",
+          icon: "🔴",
+          name: "Iniciar no Buff Vermelho (Pathing Rumo ao Top)",
+          gankTarget: "top",
+          badge: "🎯 GANK NO TOP (03:00)",
           complexity: "simple",
-          complexityLabel: "🟢 Opção Segura",
-          probability: this._calculateSuccessProbability(78, "simple", "utility"),
+          complexityLabel: "🟢 Rota Padrão",
+          probability: this._calculateSuccessProbability(86, "simple", "damage"),
           risk: "Risco Mínimo",
           riskClass: "low",
-          reward: "Rastreamento do Caçador + Telemetria de Gank (+120g)",
-          failureConsequence: "Sentinela destruída com ligeira perda de pressão",
-          desc: "Avançar sorrateiramente aos 00:50 para cravar uma sentinela profunda no Red/Blue adversário e recuar para farmar sob total proteção."
+          reward: "Queimadura do Red Buff + Duelo 2v1 no Top aos 03:00 (+First Blood/Controle de Top)",
+          failureConsequence: "Top Laner adversário joga recuado sob a torre sem mortes",
+          desc: "Inicia na Rubrivira com leash forte, limpa a selva sul e sobe com a lentidão do Red Buff para gankar o Top aos 3 minutos."
         },
         {
-          id: "lane_defense_freeze",
-          icon: "🏰",
-          name: "Controle Defensivo do Tribush & Bloqueio de Invasão",
-          complexity: "simple",
-          complexityLabel: "🟢 Opção Segura",
-          probability: this._calculateSuccessProbability(80, "simple", "tank"),
-          risk: "Risco Mínimo",
-          riskClass: "low",
-          reward: "Controle da Onda de Tropas + Bloqueio de Invasão (+130g)",
-          failureConsequence: "Onda de tropas desfavorável na rota inferior",
-          desc: "Travar a entrada do rio inferior com a bot lane e preparar o controle seguro da primeira onda de tropas rente à torre aliada."
-        }
-      ];
-
-      // Pool de Opções Táticas / Equilibradas (1 sorteada)
-      const tacticalPool = [
-        {
-          id: "invade_bot",
-          icon: "🎯",
-          name: "Invasão no Bot Side & Roubo de Buff",
-          complexity: "tactical",
-          complexityLabel: "🟡 Jogada Tática",
-          probability: this._calculateSuccessProbability(68, "tactical", "utility"),
-          risk: "Médio Risco",
-          riskClass: "medium",
-          reward: "First Blood (+400g) OU Roubo Limpo do Buff Inferior (+200g)",
-          failureConsequence: "Inimigos defendem agrupados; gasto de feitiços de invocador",
-          desc: "Avançar em grupo pelo rio inferior em direção ao buff do caçador rival para surpreender defensores ou roubar o primeiro monstro da selva."
-        },
-        {
-          id: "river_bush",
-          icon: "🌿",
-          name: "Emboscada Tática no Arbusto do Rio (Pixel Bush)",
-          complexity: "tactical",
-          complexityLabel: "🟡 Jogada Tática",
-          probability: this._calculateSuccessProbability(65, "tactical", "damage"),
-          risk: "Médio Risco",
-          riskClass: "medium",
-          reward: "Abate Limpo sem perdas (+350g) + Controle do Rio",
-          failureConsequence: "Troca neutra de feitiços e recuo sem mortes",
-          desc: "Aguardar em bloco no arbusto do rio para interceptar o Mid Laner ou Suporte adversário checando a visão no desespero."
-        },
-        {
-          id: "vertical_jungle",
-          icon: "🔄",
-          name: "Início de Selva Vertical & Inversão de Quadrantes",
-          complexity: "tactical",
-          complexityLabel: "🟡 Jogada Tática",
-          probability: this._calculateSuccessProbability(66, "tactical", "push"),
-          risk: "Médio Risco",
-          riskClass: "medium",
-          reward: "Divisão Vertical da Selva (+220g) + Atraso do Caçador Rival",
-          failureConsequence: "Caçador rival colapsa com suporte da rota",
-          desc: "Acompanhar o caçador para invadir e iniciar direto no quadrante oposto da selva adversária, dividindo o mapa verticalmente."
-        }
-      ];
-
-      // Pool de Opções Ousadas / Agressivas (1 sorteada)
-      const aggressivePool = [
-        {
-          id: "invade_top",
-          icon: "🔥",
-          name: "Invasão Agressiva no Top Side & Emboscada no Mato Triplo",
-          complexity: "complex",
-          complexityLabel: "🔴 Jogada Ousada",
-          probability: this._calculateSuccessProbability(54, "complex", "damage"),
-          risk: "Alto Risco / Alto Retorno",
-          riskClass: "high",
-          reward: "First Blood Mortal (+400g) OU Buff Roubado + Flash Queimado",
-          failureConsequence: "CBLOL colapsa no Top: risco de First Blood desfavorável",
-          desc: "Infiltrar pela selva superior e arbusto triplo do topo antes do spawn para emboscar o Top Laner ou Caçador rival."
-        },
-        {
-          id: "lane_bush_cheese",
-          icon: "⚡",
-          name: "Armadilha no Arbusto da Rota Inferior (Lane Cheese)",
-          complexity: "complex",
-          complexityLabel: "🔴 Jogada Ousada",
-          probability: this._calculateSuccessProbability(55, "complex", "damage"),
-          risk: "Alto Risco / Alto Retorno",
-          riskClass: "high",
-          reward: "First Blood no Bot (+400g) OU Dano Massivo e Recuo Forçado",
-          failureConsequence: "Rivais contornam e punem com pressão de onda",
-          desc: "Atirador e Suporte entram escondidos no primeiro mato da rota inferior para desferir rajada mortal no nível 1."
-        },
-        {
-          id: "red_buff_invade",
+          id: "invade_team",
           icon: "⚔️",
-          name: "All-In Agressivo no Buff Vermelho com Flash",
-          complexity: "complex",
-          complexityLabel: "🔴 Jogada Ousada",
-          probability: this._calculateSuccessProbability(52, "complex", "damage"),
+          name: "Invasão Nível 1 em Equipe (4-Man Invade)",
+          gankTarget: isRedStartingTop ? "top" : "bot",
+          badge: "💥 FIRST BLOOD & ROUBO",
+          complexity: "tactical",
+          complexityLabel: "🟡 Jogada de Alto Impacto",
+          probability: this._calculateSuccessProbability(68, "tactical", "combat"),
           risk: "Alto Risco / Alto Retorno",
           riskClass: "high",
-          reward: "First Blood na Selva (+400g) + Buff Vermelho Roubado (+250g)",
-          failureConsequence: "Contragolpe em 4 do CBLOL: desvantagem inicial",
-          desc: "Invadir em velocidade máxima o Buff Vermelho adversário forçando confronto imediato 4v3 e queima de feitiços de invocador."
+          reward: "First Blood na Selva (+400g) + Roubo do Buff Rival (+90g) + Flash Queimado",
+          failureConsequence: "Contra-ataque inimigo e queima defensiva de Feitiços de Invocador",
+          desc: "Avança em bloco de 4 jogadores pelo rio aos 00:50 para emboscar o caçador rival em seu buff inicial e forçar vantagem imediata."
+        },
+        {
+          id: "invade_vertical",
+          icon: "🥷",
+          name: "Roubo Furtivo Vertical (Vertical Jungling)",
+          gankTarget: "mid",
+          badge: "🗺️ DIVISÃO DO MAPA",
+          complexity: "tactical",
+          complexityLabel: "🟡 Estratégia Macro",
+          probability: this._calculateSuccessProbability(75, "tactical", "utility"),
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "3 Buffs Garantidos (+180g) + Anulação de Metade da Selva Rival",
+          failureConsequence: "Sentinela profunda detecta o roubo; forçado a recuar para própria selva",
+          desc: "Invadir sorrateiramente o buff do lado oposto ao que o caçador rival iniciou, dividindo o mapa verticalmente e roubando o monstro."
         }
       ];
-
-      const safeOption = safePool[Math.floor(Math.random() * safePool.length)];
-      const tacticalOption = tacticalPool[Math.floor(Math.random() * tacticalPool.length)];
-      const aggressiveOption = aggressivePool[Math.floor(Math.random() * aggressivePool.length)];
 
       const decisionData = {
         id: "level1",
         meta: {},
-        badge: "EARLY GAME • NÍVEL 1 (01:30)",
-        title: "⚔️ ESTRATÉGIA DE NÍVEL 1 (INÍCIO DE PARTIDA)",
-        subtitle: "As tropas chegaram às rotas. Escolha a postura inicial da sua equipe antes do spawn dos monstros:",
+        badge: "INÍCIO DE PARTIDA • ESTRATÉGIA DE SELVA (00:04)",
+        title: "🌲 PLANO DE ROTA INICIAL DO CAÇADOR & INVASÃO",
+        subtitle: "Defina onde seu Caçador começará e qual rota receberá o primeiro gank decisivo aos 3 minutos de jogo:",
         scouting: {
           intelTag: "📡 RADAR DE VISÃO NÍVEL 1",
           enemyAction: selectedScouting,
           recommendation: ""
         },
-        options: [safeOption, tacticalOption, aggressiveOption]
+        options
       };
 
       this._triggerTacticalDecision(decisionData);
@@ -9081,6 +9018,208 @@ class MatchSimulator {
   }
 
   _resolveLevel1Decision(choiceId, isSuccess, roll, prob) {
+    const bJg = this.blueRosterState && this.blueRosterState.jungle;
+    const rJg = this.redRosterState && this.redRosterState.jungle;
+    const jgNick = bJg ? (bJg.proPlayer?.nick || bJg.name) : "Caçador";
+    const rJgNick = rJg ? (rJg.proPlayer?.nick || rJg.name) : "Caçador Rival";
+
+    // 1. ESCOLHA: INICIAR NO BUFF AZUL (Pathing para Bot)
+    if (choiceId === "start_blue_buff") {
+      this.blueJgStartChoice = "start_blue_buff";
+      this.earlyGankTargetLane = "bot";
+      this.blueJgTargetCampId = "blue_blue_buff";
+      this._awardTeamGold("blue", 70);
+      if (bJg) {
+        bJg.goldEarned = (bJg.goldEarned || 500) + 70;
+        bJg.goldCurrent = (bJg.goldCurrent || 0) + 70;
+      }
+
+      this.onEvent({
+        type: "jungle_plan",
+        side: "blue",
+        icon: "🔵",
+        text: `🔵 ROTA DEFINIDA: ${jgNick} inicia no Buff Azul! Rotação norte-sul traçada para gankar a Rota Inferior (BOT) aos 03:00!`,
+        time: this._formatTime()
+      });
+
+      return {
+        success: true,
+        roll,
+        probability: prob,
+        title: "ROTA DEFINIDA: BLUE BUFF ➔ BOT LANE",
+        subtitle: "Estratégia de Farm & Gank aos 03:00",
+        text: `${jgNick} posicionou-se na Sentinela Azul com leash seguro. A rotação norte-sul garantirá mana abundante para limpar os campos e gankar a Rota Inferior (BOT) aos 03:00 em busca de First Blood e controle de dragão!`
+      };
+    }
+
+    // 2. ESCOLHA: INICIAR NO BUFF VERMELHO (Pathing para Top)
+    if (choiceId === "start_red_buff") {
+      this.blueJgStartChoice = "start_red_buff";
+      this.earlyGankTargetLane = "top";
+      this.blueJgTargetCampId = "blue_red_buff";
+      this._awardTeamGold("blue", 70);
+      if (bJg) {
+        bJg.goldEarned = (bJg.goldEarned || 500) + 70;
+        bJg.goldCurrent = (bJg.goldCurrent || 0) + 70;
+      }
+
+      this.onEvent({
+        type: "jungle_plan",
+        side: "blue",
+        icon: "🔴",
+        text: `🔴 ROTA DEFINIDA: ${jgNick} inicia no Buff Vermelho! Rotação sul-norte traçada para gankar a Rota Superior (TOP) com Red Buff aos 03:00!`,
+        time: this._formatTime()
+      });
+
+      return {
+        success: true,
+        roll,
+        probability: prob,
+        title: "ROTA DEFINIDA: RED BUFF ➔ TOP LANE",
+        subtitle: "Estratégia de Pressão & Duelo aos 03:00",
+        text: `${jgNick} posicionou-se na Rubrivira. Com o poder de lentidão e queimadura do Red Buff, seu caçador subirá o mapa para gankar a Rota Superior (TOP) aos 03:00 e pressionar o Top Laner adversário!`
+      };
+    }
+
+    // 3. ESCOLHA: INVASÃO EM EQUIPE NÍVEL 1
+    if (choiceId === "invade_team") {
+      this.blueJgStartChoice = "invade_team";
+      this.level1InvadeResolved = true;
+      const targetSide = (this.redJgStartChoice === "start_red_buff") ? "red_red_buff" : "red_blue_buff";
+      const targetCamp = this.jungleCamps.find(c => c.id === targetSide);
+
+      if (isSuccess) {
+        this._awardTeamGold("blue", 490);
+        if (bJg) {
+          bJg.kills = (bJg.kills || 0) + 1;
+          bJg.goldEarned = (bJg.goldEarned || 500) + 400;
+          bJg.goldCurrent = (bJg.goldCurrent || 0) + 400;
+        }
+        if (rJg) {
+          rJg.deaths = (rJg.deaths || 0) + 1;
+          rJg.alive = false;
+          rJg.respawnAt = this.gameSeconds + 14;
+          rJg.travelingBackUntil = rJg.respawnAt + 12;
+        }
+        this.blueScore.kills++;
+        this.redScore.deaths = (this.redScore.deaths || 0) + 1;
+
+        if (targetCamp) {
+          targetCamp.status = "respawning";
+          targetCamp.respawnsAt = this.gameSeconds + targetCamp.respawnDuration;
+          targetCamp.clearedBy = "blue";
+          if (bJg) {
+            bJg.cs = (bJg.cs || 0) + targetCamp.cs;
+            bJg.goldEarned = (bJg.goldEarned || 500) + targetCamp.gold;
+            bJg.goldCurrent = (bJg.goldCurrent || 0) + targetCamp.gold;
+          }
+        }
+
+        this.earlyGankTargetLane = (this.redJgStartChoice === "start_red_buff") ? "top" : "bot";
+        this.lanePressure = Math.min(100, this.lanePressure + 22);
+
+        this.onEvent({
+          type: "first_blood",
+          side: "blue",
+          icon: "🩸",
+          text: `💥 FIRST BLOOD NA INVASÃO! Seu time invadiu em bloco aos 00:50, eliminou ${rJgNick} (+400g) e roubou o ${targetCamp?.name || 'Buff'} inicial!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "INVASÃO PERFEITA: FIRST BLOOD & BUFF ROUBADO!",
+          subtitle: `Sucesso Crítico (${prob}% chance)`,
+          text: `A equipe avançou unida pelo rio! ${jgNick} acertou o controle de grupo em ${rJgNick}, garantindo o FIRST BLOOD (+400g) e limpando o ${targetCamp?.name || 'Buff'} inimigo (+90g). O caçador adversário foi mandado para a base!`
+        };
+      } else {
+        this._awardTeamGold("red", 150);
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        this.earlyGankTargetLane = "bot";
+
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          icon: "⚠️",
+          text: `⚠️ INVASÃO REPELIDA! O CBLOL esperava a aproximação em sentinela e contra-atacou em bloco. Seu time recuou gastando feitiços defensivos!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "INVASÃO DEFENDIDA PELO CBLOL",
+          subtitle: `Falha na Emboscada (${prob}% chance)`,
+          text: `O time adversário guardou as entradas da selva e repeliu a aproximação. Sua equipe foi forçada a queimar Flashes defensivos e recuar para a própria selva sem abates.`
+        };
+      }
+    }
+
+    // 4. ESCOLHA: ROUBO FURTIVO VERTICAL
+    if (choiceId === "invade_vertical") {
+      this.blueJgStartChoice = "invade_vertical";
+      this.level1InvadeResolved = true;
+      const stolenSide = (this.redJgStartChoice === "start_red_buff") ? "red_blue_buff" : "red_red_buff";
+      const stolenCamp = this.jungleCamps.find(c => c.id === stolenSide);
+
+      if (isSuccess) {
+        if (stolenCamp) {
+          stolenCamp.status = "respawning";
+          stolenCamp.respawnsAt = this.gameSeconds + stolenCamp.respawnDuration;
+          stolenCamp.clearedBy = "blue";
+          if (bJg) {
+            bJg.cs = (bJg.cs || 0) + stolenCamp.cs;
+            bJg.goldEarned = (bJg.goldEarned || 500) + stolenCamp.gold + 90;
+            bJg.goldCurrent = (bJg.goldCurrent || 0) + stolenCamp.gold + 90;
+          }
+        }
+        this._awardTeamGold("blue", 180);
+        this.earlyGankTargetLane = "mid";
+        this.lanePressure = Math.min(100, this.lanePressure + 16);
+
+        this.onEvent({
+          type: "jungle_steal",
+          side: "blue",
+          icon: "🥷",
+          text: `🥷 ROUBO FURTIVO VERTICAL! ${jgNick} entrou sorrateiramente na selva oposta e roubou o ${stolenCamp?.name || 'Buff'} do CBLOL sem ser visto (+180g)!`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "DIVISÃO VERTICAL DE SELVA ESTABELECIDA",
+          subtitle: `Infiltração Cirúrgica (${prob}% chance)`,
+          text: `Enquanto ${rJgNick} limpava o outro lado do mapa, ${jgNick} executou o roubo do ${stolenCamp?.name || 'Buff'} adversário. O mapa foi dividido verticalmente, garantindo 3 buffs para o seu time!`
+        };
+      } else {
+        this.earlyGankTargetLane = "bot";
+        this._awardTeamGold("red", 90);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          icon: "👁️",
+          text: `👁️ ROUBO DETECTADO! Uma sentinela profunda do CBLOL flagrou ${jgNick} tentando o roubo vertical. O caçador recuou sob pressão.`,
+          time: this._formatTime()
+        });
+
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "SENTINELA ADVERSÁRIA DETECTOU A INFILTRAÇÃO",
+          subtitle: `Tentativa Frustrada (${prob}% chance)`,
+          text: `O suporte adversário havia cravado uma sentinela no rio que flagrou o roubo a tempo. ${jgNick} precisou recuar antes de finalizar o monstro e voltou para a própria selva.`
+        };
+      }
+    }
+
     // Compatibilidade com IDs legados
     if (choiceId === "defensive_vision") choiceId = "defensive_5point";
     if (choiceId === "invade" || choiceId === "invade_buff") choiceId = "invade_top";
@@ -9088,13 +9227,11 @@ class MatchSimulator {
     const blueAliveRoles = Object.keys(this.blueRosterState).filter(r => this.blueRosterState[r].alive);
     const redAliveRoles = Object.keys(this.redRosterState).filter(r => this.redRosterState[r].alive);
     const bTop = blueAliveRoles.includes("top") ? "top" : (blueAliveRoles[0] || "top");
-    const bJg = blueAliveRoles.includes("jungle") ? "jungle" : (blueAliveRoles[0] || "jungle");
     const bMid = blueAliveRoles.includes("mid") ? "mid" : (blueAliveRoles[0] || "mid");
     const bAdc = blueAliveRoles.includes("adc") ? "adc" : (blueAliveRoles[0] || "adc");
     const bSupp = blueAliveRoles.includes("support") ? "support" : (blueAliveRoles[0] || "support");
 
     const rTop = redAliveRoles.includes("top") ? "top" : (redAliveRoles[0] || "top");
-    const rJg = redAliveRoles.includes("jungle") ? "jungle" : (redAliveRoles[0] || "jungle");
     const rMid = redAliveRoles.includes("mid") ? "mid" : (redAliveRoles[0] || "mid");
     const rAdc = redAliveRoles.includes("adc") ? "adc" : (redAliveRoles[0] || "adc");
     const rSupp = redAliveRoles.includes("support") ? "support" : (redAliveRoles[0] || "support");
@@ -13393,7 +13530,17 @@ class MatchSimulator {
       if (this.blueJungleCampLane) {
         this.blueJgTargetCampId = null;
       } else if (this.gameSeconds < 90) {
-        this.blueJgTargetCampId = "blue_blue_buff";
+        if (this.blueJgStartChoice === "start_red_buff") {
+          this.blueJgTargetCampId = "blue_red_buff";
+        } else if (this.blueJgStartChoice === "invade_vertical") {
+          this.blueJgTargetCampId = (this.redJgStartChoice === "start_red_buff") ? "red_blue_buff" : "red_red_buff";
+        } else if (this.blueJgStartChoice === "invade_team") {
+          this.blueJgTargetCampId = (this.redJgStartChoice === "start_red_buff") ? "red_red_buff" : "red_blue_buff";
+        } else {
+          this.blueJgTargetCampId = "blue_blue_buff";
+        }
+      } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.earlyGankTargetLane) {
+        this.blueJgTargetCampId = null;
       } else {
         let bCamp = this.jungleCamps.find(c => c.id === this.blueJgTargetCampId);
         if (!bCamp || bCamp.status === "respawning" || bCamp.status === "unspawned" || (bCamp.clearingBy && bCamp.clearingBy !== "blue")) {
@@ -13460,7 +13607,9 @@ class MatchSimulator {
       if (this.redJungleCampLane) {
         this.redJgTargetCampId = null;
       } else if (this.gameSeconds < 90) {
-        this.redJgTargetCampId = "red_red_buff";
+        this.redJgTargetCampId = (this.redJgStartChoice === "start_blue_buff") ? "red_blue_buff" : "red_red_buff";
+      } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.redEarlyGankTargetLane) {
+        this.redJgTargetCampId = null;
       } else {
         let rCamp = this.jungleCamps.find(c => c.id === this.redJgTargetCampId);
         if (!rCamp || rCamp.status === "respawning" || rCamp.status === "unspawned" || (rCamp.clearingBy && rCamp.clearingBy !== "red")) {
@@ -13518,6 +13667,135 @@ class MatchSimulator {
             }
           }
         }
+      }
+    }
+  }
+
+  _checkEarly3MinGank() {
+    if (this.earlyGankExecuted || this.gameSeconds < 180 || this.gameSeconds > 210) return;
+    this.earlyGankExecuted = true;
+
+    const bJg = this.blueRosterState && this.blueRosterState.jungle;
+    const rJg = this.redRosterState && this.redRosterState.jungle;
+    const bJgNick = bJg ? (bJg.proPlayer?.nick || bJg.name) : "Caçador";
+    const rJgNick = rJg ? (rJg.proPlayer?.nick || rJg.name) : "Caçador Rival";
+
+    const targetLane = this.earlyGankTargetLane || "bot";
+    const redTargetLane = this.redEarlyGankTargetLane || (this.redJgStartChoice === "start_red_buff" ? "top" : "bot");
+
+    const laneNames = { top: "Rota Superior (TOP)", mid: "Rota do Meio (MID)", bot: "Rota Inferior (BOT)" };
+    const laneName = laneNames[targetLane] || targetLane;
+
+    // Cenário 1: CONTRA-GANK (Ambos os caçadores gankam a mesma rota aos 03:00)
+    if (targetLane === redTargetLane) {
+      const bCombat = (this.blueTeam.stats?.combat || 50) + (Math.random() * 25);
+      const rCombat = (this.redTeam.stats?.combat || 50) + (Math.random() * 25);
+      const isBlueWin = bCombat >= rCombat;
+
+      if (isBlueWin) {
+        this._awardTeamGold("blue", 450);
+        if (bJg) {
+          bJg.kills = (bJg.kills || 0) + 1;
+          bJg.goldEarned = (bJg.goldEarned || 500) + 300;
+          bJg.goldCurrent = (bJg.goldCurrent || 0) + 300;
+        }
+        if (rJg) {
+          rJg.deaths = (rJg.deaths || 0) + 1;
+          rJg.alive = false;
+          rJg.respawnAt = this.gameSeconds + 16;
+          rJg.travelingBackUntil = rJg.respawnAt + 14;
+        }
+        this.blueScore.kills++;
+        this.redScore.deaths = (this.redScore.deaths || 0) + 1;
+        if (this.lanePressures && this.lanePressures[targetLane] !== undefined) {
+          this.lanePressures[targetLane] = Math.min(100, this.lanePressures[targetLane] + 28);
+        }
+
+        this.onEvent({
+          type: "counter_gank_win",
+          side: "blue",
+          icon: "⚔️",
+          text: `🔥 CONTRA-GANK VITORIOSO AOS 03:00! ${bJgNick} e ${rJgNick} colidiram na ${laneName}! Sua equipe venceu o confronto 2v2/3v3, abateu o caçador rival (+450g) e assumiu o controle do rio!`,
+          time: this._formatTime()
+        });
+      } else {
+        this._awardTeamGold("red", 400);
+        if (rJg) {
+          rJg.kills = (rJg.kills || 0) + 1;
+          rJg.goldEarned = (rJg.goldEarned || 500) + 300;
+          rJg.goldCurrent = (rJg.goldCurrent || 0) + 300;
+        }
+        if (bJg) {
+          bJg.deaths = (bJg.deaths || 0) + 1;
+          bJg.alive = false;
+          bJg.respawnAt = this.gameSeconds + 16;
+          bJg.travelingBackUntil = bJg.respawnAt + 14;
+        }
+        this.redScore.kills++;
+        this.blueScore.deaths = (this.blueScore.deaths || 0) + 1;
+        if (this.lanePressures && this.lanePressures[targetLane] !== undefined) {
+          this.lanePressures[targetLane] = Math.max(-100, this.lanePressures[targetLane] - 25);
+        }
+
+        this.onEvent({
+          type: "counter_gank_loss",
+          side: "red",
+          icon: "⚠️",
+          text: `⚠️ CONTRA-GANK DESFAVORÁVEL AOS 03:00! O caçador rival ${rJgNick} previu a jogada na ${laneName} e venceu a troca de feitiços.`,
+          time: this._formatTime()
+        });
+      }
+    } else {
+      // Cenário 2: GANK COM VANTAGEM NUMÉRICA (Cross-map ganks)
+      const roll = Math.random();
+      if (roll < 0.75) {
+        const lanerRole = targetLane === "bot" ? "adc" : targetLane;
+        const laner = this.blueRosterState && this.blueRosterState[lanerRole];
+        const oppLaner = this.redRosterState && this.redRosterState[lanerRole];
+
+        this._awardTeamGold("blue", 350);
+        if (bJg) {
+          bJg.assists = (bJg.assists || 0) + 1;
+          bJg.goldEarned = (bJg.goldEarned || 500) + 150;
+          bJg.goldCurrent = (bJg.goldCurrent || 0) + 150;
+        }
+        if (laner) {
+          laner.kills = (laner.kills || 0) + 1;
+          laner.goldEarned = (laner.goldEarned || 500) + 300;
+          laner.goldCurrent = (laner.goldCurrent || 0) + 300;
+        }
+        if (oppLaner) {
+          oppLaner.deaths = (oppLaner.deaths || 0) + 1;
+          oppLaner.alive = false;
+          oppLaner.respawnAt = this.gameSeconds + 16;
+          oppLaner.travelingBackUntil = oppLaner.respawnAt + 14;
+        }
+        this.blueScore.kills++;
+        this.redScore.deaths = (this.redScore.deaths || 0) + 1;
+        if (this.lanePressures && this.lanePressures[targetLane] !== undefined) {
+          this.lanePressures[targetLane] = Math.min(100, this.lanePressures[targetLane] + 24);
+        }
+
+        this.onEvent({
+          type: "gank_success",
+          side: "blue",
+          icon: "🎯",
+          text: `🎯 GANK CIRÚRGICO AOS 03:00! ${bJgNick} executou a emboscada planejada na ${laneName}, garantindo o abate sobre ${oppLaner ? oppLaner.name : 'o rival'} (+350g) e pressão de rota!`,
+          time: this._formatTime()
+        });
+      } else {
+        if (this.lanePressures && this.lanePressures[targetLane] !== undefined) {
+          this.lanePressures[targetLane] = Math.min(100, this.lanePressures[targetLane] + 14);
+        }
+        this._awardTeamGold("blue", 100);
+
+        this.onEvent({
+          type: "gank_flash",
+          side: "blue",
+          icon: "⚡",
+          text: `⚡ FLASH QUEIMADO AOS 03:00! O gank de ${bJgNick} na ${laneName} forçou o recuo adversário sob a torre! Onda de tropas crashada com sucesso (+100g).`,
+          time: this._formatTime()
+        });
       }
     }
   }
@@ -13588,9 +13866,30 @@ class MatchSimulator {
           ty = targetCoords.y;
           status = `Gankando a rota ${l.toUpperCase()}`;
         } else if (this.gameSeconds < 90) {
-          tx = 382;
-          ty = 520;
-          status = "Aguardando Buff Azul (01:30)";
+          if (this.blueJgStartChoice === "start_red_buff") {
+            tx = 500;
+            ty = 440;
+            status = "Aguardando Buff Vermelho (01:30)";
+          } else if (this.blueJgStartChoice === "invade_team") {
+            tx = 520;
+            ty = 360;
+            status = "Posicionado para Invasão 4-Man";
+          } else if (this.blueJgStartChoice === "invade_vertical") {
+            const isRedTop = (this.redJgStartChoice === "start_red_buff");
+            tx = isRedTop ? 640 : 460;
+            ty = isRedTop ? 150 : 220;
+            status = "Infiltrado para Roubo Vertical";
+          } else {
+            tx = 382;
+            ty = 520;
+            status = "Aguardando Buff Azul (01:30)";
+          }
+        } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.earlyGankTargetLane) {
+          const l = this.earlyGankTargetLane;
+          const targetCoords = l === "top" ? { x: 270, y: 165 } : (l === "mid" ? { x: 480, y: 320 } : { x: 770, y: 580 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gank Planejado na Rota ${l.toUpperCase()} (03:00)`;
         } else {
           const targetCamp = (this.jungleCamps && this.blueJgTargetCampId) ? this.jungleCamps.find(c => c.id === this.blueJgTargetCampId) : null;
           if (targetCamp) {
@@ -13684,9 +13983,21 @@ class MatchSimulator {
           ty = targetCoords.y;
           status = `Gankando a rota ${l.toUpperCase()}`;
         } else if (this.gameSeconds < 90) {
-          tx = 460;
-          ty = 220;
-          status = "Aguardando Buff Red (01:30)";
+          if (this.redJgStartChoice === "start_blue_buff") {
+            tx = 640;
+            ty = 150;
+            status = "Aguardando Buff Azul (01:30)";
+          } else {
+            tx = 460;
+            ty = 220;
+            status = "Aguardando Buff Red (01:30)";
+          }
+        } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.redEarlyGankTargetLane) {
+          const l = this.redEarlyGankTargetLane;
+          const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gank Planejado na Rota ${l.toUpperCase()} (03:00)`;
         } else {
           const targetCamp = (this.jungleCamps && this.redJgTargetCampId) ? this.jungleCamps.find(c => c.id === this.redJgTargetCampId) : null;
           if (targetCamp) {
@@ -13876,6 +14187,11 @@ class MatchSimulator {
       visionSources: this.blueVisionSources || [],
       lastEnemySightings: this.lastEnemySightings || {},
       jungleCamps: this.jungleCamps || [],
+      blueJgStartChoice: this.blueJgStartChoice,
+      redJgStartChoice: this.redJgStartChoice,
+      earlyGankTargetLane: this.earlyGankTargetLane,
+      redEarlyGankTargetLane: this.redEarlyGankTargetLane,
+      earlyGankExecuted: this.earlyGankExecuted,
       activeBuffs: {
         blue: this._getActiveBuffs("blue"),
         red: this._getActiveBuffs("red")
@@ -17490,6 +17806,8 @@ class ArenaView {
           <div class="choice-card-header">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span class="choice-card-icon">${opt.icon || '⚔️'}</span>
+              ${opt.badge ? `<span class="decision-custom-badge" style="background: rgba(200, 155, 60, 0.2); border: 1px solid #c89b3c; color: #f0e6d2; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px;">${opt.badge}</span>` : ''}
+              ${opt.gankTarget ? `<span class="gank-target-badge" style="background: rgba(0, 180, 216, 0.25); border: 1px solid #00b4d8; color: #90e0ef; font-size: 11px; padding: 2px 7px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px;">🎯 GANK 03:00: ${opt.gankTarget.toUpperCase()}</span>` : ''}
               ${opt.zoneLabel ? `<span class="zone-badge zone-${opt.zone || 'map'}">${opt.zoneLabel}</span>` : ''}
               <span class="complexity-badge ${opt.complexity || 'tactical'}">${opt.complexityLabel || opt.risk}</span>
             </div>
