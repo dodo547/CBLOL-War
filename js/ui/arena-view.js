@@ -1,6 +1,7 @@
 import { sound } from "../engine/audio.js";
 import { getChampionById } from "../data/champions.js";
 import { getItemIconUrl, LOL_ITEMS, getItemById, getItemRecipeTree, ITEM_CATEGORIES } from "../data/items.js";
+import { JUNGLE_CAMPS, getJungleCampById, getAllJungleCamps } from "../data/jungle-camps.js";
 
 export class ArenaView {
   constructor({ containerEl, simulator, onMatchFinished }) {
@@ -474,6 +475,11 @@ export class ArenaView {
           ${redStructuresSvg}
         </g>
 
+        <!-- ACAMPAMENTOS E MONSTROS DA SELVA (Jungle Camps & Mobs) -->
+        <g id="jungle-camps-layer" class="jungle-camps-layer">
+          ${this._renderJungleCampsSvg(state)}
+        </g>
+
         <!-- SENTINELAS E VISÃO (Wards & Trinkets) -->
         <g id="wards-layer" class="wards-layer"></g>
 
@@ -483,6 +489,49 @@ export class ArenaView {
         </g>
       </svg>
     `;
+  }
+
+  _renderJungleCampsSvg(state) {
+    const camps = (state && state.jungleCamps && state.jungleCamps.length > 0)
+      ? state.jungleCamps
+      : (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : (typeof JUNGLE_CAMPS !== "undefined" ? JUNGLE_CAMPS : []));
+    if (!camps || camps.length === 0) return "";
+
+    return camps.map(camp => {
+      const isAlive = camp.status === "alive";
+      const isClearing = camp.status === "clearing";
+      const isRespawning = camp.status === "respawning";
+      const isUnspawned = !camp.status || camp.status === "unspawned";
+
+      const remSeconds = Math.max(0, (camp.respawnsAt || camp.spawnAt || 90) - (state?.gameSeconds || 0));
+      const m = Math.floor(remSeconds / 60);
+      const s = remSeconds % 60;
+      const timerStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      const showTimer = !isAlive;
+
+      return `
+        <g id="camp-node-${camp.id}"
+           class="jungle-camp-node ${camp.side} ${camp.campType} ${camp.status || 'unspawned'}"
+           data-camp-id="${camp.id}"
+           data-side="${camp.side}"
+           transform="translate(${camp.x}, ${camp.y})"
+           cursor="pointer">
+          <!-- Hitbox transparente para captura de eventos -->
+          <circle class="camp-hitbox" r="22" fill="transparent" />
+          <!-- Halo de combate / pulso -->
+          <circle class="camp-halo" r="18" fill="${camp.themeColor || '#fbbf24'}" opacity="${isClearing ? '0.4' : (isAlive ? '0.2' : '0.08')}" />
+          <!-- Anel de contorno com cor temática -->
+          <circle class="camp-ring" r="13.5" fill="#0b121e" stroke="${camp.themeColor || '#fbbf24'}" stroke-width="2" />
+          <!-- Ícone oficial do monstro -->
+          <text class="camp-icon" text-anchor="middle" dominant-baseline="central" font-size="11.5">${camp.icon}</text>
+          <!-- Badge flutuante de respawn -->
+          <g class="camp-timer-badge" id="camp-timer-${camp.id}" transform="translate(0, 16)" style="${showTimer ? '' : 'display: none;'}">
+            <rect x="-18" y="-7.5" width="36" height="15" rx="4.5" fill="rgba(6, 11, 20, 0.92)" stroke="${camp.themeColor || '#fbbf24'}" stroke-width="1.2" />
+            <text id="camp-timer-text-${camp.id}" class="camp-timer-text" text-anchor="middle" dominant-baseline="central" font-size="8.5" font-weight="800" fill="#f0e6d2">${timerStr}</text>
+          </g>
+        </g>
+      `;
+    }).join("");
   }
 
   _renderChampionsSvg(state) {
@@ -1022,6 +1071,9 @@ export class ArenaView {
 
     // Atualiza sentinelas de visão ativas no mapa
     this._updateMapWards(state);
+
+    // Atualiza acampamentos da selva, status e cronômetros de respawn
+    this._updateMapJungleCamps(state);
   }
 
   _updateMapChampions(state) {
@@ -1122,6 +1174,47 @@ export class ArenaView {
         </g>
       `;
     }).join("");
+  }
+
+  _updateMapJungleCamps(state) {
+    if (!state) return;
+    const camps = state.jungleCamps || (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : []);
+    const gameSecs = state.gameSeconds || 0;
+
+    camps.forEach(camp => {
+      const node = this.containerEl.querySelector(`#camp-node-${camp.id}`);
+      if (!node) return;
+
+      const isAlive = camp.status === "alive";
+      const isClearing = camp.status === "clearing";
+      const isRespawning = camp.status === "respawning";
+      const isUnspawned = !camp.status || camp.status === "unspawned";
+
+      node.classList.toggle("alive", isAlive);
+      node.classList.toggle("clearing", isClearing);
+      node.classList.toggle("respawning", isRespawning);
+      node.classList.toggle("unspawned", isUnspawned);
+
+      const timerBadge = node.querySelector(`#camp-timer-${camp.id}`);
+      const timerText = node.querySelector(`#camp-timer-text-${camp.id}`);
+
+      if (timerBadge && timerText) {
+        if (isAlive) {
+          timerBadge.style.display = "none";
+        } else {
+          timerBadge.style.display = "block";
+          const rem = Math.max(0, (camp.respawnsAt || camp.spawnAt || 0) - gameSecs);
+          const m = Math.floor(rem / 60);
+          const s = rem % 60;
+          timerText.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+      }
+
+      const halo = node.querySelector(".camp-halo");
+      if (halo) {
+        halo.setAttribute("opacity", isClearing ? "0.45" : (isAlive ? "0.2" : "0.08"));
+      }
+    });
   }
 
   _updateRosterUI(rosterState, side, fullState = null) {
@@ -2548,6 +2641,110 @@ export class ArenaView {
         }
       });
     }
+
+    // Interatividade dos Acampamentos e Monstros da Selva (Jungle Camps)
+    this.containerEl.querySelectorAll(".jungle-camp-node").forEach(campNode => {
+      campNode.addEventListener("mouseenter", (e) => {
+        this._hoveredStructNode = null;
+        const campId = campNode.dataset.campId;
+        const liveState = this.sim ? this.sim.getState() : state;
+        const campsList = liveState.jungleCamps || (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : []);
+        const camp = campsList.find(c => c.id === campId) || (typeof getJungleCampById === "function" ? getJungleCampById(campId) : null);
+        if (!camp) return;
+
+        const isAlive = camp.status === "alive";
+        const isClearing = camp.status === "clearing";
+        const isRespawning = camp.status === "respawning";
+        const isUnspawned = !camp.status || camp.status === "unspawned";
+        const gameSecs = liveState.gameSeconds || 0;
+
+        let statusBadge = "";
+        let statusText = "";
+        const remSeconds = Math.max(0, (camp.respawnsAt || camp.spawnAt || 0) - gameSecs);
+        const m = Math.floor(remSeconds / 60);
+        const s = remSeconds % 60;
+        const timerFormatted = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+        if (isAlive) {
+          statusBadge = `<span style="color:#10b981; font-weight:bold;">🟢 VIVO NO MAPA</span>`;
+          statusText = `Disponível para abate por qualquer caçador`;
+        } else if (isClearing) {
+          const who = camp.clearingBy === "blue" ? "Caçador Aliado (Azul)" : "Caçador Inimigo (Vermelho)";
+          statusBadge = `<span style="color:#f59e0b; font-weight:bold;">⚔️ EM COMBATE</span>`;
+          statusText = `Sendo abatido por ${who}`;
+        } else if (isRespawning) {
+          statusBadge = `<span style="color:#f43f5e; font-weight:bold;">⏳ RENASCENDO EM ${timerFormatted}</span>`;
+          statusText = `Abatido recentemente (${camp.clearedBy === 'blue' ? 'Abatido pela sua equipe' : 'Abatido pelo time rival'})`;
+        } else {
+          statusBadge = `<span style="color:#a855f7; font-weight:bold;">⏳ SURGIMENTO INICIAL EM ${timerFormatted}</span>`;
+          statusText = `Surge aos ${Math.floor(camp.spawnAt / 60)}:${String(camp.spawnAt % 60).padStart(2, '0')} de jogo`;
+        }
+
+        const sideLabel = camp.side === "blue" ? "🔵 Selva Azul" : (camp.side === "red" ? "🔴 Selva Vermelha" : "🌊 Rio de Summoner's Rift");
+        const respawnMin = Math.floor(camp.respawnDuration / 60);
+        const respawnSec = camp.respawnDuration % 60;
+        const respawnStr = respawnSec ? `${respawnMin}m ${respawnSec}s` : `${respawnMin} min`;
+
+        tooltip.innerHTML = `
+          <div class="tip-header" style="border-bottom: 2px solid ${camp.themeColor || '#fbbf24'};">
+            <span class="tip-team" style="background: rgba(10, 15, 25, 0.9); color: ${camp.themeColor || '#fbbf24'}; border: 1px solid ${camp.themeColor || '#fbbf24'};">
+              ${camp.icon} ${camp.badge || 'SELVA'} • ${sideLabel}
+            </span>
+            <div class="tip-name" style="color:#fff; font-size:13px; margin-top:2px;">
+              ${camp.name}
+            </div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-detail-row">
+              <span>Situação:</span>
+              ${statusBadge}
+            </div>
+            <div class="tip-detail-row">
+              <span>Recompensa de Ouro:</span>
+              <strong style="color: #fbbf24;">💰 +${camp.gold}g (Para o Caçador)</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Farm de Tropas (CS):</span>
+              <strong style="color: #60a5fa;">🌾 +${camp.cs} CS</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Tempo de Renascimento:</span>
+              <strong style="color: #f0e6d2;">⏱️ ${respawnStr}</strong>
+            </div>
+            ${camp.buff ? `
+              <div class="tip-detail-row" style="margin-top: 4px;">
+                <span>Efeito / Bônus:</span>
+                <span style="color: #38bdf8; font-size: 10.5px; line-height: 1.3;">${camp.buff}</span>
+              </div>
+            ` : ''}
+            <div class="tip-detail-row" style="margin-top: 4px;">
+              <span>Descrição:</span>
+              <span style="color: #d1d5db; font-size: 10px; line-height: 1.3;">${camp.desc}</span>
+            </div>
+          </div>
+        `;
+        updateTooltipPosition(e);
+        tooltip.style.display = "block";
+      });
+
+      campNode.addEventListener("mousemove", (e) => {
+        updateTooltipPosition(e);
+      });
+
+      campNode.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      campNode.addEventListener("click", () => {
+        sound.playClick();
+        const halo = campNode.querySelector(".camp-halo");
+        if (halo) {
+          halo.classList.remove("ping-pulse");
+          void halo.offsetWidth;
+          halo.classList.add("ping-pulse");
+        }
+      });
+    });
 
     // Inicializa o modal da Loja Hextech e Árvore de Receitas
     this._initItemShopModal();

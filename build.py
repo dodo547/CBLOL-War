@@ -10,6 +10,7 @@ FILES = [
     "js/data/teams.js",
     "js/data/champions.js",
     "js/data/items.js",
+    "js/data/jungle-camps.js",
     "js/data/upgrades.js",
     "js/engine/audio.js",
     "js/engine/match-sim.js",
@@ -78,6 +79,9 @@ if (typeof window !== 'undefined') {
   window.getStarterItemForChampion = getStarterItemForChampion;
   window.ITEM_CATEGORIES = ITEM_CATEGORIES;
   window.getRecommendedItemForChampion = getRecommendedItemForChampion;
+  window.JUNGLE_CAMPS = JUNGLE_CAMPS;
+  window.getJungleCampById = getJungleCampById;
+  window.getAllJungleCamps = getAllJungleCamps;
   window.PRO_PLAYERS = PRO_PLAYERS;
   window.getPlayersByRole = getPlayersByRole;
   window.getPlayerById = getPlayerById;

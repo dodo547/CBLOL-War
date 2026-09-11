@@ -4394,6 +4394,275 @@ function _resolveNextStep(currentInventory, targetItemId, currentGold, isRoot = 
 
 
 
+// =================== js/data/jungle-camps.js ===================
+
+/**
+ * Catálogo Oficial dos Acampamentos e Monstros da Selva de Summoner's Rift (League of Legends Patch 14.x)
+ * Contém horários de nascimento originais, tempos de respawn, recompensas de ouro/CS e coordenadas no minimapa.
+ */
+
+const JUNGLE_CAMPS = [
+  // ==========================================
+  // SELVA DA EQUIPE AZUL (BLUE SIDE JUNGLE)
+  // ==========================================
+  {
+    id: "blue_blue_buff",
+    name: "Sentinela Azul",
+    campType: "buff",
+    side: "blue",
+    icon: "🔵",
+    badge: "BUFF AZUL",
+    themeColor: "#38bdf8",
+    x: 382,
+    y: 520,
+    spawnAt: 90, // 01:30
+    respawnDuration: 300, // 5:00 min
+    gold: 90,
+    cs: 4,
+    buff: "Bênção da Perspicácia (Crest of Insight): +10 Aceleração de Habilidade e regeneração maciça de Mana/Energia.",
+    desc: "Guardião arcano da floresta azul. Concede bônus vital para magos e campeões dependentes de mana."
+  },
+  {
+    id: "blue_gromp",
+    name: "Grompe",
+    campType: "minor",
+    side: "blue",
+    icon: "🐸",
+    badge: "GROMP",
+    themeColor: "#34d399",
+    x: 210,
+    y: 440,
+    spawnAt: 102, // 01:42
+    respawnDuration: 135, // 2:15 min
+    gold: 80,
+    cs: 4,
+    buff: "Restauração Mítica: Regenera uma porcentagem da Vida e Mana ao ser abatido.",
+    desc: "Sapo venenoso gigante da selva superior azul. Alvo prioritário para sustentação rápida."
+  },
+  {
+    id: "blue_wolves",
+    name: "Lobos Devastadores",
+    campType: "minor",
+    side: "blue",
+    icon: "🐺",
+    badge: "LOBOS",
+    themeColor: "#a78bfa",
+    x: 380,
+    y: 440,
+    spawnAt: 90, // 01:30
+    respawnDuration: 135, // 2:15 min
+    gold: 85,
+    cs: 4,
+    buff: "3 Monstros (Lobo Maior 55g + 2 Menores 15g cada).",
+    desc: "Matilha ágil de predadores sombrios na entrada do quadrante azul."
+  },
+  {
+    id: "blue_raptors",
+    name: "Acuâminas",
+    campType: "minor",
+    side: "blue",
+    icon: "🦅",
+    badge: "ACUÂMINAS",
+    themeColor: "#f43f5e",
+    x: 440,
+    y: 340,
+    spawnAt: 90, // 01:30
+    respawnDuration: 135, // 2:15 min
+    gold: 70,
+    cs: 4,
+    buff: "6 Monstros (Acuâmina Maior 35g + 5 Menores 7g cada).",
+    desc: "Bando numeroso de aves ferozes na rampa do meio. Excelente para dano em área (AoE)."
+  },
+  {
+    id: "blue_red_buff",
+    name: "Rubrivira",
+    campType: "buff",
+    side: "blue",
+    icon: "🔴",
+    badge: "BUFF RED",
+    themeColor: "#ef4444",
+    x: 500,
+    y: 440,
+    spawnAt: 90, // 01:30
+    respawnDuration: 300, // 5:00 min
+    gold: 90,
+    cs: 4,
+    buff: "Bênção das Cinzas (Crest of Cinders): Ataques básicos causam lentidão e queimadura de dano verdadeiro contínuo.",
+    desc: "Colosso elemental de fogo da selva inferior azul. Essencial para ganks e trocas de dano."
+  },
+  {
+    id: "blue_krugs",
+    name: "Krugues",
+    campType: "minor",
+    side: "blue",
+    icon: "🪨",
+    badge: "KRUGS",
+    themeColor: "#f59e0b",
+    x: 630,
+    y: 630,
+    spawnAt: 102, // 01:42
+    respawnDuration: 135, // 2:15 min
+    gold: 110,
+    cs: 4,
+    buff: "Divisão Rochosa: O Krug Maior se divide em Krugs Médios e Menores (maior ouro total de acampamento comum).",
+    desc: "Golens de pedra mágica no canto inferior direito da rota bot."
+  },
+
+  // ==========================================
+  // SELVA DA EQUIPE VERMELHA (RED SIDE JUNGLE)
+  // ==========================================
+  {
+    id: "red_red_buff",
+    name: "Rubrivira",
+    campType: "buff",
+    side: "red",
+    icon: "🔴",
+    badge: "BUFF RED",
+    themeColor: "#ef4444",
+    x: 460,
+    y: 220,
+    spawnAt: 90, // 01:30
+    respawnDuration: 300, // 5:00 min
+    gold: 90,
+    cs: 4,
+    buff: "Bênção das Cinzas (Crest of Cinders): Lentidão e queimadura de dano verdadeiro em autoataques.",
+    desc: "Monstro guardião de brasa no quadrante superior vermelho."
+  },
+  {
+    id: "red_raptors",
+    name: "Acuâminas",
+    campType: "minor",
+    side: "red",
+    icon: "🦅",
+    badge: "ACUÂMINAS",
+    themeColor: "#f43f5e",
+    x: 540,
+    y: 260,
+    spawnAt: 90, // 01:30
+    respawnDuration: 135, // 2:15 min
+    gold: 70,
+    cs: 4,
+    buff: "6 Monstros (Acuâmina Maior 35g + 5 Menores 7g cada).",
+    desc: "Bando de aves vorazes no bolsão central da selva vermelha."
+  },
+  {
+    id: "red_krugs",
+    name: "Krugues",
+    campType: "minor",
+    side: "red",
+    icon: "🪨",
+    badge: "KRUGS",
+    themeColor: "#f59e0b",
+    x: 380,
+    y: 110,
+    spawnAt: 102, // 01:42
+    respawnDuration: 135, // 2:15 min
+    gold: 110,
+    cs: 4,
+    buff: "Divisão de Rochas Mágicas: 110 de ouro total para o caçador.",
+    desc: "Acampamento isolado de golens rochosos perto da rota superior vermelha."
+  },
+  {
+    id: "red_wolves",
+    name: "Lobos Devastadores",
+    campType: "minor",
+    side: "red",
+    icon: "🐺",
+    badge: "LOBOS",
+    themeColor: "#a78bfa",
+    x: 640,
+    y: 220,
+    spawnAt: 90, // 01:30
+    respawnDuration: 135, // 2:15 min
+    gold: 85,
+    cs: 4,
+    buff: "3 Monstros (85 de ouro total).",
+    desc: "Lobos territoriais guardando o acesso à selva azul inimiga."
+  },
+  {
+    id: "red_blue_buff",
+    name: "Sentinela Azul",
+    campType: "buff",
+    side: "red",
+    icon: "🔵",
+    badge: "BUFF AZUL",
+    themeColor: "#38bdf8",
+    x: 640,
+    y: 150,
+    spawnAt: 90, // 01:30
+    respawnDuration: 300, // 5:00 min
+    gold: 90,
+    cs: 4,
+    buff: "Bênção da Perspicácia (Crest of Insight): Aceleração de Habilidade e regeneração rápida de Mana.",
+    desc: "Sentinela rúnica de pedra e magia no quadrante inferior vermelho."
+  },
+  {
+    id: "red_gromp",
+    name: "Grompe",
+    campType: "minor",
+    side: "red",
+    icon: "🐸",
+    badge: "GROMP",
+    themeColor: "#34d399",
+    x: 750,
+    y: 180,
+    spawnAt: 102, // 01:42
+    respawnDuration: 135, // 2:15 min
+    gold: 80,
+    cs: 4,
+    buff: "Restauração de Combate: Recupera vida e recurso ao ser finalizado.",
+    desc: "Monstro cogumelo anfíbio na entrada norte da selva vermelha."
+  },
+
+  // ==========================================
+  // ARONGUEJOS DO RIO (RIVER SCUTTLE CRABS)
+  // ==========================================
+  {
+    id: "river_scuttle_top",
+    name: "Aronguejo (Rio Superior)",
+    campType: "scuttle",
+    side: "neutral",
+    icon: "🦀",
+    badge: "ARONGUEJO TOP",
+    themeColor: "#06b6d4",
+    x: 330,
+    y: 200,
+    spawnAt: 210, // 03:30
+    respawnDuration: 150, // 2:30 min
+    gold: 55,
+    cs: 4,
+    buff: "Santuário do Rio: Concede um santuário de visão inquebrável e +35% de velocidade de movimento ao atravessar por 90s.",
+    desc: "Criatura inofensiva que vaga pelo rio em frente ao covil do Barão Na'Shor."
+  },
+  {
+    id: "river_scuttle_bot",
+    name: "Aronguejo (Rio Inferior)",
+    campType: "scuttle",
+    side: "neutral",
+    icon: "🦀",
+    badge: "ARONGUEJO BOT",
+    themeColor: "#06b6d4",
+    x: 680,
+    y: 480,
+    spawnAt: 210, // 03:30
+    respawnDuration: 150, // 2:30 min
+    gold: 55,
+    cs: 4,
+    buff: "Santuário do Rio: Concede visão duradoura e aceleração na entrada do covil do Dragão por 90s.",
+    desc: "Patrulheiro do rio sul. Garante controle de visão tático crucial para disputas de Dragão."
+  }
+];
+
+function getJungleCampById(id) {
+  return JUNGLE_CAMPS.find(c => c.id === id) || null;
+}
+
+function getAllJungleCamps() {
+  return JUNGLE_CAMPS;
+}
+
+
+
 // =================== js/data/upgrades.js ===================
 
 // Aprimoramentos e Buffs Hextech adquiridos entre rodadas do CBLOL
@@ -5214,6 +5483,20 @@ class MatchSimulator {
     this.blueVisionSources = [];
     this.lastEnemySightings = {};
 
+    // Acampamentos Oficiais da Selva de Summoner's Rift (League of Legends)
+    const campsData = (typeof JUNGLE_CAMPS !== "undefined" && Array.isArray(JUNGLE_CAMPS)) ? JUNGLE_CAMPS : [];
+    this.jungleCamps = campsData.map(c => ({
+      ...c,
+      status: "unspawned", // "unspawned" | "alive" | "clearing" | "respawning"
+      respawnsAt: c.spawnAt,
+      clearedBy: null,
+      clearingBy: null,
+      clearingProgress: 0,
+      clearingDuration: 4
+    }));
+    this.blueJgTargetCampId = null;
+    this.redJgTargetCampId = null;
+
     // Estados dos campeões e pro players
     this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam, "blue");
     this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam, "red");
@@ -6008,8 +6291,8 @@ class MatchSimulator {
           let csRate = 0.16;
           if (role === "top") csRate = 0.143;
           else if (role === "jungle") {
-            csRate = 0.108;
-            goldGain += (32 / 15) * deltaSeconds;
+            csRate = 0.015; // Tropas esporádicas de rotas em ganks/cobertura (farm principal vem dos acampamentos da selva)
+            goldGain += (8 / 15) * deltaSeconds;
           } else if (role === "support") {
             csRate = 0.023;
             goldGain += (26 / 15) * deltaSeconds;
@@ -6089,6 +6372,9 @@ class MatchSimulator {
 
     // Rola simulação de pressão de rota e combate tático
     this._resolveCombatRound();
+
+    // Atualiza acampamentos da selva, status e farm dos caçadores
+    this._updateJungleCamps(deltaSeconds);
 
     // Atualiza sentinelas/trinkets, posições orgânicas dos campeões e cálculo de névoa de guerra
     this._updateWards();
@@ -13089,6 +13375,153 @@ class MatchSimulator {
     }
   }
 
+  _updateJungleCamps(deltaSeconds = 2) {
+    if (!this.jungleCamps || this.jungleCamps.length === 0) return;
+
+    // 1. Atualização de Renascimento / Surgimento dos Acampamentos Oficiais
+    this.jungleCamps.forEach(camp => {
+      if ((camp.status === "unspawned" || camp.status === "respawning") && this.gameSeconds >= camp.respawnsAt) {
+        camp.status = "alive";
+        camp.clearingBy = null;
+        camp.clearingProgress = 0;
+      }
+    });
+
+    // 2. Caçador Aliado (Blue Jungler)
+    const bJg = this.blueRosterState && this.blueRosterState.jungle;
+    if (bJg && bJg.alive && this.gameSeconds >= (bJg.travelingBackUntil || 0)) {
+      if (this.blueJungleCampLane) {
+        this.blueJgTargetCampId = null;
+      } else if (this.gameSeconds < 90) {
+        this.blueJgTargetCampId = "blue_blue_buff";
+      } else {
+        let bCamp = this.jungleCamps.find(c => c.id === this.blueJgTargetCampId);
+        if (!bCamp || bCamp.status === "respawning" || bCamp.status === "unspawned" || (bCamp.clearingBy && bCamp.clearingBy !== "blue")) {
+          const aliveCamps = this.jungleCamps.filter(c => c.status === "alive" || (c.status === "clearing" && c.clearingBy === "blue"));
+          const blueCamps = aliveCamps.filter(c => c.side === "blue");
+          const scuttles = aliveCamps.filter(c => c.side === "neutral");
+          const redInvade = (this.gameSeconds >= 600) ? aliveCamps.filter(c => c.side === "red") : [];
+
+          const candidates = blueCamps.length > 0 ? blueCamps : (scuttles.length > 0 ? scuttles : redInvade);
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+              const dA = Math.hypot((bJg.x || 200) - a.x, (bJg.y || 600) - a.y);
+              const dB = Math.hypot((bJg.x || 200) - b.x, (bJg.y || 600) - b.y);
+              return dA - dB;
+            });
+            bCamp = candidates[0];
+            this.blueJgTargetCampId = bCamp.id;
+          } else {
+            this.blueJgTargetCampId = null;
+            bCamp = null;
+          }
+        }
+
+        if (bCamp && (bCamp.status === "alive" || bCamp.status === "clearing")) {
+          const dist = Math.hypot((bJg.x || 0) - bCamp.x, (bJg.y || 0) - bCamp.y);
+          if (dist <= 45) {
+            bCamp.status = "clearing";
+            bCamp.clearingBy = "blue";
+            bCamp.clearingProgress = (bCamp.clearingProgress || 0) + deltaSeconds;
+            bJg.statusText = `Farmando ${bCamp.name}`;
+
+            if (bCamp.clearingProgress >= (bCamp.clearingDuration || 4)) {
+              bCamp.status = "respawning";
+              bCamp.respawnsAt = this.gameSeconds + bCamp.respawnDuration;
+              bCamp.clearedBy = "blue";
+              bCamp.clearingBy = null;
+              bCamp.clearingProgress = 0;
+              this.blueJgTargetCampId = null;
+
+              bJg.goldEarned = (bJg.goldEarned || 500) + bCamp.gold;
+              bJg.goldCurrent = (bJg.goldCurrent || 0) + bCamp.gold;
+              bJg.cs = (bJg.cs || 0) + bCamp.cs;
+              this.blueScore.gold += bCamp.gold;
+
+              if (bCamp.campType === "buff" || bCamp.campType === "scuttle") {
+                const jgNick = bJg.proPlayer?.nick || bJg.name;
+                this.onEvent({
+                  type: "jungle",
+                  side: "blue",
+                  icon: bCamp.icon,
+                  text: `🌲 ${jgNick} abateu ${bCamp.name} (+${bCamp.gold}g, +${bCamp.cs} CS)!`,
+                  time: this._formatTime()
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Caçador Inimigo (Red Jungler)
+    const rJg = this.redRosterState && this.redRosterState.jungle;
+    if (rJg && rJg.alive && this.gameSeconds >= (rJg.travelingBackUntil || 0)) {
+      if (this.redJungleCampLane) {
+        this.redJgTargetCampId = null;
+      } else if (this.gameSeconds < 90) {
+        this.redJgTargetCampId = "red_red_buff";
+      } else {
+        let rCamp = this.jungleCamps.find(c => c.id === this.redJgTargetCampId);
+        if (!rCamp || rCamp.status === "respawning" || rCamp.status === "unspawned" || (rCamp.clearingBy && rCamp.clearingBy !== "red")) {
+          const aliveCamps = this.jungleCamps.filter(c => c.status === "alive" || (c.status === "clearing" && c.clearingBy === "red"));
+          const redCamps = aliveCamps.filter(c => c.side === "red");
+          const scuttles = aliveCamps.filter(c => c.side === "neutral");
+          const blueInvade = (this.gameSeconds >= 600) ? aliveCamps.filter(c => c.side === "blue") : [];
+
+          const candidates = redCamps.length > 0 ? redCamps : (scuttles.length > 0 ? scuttles : blueInvade);
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => {
+              const dA = Math.hypot((rJg.x || 800) - a.x, (rJg.y || 150) - a.y);
+              const dB = Math.hypot((rJg.x || 800) - b.x, (rJg.y || 150) - b.y);
+              return dA - dB;
+            });
+            rCamp = candidates[0];
+            this.redJgTargetCampId = rCamp.id;
+          } else {
+            this.redJgTargetCampId = null;
+            rCamp = null;
+          }
+        }
+
+        if (rCamp && (rCamp.status === "alive" || rCamp.status === "clearing")) {
+          const dist = Math.hypot((rJg.x || 0) - rCamp.x, (rJg.y || 0) - rCamp.y);
+          if (dist <= 45) {
+            rCamp.status = "clearing";
+            rCamp.clearingBy = "red";
+            rCamp.clearingProgress = (rCamp.clearingProgress || 0) + deltaSeconds;
+            rJg.statusText = `Farmando ${rCamp.name}`;
+
+            if (rCamp.clearingProgress >= (rCamp.clearingDuration || 4)) {
+              rCamp.status = "respawning";
+              rCamp.respawnsAt = this.gameSeconds + rCamp.respawnDuration;
+              rCamp.clearedBy = "red";
+              rCamp.clearingBy = null;
+              rCamp.clearingProgress = 0;
+              this.redJgTargetCampId = null;
+
+              rJg.goldEarned = (rJg.goldEarned || 500) + rCamp.gold;
+              rJg.goldCurrent = (rJg.goldCurrent || 0) + rCamp.gold;
+              rJg.cs = (rJg.cs || 0) + rCamp.cs;
+              this.redScore.gold += rCamp.gold;
+
+              if (rCamp.campType === "buff" || rCamp.campType === "scuttle") {
+                const jgNick = rJg.proPlayer?.nick || rJg.name;
+                this.onEvent({
+                  type: "jungle",
+                  side: "red",
+                  icon: rCamp.icon,
+                  text: `🔴 ${jgNick} abateu ${rCamp.name} (+${rCamp.gold}g, +${rCamp.cs} CS)!`,
+                  time: this._formatTime()
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   _updateChampionPositions() {
     if (!this.blueRosterState || !this.redRosterState) return;
 
@@ -13101,26 +13534,6 @@ class MatchSimulator {
 
     const isDragonSpawningOrContested = (this.gameSeconds >= 270 && this.gameSeconds % 300 >= 240);
     const isBaronSpawningOrContested = (this.gameSeconds >= 1200 && (this.gameSeconds < this.blueBaronUntil || this.gameSeconds < this.redBaronUntil || this.gameSeconds % 360 >= 300));
-
-    const blueJgCamps = [
-      { name: "Blue Buff", x: 382, y: 520 },
-      { name: "Gromp", x: 210, y: 440 },
-      { name: "Lobos", x: 380, y: 440 },
-      { name: "Acuâminas", x: 440, y: 340 },
-      { name: "Red Buff", x: 500, y: 440 },
-      { name: "Aronguejo Bot", x: 680, y: 480 },
-      { name: "Aronguejo Top", x: 330, y: 200 }
-    ];
-
-    const redJgCamps = [
-      { name: "Red Buff", x: 460, y: 220 },
-      { name: "Acuâminas", x: 540, y: 260 },
-      { name: "Lobos", x: 640, y: 220 },
-      { name: "Blue Buff", x: 640, y: 150 },
-      { name: "Gromp", x: 750, y: 180 },
-      { name: "Aronguejo Top", x: 330, y: 200 },
-      { name: "Aronguejo Bot", x: 680, y: 480 }
-    ];
 
     const updateBlueChamp = (c, role) => {
       if (!c) return;
@@ -13174,12 +13587,21 @@ class MatchSimulator {
           tx = targetCoords.x;
           ty = targetCoords.y;
           status = `Gankando a rota ${l.toUpperCase()}`;
+        } else if (this.gameSeconds < 90) {
+          tx = 382;
+          ty = 520;
+          status = "Aguardando Buff Azul (01:30)";
         } else {
-          const campIdx = Math.floor(this.gameSeconds / 30) % blueJgCamps.length;
-          const camp = blueJgCamps[campIdx];
-          tx = camp.x;
-          ty = camp.y;
-          status = `Farmando ${camp.name}`;
+          const targetCamp = (this.jungleCamps && this.blueJgTargetCampId) ? this.jungleCamps.find(c => c.id === this.blueJgTargetCampId) : null;
+          if (targetCamp) {
+            tx = targetCamp.x;
+            ty = targetCamp.y;
+            status = targetCamp.status === "clearing" ? `Farmando ${targetCamp.name}` : `Indo para ${targetCamp.name}`;
+          } else {
+            tx = 382;
+            ty = 480;
+            status = "Patrulhando a Selva";
+          }
         }
       }
 
@@ -13261,12 +13683,21 @@ class MatchSimulator {
           tx = targetCoords.x;
           ty = targetCoords.y;
           status = `Gankando a rota ${l.toUpperCase()}`;
+        } else if (this.gameSeconds < 90) {
+          tx = 460;
+          ty = 220;
+          status = "Aguardando Buff Red (01:30)";
         } else {
-          const campIdx = Math.floor(this.gameSeconds / 30) % redJgCamps.length;
-          const camp = redJgCamps[campIdx];
-          tx = camp.x;
-          ty = camp.y;
-          status = `Farmando ${camp.name}`;
+          const targetCamp = (this.jungleCamps && this.redJgTargetCampId) ? this.jungleCamps.find(c => c.id === this.redJgTargetCampId) : null;
+          if (targetCamp) {
+            tx = targetCamp.x;
+            ty = targetCamp.y;
+            status = targetCamp.status === "clearing" ? `Farmando ${targetCamp.name}` : `Indo para ${targetCamp.name}`;
+          } else {
+            tx = 640;
+            ty = 200;
+            status = "Patrulhando a Selva";
+          }
         }
       }
 
@@ -13444,6 +13875,7 @@ class MatchSimulator {
       wards: this.wards || [],
       visionSources: this.blueVisionSources || [],
       lastEnemySightings: this.lastEnemySightings || {},
+      jungleCamps: this.jungleCamps || [],
       activeBuffs: {
         blue: this._getActiveBuffs("blue"),
         red: this._getActiveBuffs("red")
@@ -15454,6 +15886,11 @@ class ArenaView {
           ${redStructuresSvg}
         </g>
 
+        <!-- ACAMPAMENTOS E MONSTROS DA SELVA (Jungle Camps & Mobs) -->
+        <g id="jungle-camps-layer" class="jungle-camps-layer">
+          ${this._renderJungleCampsSvg(state)}
+        </g>
+
         <!-- SENTINELAS E VISÃO (Wards & Trinkets) -->
         <g id="wards-layer" class="wards-layer"></g>
 
@@ -15463,6 +15900,49 @@ class ArenaView {
         </g>
       </svg>
     `;
+  }
+
+  _renderJungleCampsSvg(state) {
+    const camps = (state && state.jungleCamps && state.jungleCamps.length > 0)
+      ? state.jungleCamps
+      : (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : (typeof JUNGLE_CAMPS !== "undefined" ? JUNGLE_CAMPS : []));
+    if (!camps || camps.length === 0) return "";
+
+    return camps.map(camp => {
+      const isAlive = camp.status === "alive";
+      const isClearing = camp.status === "clearing";
+      const isRespawning = camp.status === "respawning";
+      const isUnspawned = !camp.status || camp.status === "unspawned";
+
+      const remSeconds = Math.max(0, (camp.respawnsAt || camp.spawnAt || 90) - (state?.gameSeconds || 0));
+      const m = Math.floor(remSeconds / 60);
+      const s = remSeconds % 60;
+      const timerStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      const showTimer = !isAlive;
+
+      return `
+        <g id="camp-node-${camp.id}"
+           class="jungle-camp-node ${camp.side} ${camp.campType} ${camp.status || 'unspawned'}"
+           data-camp-id="${camp.id}"
+           data-side="${camp.side}"
+           transform="translate(${camp.x}, ${camp.y})"
+           cursor="pointer">
+          <!-- Hitbox transparente para captura de eventos -->
+          <circle class="camp-hitbox" r="22" fill="transparent" />
+          <!-- Halo de combate / pulso -->
+          <circle class="camp-halo" r="18" fill="${camp.themeColor || '#fbbf24'}" opacity="${isClearing ? '0.4' : (isAlive ? '0.2' : '0.08')}" />
+          <!-- Anel de contorno com cor temática -->
+          <circle class="camp-ring" r="13.5" fill="#0b121e" stroke="${camp.themeColor || '#fbbf24'}" stroke-width="2" />
+          <!-- Ícone oficial do monstro -->
+          <text class="camp-icon" text-anchor="middle" dominant-baseline="central" font-size="11.5">${camp.icon}</text>
+          <!-- Badge flutuante de respawn -->
+          <g class="camp-timer-badge" id="camp-timer-${camp.id}" transform="translate(0, 16)" style="${showTimer ? '' : 'display: none;'}">
+            <rect x="-18" y="-7.5" width="36" height="15" rx="4.5" fill="rgba(6, 11, 20, 0.92)" stroke="${camp.themeColor || '#fbbf24'}" stroke-width="1.2" />
+            <text id="camp-timer-text-${camp.id}" class="camp-timer-text" text-anchor="middle" dominant-baseline="central" font-size="8.5" font-weight="800" fill="#f0e6d2">${timerStr}</text>
+          </g>
+        </g>
+      `;
+    }).join("");
   }
 
   _renderChampionsSvg(state) {
@@ -16002,6 +16482,9 @@ class ArenaView {
 
     // Atualiza sentinelas de visão ativas no mapa
     this._updateMapWards(state);
+
+    // Atualiza acampamentos da selva, status e cronômetros de respawn
+    this._updateMapJungleCamps(state);
   }
 
   _updateMapChampions(state) {
@@ -16102,6 +16585,47 @@ class ArenaView {
         </g>
       `;
     }).join("");
+  }
+
+  _updateMapJungleCamps(state) {
+    if (!state) return;
+    const camps = state.jungleCamps || (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : []);
+    const gameSecs = state.gameSeconds || 0;
+
+    camps.forEach(camp => {
+      const node = this.containerEl.querySelector(`#camp-node-${camp.id}`);
+      if (!node) return;
+
+      const isAlive = camp.status === "alive";
+      const isClearing = camp.status === "clearing";
+      const isRespawning = camp.status === "respawning";
+      const isUnspawned = !camp.status || camp.status === "unspawned";
+
+      node.classList.toggle("alive", isAlive);
+      node.classList.toggle("clearing", isClearing);
+      node.classList.toggle("respawning", isRespawning);
+      node.classList.toggle("unspawned", isUnspawned);
+
+      const timerBadge = node.querySelector(`#camp-timer-${camp.id}`);
+      const timerText = node.querySelector(`#camp-timer-text-${camp.id}`);
+
+      if (timerBadge && timerText) {
+        if (isAlive) {
+          timerBadge.style.display = "none";
+        } else {
+          timerBadge.style.display = "block";
+          const rem = Math.max(0, (camp.respawnsAt || camp.spawnAt || 0) - gameSecs);
+          const m = Math.floor(rem / 60);
+          const s = rem % 60;
+          timerText.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+      }
+
+      const halo = node.querySelector(".camp-halo");
+      if (halo) {
+        halo.setAttribute("opacity", isClearing ? "0.45" : (isAlive ? "0.2" : "0.08"));
+      }
+    });
   }
 
   _updateRosterUI(rosterState, side, fullState = null) {
@@ -17529,6 +18053,110 @@ class ArenaView {
       });
     }
 
+    // Interatividade dos Acampamentos e Monstros da Selva (Jungle Camps)
+    this.containerEl.querySelectorAll(".jungle-camp-node").forEach(campNode => {
+      campNode.addEventListener("mouseenter", (e) => {
+        this._hoveredStructNode = null;
+        const campId = campNode.dataset.campId;
+        const liveState = this.sim ? this.sim.getState() : state;
+        const campsList = liveState.jungleCamps || (typeof getAllJungleCamps === "function" ? getAllJungleCamps() : []);
+        const camp = campsList.find(c => c.id === campId) || (typeof getJungleCampById === "function" ? getJungleCampById(campId) : null);
+        if (!camp) return;
+
+        const isAlive = camp.status === "alive";
+        const isClearing = camp.status === "clearing";
+        const isRespawning = camp.status === "respawning";
+        const isUnspawned = !camp.status || camp.status === "unspawned";
+        const gameSecs = liveState.gameSeconds || 0;
+
+        let statusBadge = "";
+        let statusText = "";
+        const remSeconds = Math.max(0, (camp.respawnsAt || camp.spawnAt || 0) - gameSecs);
+        const m = Math.floor(remSeconds / 60);
+        const s = remSeconds % 60;
+        const timerFormatted = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+        if (isAlive) {
+          statusBadge = `<span style="color:#10b981; font-weight:bold;">🟢 VIVO NO MAPA</span>`;
+          statusText = `Disponível para abate por qualquer caçador`;
+        } else if (isClearing) {
+          const who = camp.clearingBy === "blue" ? "Caçador Aliado (Azul)" : "Caçador Inimigo (Vermelho)";
+          statusBadge = `<span style="color:#f59e0b; font-weight:bold;">⚔️ EM COMBATE</span>`;
+          statusText = `Sendo abatido por ${who}`;
+        } else if (isRespawning) {
+          statusBadge = `<span style="color:#f43f5e; font-weight:bold;">⏳ RENASCENDO EM ${timerFormatted}</span>`;
+          statusText = `Abatido recentemente (${camp.clearedBy === 'blue' ? 'Abatido pela sua equipe' : 'Abatido pelo time rival'})`;
+        } else {
+          statusBadge = `<span style="color:#a855f7; font-weight:bold;">⏳ SURGIMENTO INICIAL EM ${timerFormatted}</span>`;
+          statusText = `Surge aos ${Math.floor(camp.spawnAt / 60)}:${String(camp.spawnAt % 60).padStart(2, '0')} de jogo`;
+        }
+
+        const sideLabel = camp.side === "blue" ? "🔵 Selva Azul" : (camp.side === "red" ? "🔴 Selva Vermelha" : "🌊 Rio de Summoner's Rift");
+        const respawnMin = Math.floor(camp.respawnDuration / 60);
+        const respawnSec = camp.respawnDuration % 60;
+        const respawnStr = respawnSec ? `${respawnMin}m ${respawnSec}s` : `${respawnMin} min`;
+
+        tooltip.innerHTML = `
+          <div class="tip-header" style="border-bottom: 2px solid ${camp.themeColor || '#fbbf24'};">
+            <span class="tip-team" style="background: rgba(10, 15, 25, 0.9); color: ${camp.themeColor || '#fbbf24'}; border: 1px solid ${camp.themeColor || '#fbbf24'};">
+              ${camp.icon} ${camp.badge || 'SELVA'} • ${sideLabel}
+            </span>
+            <div class="tip-name" style="color:#fff; font-size:13px; margin-top:2px;">
+              ${camp.name}
+            </div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-detail-row">
+              <span>Situação:</span>
+              ${statusBadge}
+            </div>
+            <div class="tip-detail-row">
+              <span>Recompensa de Ouro:</span>
+              <strong style="color: #fbbf24;">💰 +${camp.gold}g (Para o Caçador)</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Farm de Tropas (CS):</span>
+              <strong style="color: #60a5fa;">🌾 +${camp.cs} CS</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Tempo de Renascimento:</span>
+              <strong style="color: #f0e6d2;">⏱️ ${respawnStr}</strong>
+            </div>
+            ${camp.buff ? `
+              <div class="tip-detail-row" style="margin-top: 4px;">
+                <span>Efeito / Bônus:</span>
+                <span style="color: #38bdf8; font-size: 10.5px; line-height: 1.3;">${camp.buff}</span>
+              </div>
+            ` : ''}
+            <div class="tip-detail-row" style="margin-top: 4px;">
+              <span>Descrição:</span>
+              <span style="color: #d1d5db; font-size: 10px; line-height: 1.3;">${camp.desc}</span>
+            </div>
+          </div>
+        `;
+        updateTooltipPosition(e);
+        tooltip.style.display = "block";
+      });
+
+      campNode.addEventListener("mousemove", (e) => {
+        updateTooltipPosition(e);
+      });
+
+      campNode.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      campNode.addEventListener("click", () => {
+        sound.playClick();
+        const halo = campNode.querySelector(".camp-halo");
+        if (halo) {
+          halo.classList.remove("ping-pulse");
+          void halo.offsetWidth;
+          halo.classList.add("ping-pulse");
+        }
+      });
+    });
+
     // Inicializa o modal da Loja Hextech e Árvore de Receitas
     this._initItemShopModal();
   }
@@ -18911,6 +19539,9 @@ if (typeof window !== 'undefined') {
   window.getStarterItemForChampion = getStarterItemForChampion;
   window.ITEM_CATEGORIES = ITEM_CATEGORIES;
   window.getRecommendedItemForChampion = getRecommendedItemForChampion;
+  window.JUNGLE_CAMPS = JUNGLE_CAMPS;
+  window.getJungleCampById = getJungleCampById;
+  window.getAllJungleCamps = getAllJungleCamps;
   window.PRO_PLAYERS = PRO_PLAYERS;
   window.getPlayersByRole = getPlayersByRole;
   window.getPlayerById = getPlayerById;

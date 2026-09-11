@@ -1016,8 +1016,90 @@
   filter: brightness(1.35) drop-shadow(0 0 8px currentColor);
 }
 
-.camp-marker {
-  opacity: 0.85;
+/* =========================================================
+   ACAMPAMENTOS E MONSTROS DA SELVA (JUNGLE CAMPS LAYER)
+   ========================================================= */
+.jungle-camps-layer {
+  pointer-events: none;
+}
+
+.jungle-camp-node {
+  pointer-events: all !important;
+  cursor: pointer;
+  transition: transform 0.25s ease, opacity 0.3s ease;
+}
+
+.jungle-camp-node .camp-hitbox {
+  pointer-events: all !important;
+  cursor: pointer;
+}
+
+.jungle-camp-node > *:not(.camp-hitbox) {
+  pointer-events: none !important;
+}
+
+.jungle-camp-node .camp-ring {
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.2s, stroke-width 0.2s;
+  transform-origin: center;
+}
+
+.jungle-camp-node .camp-halo {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  transform-origin: center;
+}
+
+.jungle-camp-node:hover .camp-ring {
+  transform: scale(1.22);
+  filter: brightness(1.35) drop-shadow(0 0 6px rgba(251, 191, 36, 0.8));
+  stroke-width: 2.8px;
+}
+
+.jungle-camp-node:hover .camp-halo {
+  transform: scale(1.35);
+  opacity: 0.5 !important;
+}
+
+.jungle-camp-node.alive .camp-halo {
+  animation: campAliveGlow 2.5s infinite ease-in-out;
+}
+
+@keyframes campAliveGlow {
+  0%, 100% { transform: scale(1); opacity: 0.18; }
+  50% { transform: scale(1.15); opacity: 0.35; }
+}
+
+.jungle-camp-node.clearing .camp-ring {
+  animation: campClearingCombat 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes campClearingCombat {
+  0% { stroke: #f59e0b; filter: drop-shadow(0 0 4px #f59e0b); }
+  100% { stroke: #ef4444; filter: drop-shadow(0 0 9px #ef4444); }
+}
+
+.jungle-camp-node.respawning,
+.jungle-camp-node.unspawned {
+  opacity: 0.62;
+}
+
+.jungle-camp-node.respawning .camp-ring,
+.jungle-camp-node.unspawned .camp-ring {
+  stroke-dasharray: 3 2;
+  filter: grayscale(0.5);
+}
+
+.camp-timer-badge {
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.camp-timer-text {
+  font-family: var(--lol-font-title, monospace);
+  font-size: 8.5px;
+  font-weight: 800;
+  fill: #f0e6d2;
+  letter-spacing: 0.4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
 /* =========================================================
