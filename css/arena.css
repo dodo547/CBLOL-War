@@ -484,7 +484,8 @@
 }
 
 /* =========================================================
-   CAMPO DE BATALHA DE ESTRUTURAS (SUMMONER'S RIFT FIELD)
+   CAMPO DE BATALHA DE ESTRUTURAS & BROADCAST STAGE
+   (MAPA INTERATIVO À ESQUERDA | KILL FEED AO VIVO À DIREITA)
    ========================================================= */
 .battlefield-arena {
   background: transparent;
@@ -493,9 +494,21 @@
   position: relative;
   overflow: visible;
   box-shadow: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(440px, 520px) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1080px) {
+  .battlefield-arena {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
 }
 
 /* Indicador de buff de Super Minions */
@@ -559,8 +572,8 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: 520px;
-  max-width: min(520px, 95vw);
+  width: 100%;
+  max-width: 520px;
   margin: 0 auto;
 }
 
@@ -1249,26 +1262,22 @@
 /* =========================================================
    GRID DOS CAMPEÕES NO JOGO (LINEUPS / KDA / STATUS)
 /* =========================================================
-   PAINEL DE TRANSMISSÃO ESPORTS (LINEUPS & KILLFEED AO VIVO)
+   PAINEL DE TRANSMISSÃO ESPORTS (ESCALAÇÃO AZUL & VERMELHA)
    ========================================================= */
 .arena-broadcast-center {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr) minmax(0, 1.35fr);
-  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
   align-items: stretch;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
 
-@media (max-width: 1360px) {
+@media (max-width: 860px) {
   .arena-broadcast-center {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 12px;
-  }
-  .broadcast-killfeed-panel {
-    grid-column: 1 / -1;
-    order: 2; /* Fica abaixo das escalações em telas médias/laptops para que as escalações fiquem visíveis e espaçosas */
   }
 }
 
@@ -1353,16 +1362,6 @@
   }
 }
 
-@media (max-width: 860px) {
-  .arena-broadcast-center {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .broadcast-killfeed-panel {
-    grid-column: auto;
-    order: 3;
-  }
-}
 
 @media (max-width: 600px) {
   .lineup-stat-headers {
@@ -2028,6 +2027,7 @@
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
+  height: 100%;
 }
 
 .broadcast-feed-header {
@@ -2039,6 +2039,7 @@
   border-bottom: 1px solid rgba(200, 170, 110, 0.25);
   gap: 8px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .broadcast-live-indicator {
@@ -2098,9 +2099,10 @@
   border: 1px solid rgba(200, 170, 110, 0.25);
   border-radius: 6px;
   padding: 6px 8px;
-  height: 290px;
-  max-height: 290px;
-  min-height: 240px;
+  flex: 1 1 auto;
+  height: 355px;
+  max-height: 380px;
+  min-height: 250px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2110,11 +2112,11 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 1360px) {
+@media (max-width: 1080px) {
   .killfeed-box {
-    height: 180px;
-    max-height: 180px;
-    min-height: 140px;
+    height: 220px;
+    max-height: 240px;
+    min-height: 180px;
   }
 }
 

@@ -13616,8 +13616,9 @@ class ArenaView {
           🎯 RECOMPENSAS DE OBJETIVO ATIVAS: +650g a +800g de Ouro Global de Virada ao Destruir Torres ou Monstros Épicos!
         </div>
 
-        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS (SUMMONER'S RIFT INTERATIVO 3 ROTAS) -->
+        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS: MAPA DO RIFT (ESQUERDA) & KILLFEED AO VIVO (DIREITA) -->
         <div class="battlefield-arena">
+          <!-- Esquerda: Minimapa Oficial Interativo do Rift -->
           <div class="rift-map-wrapper">
             <!-- Cabeçalho Tático do Mapa: Controle das 3 Rotas & Objetivos do Rio -->
             <div class="rift-map-header">
@@ -13654,33 +13655,8 @@ class ArenaView {
               <div class="minimap-cam-btn" title="Câmera do Mapa">🎯</div>
             </div>
           </div>
-        </div>
 
-        <!-- BANNER EDUCATIVO DE FARM: VALOR DE LAST HITS -->
-        <div class="farm-edu-tip-bar" title="Dica Profissional: 15 a 18 tropas (CS) equivalem a 300 de ouro (o mesmo valor de 1 abate de campeão). Farmar com consistência é o caminho mais seguro para a vitória!">
-          <span class="farm-edu-badge">🌾 VALOR DO FARM</span>
-          <span class="farm-edu-text"><strong>~18 Tropas (CS) ≈ 1 Abate (300g)</strong> • Ouro constante de farm garante itens sem se expor a ganks!</span>
-        </div>
-
-        <!-- PAINEL CENTRAL DE TRANSMISSÃO ESPORTS: ESCALAÇÃO AZUL | KILLFEED AO VIVO | ESCALAÇÃO VERMELHA -->
-        <div class="arena-broadcast-center">
-          <!-- Coluna 1: Escalação Azul -->
-          <div class="lineup-box blue-side-panel">
-            <div class="lineup-title blue">
-              <span>🔵 Escalação ${state.blue.name}</span>
-              <div class="lineup-stat-headers">
-                <span class="lineup-items-header" title="Itens Concluídos">ITENS</span>
-                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
-                <span class="lineup-gold-header" title="Ouro total e vantagem de rota">💰 OURO</span>
-                <span class="lineup-kda-header">K / D / A</span>
-              </div>
-            </div>
-            <div id="blue-roster-status" class="roster-status-list">
-              ${this._renderRosterRows(state.blue.roster, "blue")}
-            </div>
-          </div>
-
-          <!-- Coluna 2: Central Killfeed & Broadcast Hub (Super Visível) -->
+          <!-- Direita: Central Killfeed & Broadcast Hub (Super Visível) -->
           <div class="broadcast-killfeed-panel">
             <div class="broadcast-feed-header">
               <div class="broadcast-live-indicator">
@@ -13699,8 +13675,33 @@ class ArenaView {
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Coluna 3: Escalação Vermelha -->
+        <!-- BANNER EDUCATIVO DE FARM: VALOR DE LAST HITS -->
+        <div class="farm-edu-tip-bar" title="Dica Profissional: 15 a 18 tropas (CS) equivalem a 300 de ouro (o mesmo valor de 1 abate de campeão). Farmar com consistência é o caminho mais seguro para a vitória!">
+          <span class="farm-edu-badge">🌾 VALOR DO FARM</span>
+          <span class="farm-edu-text"><strong>~18 Tropas (CS) ≈ 1 Abate (300g)</strong> • Ouro constante de farm garante itens sem se expor a ganks!</span>
+        </div>
+
+        <!-- PAINEL CENTRAL DE TRANSMISSÃO ESPORTS: ESCALAÇÃO AZUL (ESQ) | ESCALAÇÃO VERMELHA (DIR) -->
+        <div class="arena-broadcast-center">
+          <!-- Coluna 1: Escalação Azul -->
+          <div class="lineup-box blue-side-panel">
+            <div class="lineup-title blue">
+              <span>🔵 Escalação ${state.blue.name}</span>
+              <div class="lineup-stat-headers">
+                <span class="lineup-items-header" title="Itens Concluídos">ITENS</span>
+                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-gold-header" title="Ouro total e vantagem de rota">💰 OURO</span>
+                <span class="lineup-kda-header">K / D / A</span>
+              </div>
+            </div>
+            <div id="blue-roster-status" class="roster-status-list">
+              ${this._renderRosterRows(state.blue.roster, "blue")}
+            </div>
+          </div>
+
+          <!-- Coluna 2: Escalação Vermelha -->
           <div class="lineup-box red-side-panel">
             <div class="lineup-title red">
               <span>🔴 Escalação ${state.red.name}</span>
