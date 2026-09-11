@@ -421,21 +421,41 @@ export class ArenaView {
           <text text-anchor="middle" dominant-baseline="central" font-size="13">🐲</text>
         </g>
 
-        <!-- Marcadores de Choque de Minions (Minion Clash Waves) -->
-        <g id="clash-top" class="minion-clash-wave" transform="translate(268, 136)">
-          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        <!-- Marcadores de Choque de Minions (Minion Clash Waves) com Cores Únicas por Rota e Contagem ao Vivo -->
+        <!-- ROTA SUPERIOR (TOP): Verde Esmeralda / Selva (#10b981) -->
+        <g id="clash-top" class="minion-clash-wave clash-top" data-lane="top" transform="translate(268, 136)" cursor="pointer">
+          <circle class="clash-hitbox" r="24" fill="transparent" />
+          <circle r="16" fill="#10b981" opacity="0.35" class="clash-wave-pulse pulse-top" />
+          <circle r="8.5" fill="#064e3b" stroke="#34d399" stroke-width="2" class="clash-core core-top" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8.5" class="clash-icon">🌲</text>
+          <g class="clash-pill" transform="translate(0, -18)">
+            <rect x="-26" y="-8.5" width="52" height="17" rx="8.5" class="pill-rect pill-top" fill="rgba(6, 78, 59, 0.92)" stroke="#10b981" stroke-width="1.2" />
+            <text text-anchor="middle" dominant-baseline="central" class="pill-count-text" id="clash-count-top" font-size="8.5" font-weight="800" fill="#f0e6d2">6 ⚔️ 6</text>
+          </g>
         </g>
-        <g id="clash-mid" class="minion-clash-wave" transform="translate(514, 344)">
-          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+
+        <!-- ROTA DO MEIO (MID): Roxo Arcano / Magia (#a855f7) -->
+        <g id="clash-mid" class="minion-clash-wave clash-mid" data-lane="mid" transform="translate(514, 344)" cursor="pointer">
+          <circle class="clash-hitbox" r="24" fill="transparent" />
+          <circle r="16" fill="#a855f7" opacity="0.35" class="clash-wave-pulse pulse-mid" />
+          <circle r="8.5" fill="#3b0764" stroke="#c084fc" stroke-width="2" class="clash-core core-mid" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8.5" class="clash-icon">🔮</text>
+          <g class="clash-pill" transform="translate(0, -18)">
+            <rect x="-26" y="-8.5" width="52" height="17" rx="8.5" class="pill-rect pill-mid" fill="rgba(59, 7, 100, 0.92)" stroke="#a855f7" stroke-width="1.2" />
+            <text text-anchor="middle" dominant-baseline="central" class="pill-count-text" id="clash-count-mid" font-size="8.5" font-weight="800" fill="#f0e6d2">6 ⚔️ 6</text>
+          </g>
         </g>
-        <g id="clash-bot" class="minion-clash-wave" transform="translate(757, 558)">
-          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+
+        <!-- ROTA INFERIOR (BOT): Dourado Solar / Atiradores (#f59e0b) -->
+        <g id="clash-bot" class="minion-clash-wave clash-bot" data-lane="bot" transform="translate(757, 558)" cursor="pointer">
+          <circle class="clash-hitbox" r="24" fill="transparent" />
+          <circle r="16" fill="#f59e0b" opacity="0.35" class="clash-wave-pulse pulse-bot" />
+          <circle r="8.5" fill="#78350f" stroke="#fbbf24" stroke-width="2" class="clash-core core-bot" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8.5" class="clash-icon">🏹</text>
+          <g class="clash-pill" transform="translate(0, -18)">
+            <rect x="-26" y="-8.5" width="52" height="17" rx="8.5" class="pill-rect pill-bot" fill="rgba(120, 53, 15, 0.92)" stroke="#f59e0b" stroke-width="1.2" />
+            <text text-anchor="middle" dominant-baseline="central" class="pill-count-text" id="clash-count-bot" font-size="8.5" font-weight="800" fill="#f0e6d2">6 ⚔️ 6</text>
+          </g>
         </g>
 
         <!-- ESTRUTURAS DO MAPA (30 Estruturas Autênticas) -->
@@ -894,6 +914,19 @@ export class ArenaView {
       }
       clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
+
+    // Atualiza contadores e status visuais de tropas nas pílulas flutuantes de cada rota
+    const clashLanes = ["top", "mid", "bot"];
+    clashLanes.forEach(cL => {
+      const p = pressures[cL] || 0;
+      const countEl = this.containerEl.querySelector(`#clash-count-${cL}`);
+      if (countEl) {
+        const wave = this._getLaneWaveData(cL, p, state.gameSeconds || 0, state);
+        const blueSup = wave.blueSuper > 0 ? "👾" : "";
+        const redSup = wave.redSuper > 0 ? "👾" : "";
+        countEl.textContent = `${blueSup}${wave.blueTotal} ⚔️ ${wave.redTotal}${redSup}`;
+      }
+    });
 
     // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
     const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
@@ -2138,6 +2171,82 @@ export class ArenaView {
       });
     });
 
+    // Interatividade dos Marcadores de Choque de Tropas (Minion Clash Waves)
+    this.containerEl.querySelectorAll(".minion-clash-wave").forEach(clashNode => {
+      clashNode.addEventListener("mouseenter", (e) => {
+        this._hoveredStructNode = null;
+        const lane = clashNode.dataset.lane;
+        const liveState = this.sim ? this.sim.getState() : state;
+        const pressures = liveState.lanePressures || { top: liveState.lanePressure, mid: liveState.lanePressure, bot: liveState.lanePressure };
+        const waveData = this._getLaneWaveData(lane, pressures[lane] || 0, liveState.gameSeconds || 0, liveState);
+
+        tooltip.innerHTML = `
+          <div class="tip-header" style="border-bottom: 2px solid ${waveData.theme.color};">
+            <span class="tip-team" style="background:${waveData.theme.badgeBg}; color:${waveData.theme.colorLight}; border: 1px solid ${waveData.theme.color};">
+              ${waveData.theme.icon} CHOQUE DE TROPAS • ${waveData.theme.name.toUpperCase()}
+            </span>
+            <div class="tip-name" style="color:#fff; font-size:12px; margin-top:2px;">${waveData.status}</div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-wave-grid">
+              <div class="tip-wave-team blue">
+                <div class="tip-wave-team-title">🔵 Tropas Azuis: <strong>${waveData.blueTotal}</strong></div>
+                <div class="tip-wave-breakdown">
+                  <span>🛡️ ${waveData.blueMelee} Guerreiros</span>
+                  <span>🔮 ${waveData.blueCasters} Magos</span>
+                  ${waveData.blueCannon ? `<span>💣 ${waveData.blueCannon} Canhão</span>` : ''}
+                  ${waveData.blueSuper ? `<span style="color:#c084fc;">👾 ${waveData.blueSuper} Super Tropa</span>` : ''}
+                  ${waveData.blueHasBaron ? `<span style="color:#a855f7;">👑 Mão do Barão</span>` : ''}
+                </div>
+              </div>
+              <div class="tip-wave-vs">VS</div>
+              <div class="tip-wave-team red">
+                <div class="tip-wave-team-title">🔴 Tropas Vermelhas: <strong>${waveData.redTotal}</strong></div>
+                <div class="tip-wave-breakdown">
+                  <span>🛡️ ${waveData.redMelee} Guerreiros</span>
+                  <span>🔮 ${waveData.redCasters} Magos</span>
+                  ${waveData.redCannon ? `<span>💣 ${waveData.redCannon} Canhão</span>` : ''}
+                  ${waveData.redSuper ? `<span style="color:#f43f5e;">👾 ${waveData.redSuper} Super Tropa</span>` : ''}
+                  ${waveData.redHasBaron ? `<span style="color:#f87171;">👑 Mão do Barão</span>` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="tip-detail-row" style="margin-top: 6px;">
+              <span>Pressão da Rota:</span>
+              <strong style="color:${waveData.pressure >= 0 ? '#60a5fa' : '#f87171'};">${waveData.pressure >= 0 ? `+${waveData.pressure}% (Azul Avançando)` : `${Math.abs(waveData.pressure)}% (Vermelho Avançando)`}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Situação:</span>
+              <span style="color:#f0e6d2; font-size:11px;">${waveData.description}</span>
+            </div>
+            <div class="tip-wave-cta" style="color:${waveData.theme.colorLight};">
+              🎯 Clique para Focar esta Rota com a sua Equipe!
+            </div>
+          </div>
+        `;
+        updateTooltipPosition(e);
+        tooltip.style.display = "block";
+      });
+
+      clashNode.addEventListener("mousemove", (e) => {
+        updateTooltipPosition(e);
+      });
+
+      clashNode.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      clashNode.addEventListener("click", () => {
+        sound.playClick();
+        const lane = clashNode.dataset.lane;
+        if (this.sim && this.sim.setLaneFocus && lane) {
+          this.sim.setLaneFocus(lane);
+          const liveState = this.sim.getState();
+          this.updateTick(liveState);
+        }
+      });
+    });
+
     // Interatividade de Foco Tático de Rota (Top, Mid, Bot)
     const laneBadges = [
       { id: "badge-lane-top", lane: "top" },
@@ -2160,6 +2269,109 @@ export class ArenaView {
 
     // Inicializa o modal da Loja Hextech e Árvore de Receitas
     this._initItemShopModal();
+  }
+
+  _getLaneWaveData(lane, pressure, gameSeconds, state) {
+    const isCannonWave = (gameSeconds < 900 && Math.floor(gameSeconds / 30) % 3 === 0) ||
+                         (gameSeconds >= 900 && gameSeconds < 1500 && Math.floor(gameSeconds / 30) % 2 === 0) ||
+                         (gameSeconds >= 1500);
+
+    const baseMinions = isCannonWave ? 7 : 6;
+    const p = Math.max(-100, Math.min(100, pressure || 0));
+
+    let blueTotal = baseMinions;
+    let redTotal = baseMinions;
+
+    if (p > 15) {
+      const waveStack = Math.min(9, Math.floor((p - 15) / 10) + 1);
+      blueTotal = baseMinions + waveStack;
+      redTotal = Math.max(1, baseMinions - Math.floor(p / 22));
+    } else if (p < -15) {
+      const absP = Math.abs(p);
+      const waveStack = Math.min(9, Math.floor((absP - 15) / 10) + 1);
+      redTotal = baseMinions + waveStack;
+      blueTotal = Math.max(1, baseMinions - Math.floor(absP / 22));
+    }
+
+    const blueHasSuper = state?.blue?.superMinionsByLane?.[lane] || false;
+    const redHasSuper = state?.red?.superMinionsByLane?.[lane] || false;
+    const blueSuperCount = blueHasSuper ? (gameSeconds > 1800 ? 2 : 1) : 0;
+    const redSuperCount = redHasSuper ? (gameSeconds > 1800 ? 2 : 1) : 0;
+
+    blueTotal += blueSuperCount;
+    redTotal += redSuperCount;
+
+    const blueCannon = (isCannonWave && blueTotal >= 4) ? 1 : 0;
+    const blueMelee = Math.min(3, Math.max(1, Math.floor((blueTotal - blueCannon - blueSuperCount) * 0.5)));
+    const blueCasters = Math.max(0, blueTotal - blueMelee - blueCannon - blueSuperCount);
+
+    const redCannon = (isCannonWave && redTotal >= 4) ? 1 : 0;
+    const redMelee = Math.min(3, Math.max(1, Math.floor((redTotal - redCannon - redSuperCount) * 0.5)));
+    const redCasters = Math.max(0, redTotal - redMelee - redCannon - redSuperCount);
+
+    let waveStatus = "⚖️ Onda Equilibrada (Freeze)";
+    let waveDesc = "As tropas estão se enfrentando no meio da rota com forças proporcionais.";
+    if (p >= 50) {
+      waveStatus = "🔥 Onda Gigante Batendo na Torre!";
+      waveDesc = `A tropa azul acumulou ${blueTotal} minions e está castigando a estrutura adversária!`;
+    } else if (p >= 20) {
+      waveStatus = "🌊 Slow Push Aliado (+Vantagem Numérica)";
+      waveDesc = `Sua equipe tem superioridade de tropas (+${blueTotal - redTotal}) avançando a rota.`;
+    } else if (p <= -50) {
+      waveStatus = "⚠️ Onda Inimiga Quebrando sob a Torre (Crash)";
+      waveDesc = `O time vermelho acumulou ${redTotal} tropas e está ameaçando a sua torre!`;
+    } else if (p <= -20) {
+      waveStatus = "⚠️ Onda Inimiga Avançando (Sob Pressão)";
+      waveDesc = `O time rival tem superioridade de tropas (+${redTotal - blueTotal}) empurrando em sua direção.`;
+    }
+
+    const laneThemes = {
+      top: {
+        name: "Rota Superior (Top)",
+        color: "#10b981",
+        colorLight: "#34d399",
+        colorDark: "#064e3b",
+        badgeBg: "rgba(6, 78, 59, 0.9)",
+        icon: "🌲"
+      },
+      mid: {
+        name: "Rota do Meio (Mid)",
+        color: "#a855f7",
+        colorLight: "#c084fc",
+        colorDark: "#3b0764",
+        badgeBg: "rgba(59, 7, 100, 0.9)",
+        icon: "🔮"
+      },
+      bot: {
+        name: "Rota Inferior (Bot)",
+        color: "#f59e0b",
+        colorLight: "#fbbf24",
+        colorDark: "#78350f",
+        badgeBg: "rgba(120, 53, 15, 0.9)",
+        icon: "🏹"
+      }
+    };
+
+    return {
+      lane,
+      theme: laneThemes[lane] || laneThemes.mid,
+      pressure: p,
+      blueTotal,
+      redTotal,
+      blueMelee,
+      blueCasters,
+      blueCannon,
+      blueSuper: blueSuperCount,
+      redMelee,
+      redCasters,
+      redCannon,
+      redSuper: redSuperCount,
+      isCannonWave,
+      blueHasBaron: !!state?.blue?.hasBaron,
+      redHasBaron: !!state?.red?.hasBaron,
+      status: waveStatus,
+      description: waveDesc
+    };
   }
 
   _initItemShopModal() {
