@@ -5445,9 +5445,34 @@ class MatchSimulator {
     this.roundIndex = roundIndex;
     this.speed = speed;
     this.onTick = onTick;
-    this.onEvent = onEvent;
+    
+    // Rastreamento automático de eventos chave na Linha do Tempo de Ouro
+    const rawOnEvent = onEvent;
+    this.onEvent = (evt) => {
+      if (evt && evt.type) {
+        if (evt.type === "dragon" || evt.type === "dragon_soul" || evt.type === "elder" || evt.type === "elder_dragon") {
+          this._recordGoldSnapshot("dragon", evt.text || "Dragão Abatido");
+        } else if (evt.type === "baron") {
+          this._recordGoldSnapshot("baron", evt.text || "Barão Abatido");
+        } else if (evt.type === "herald_charge" || evt.type === "herald_summon") {
+          this._recordGoldSnapshot("herald", evt.text || "Arauto do Vale");
+        } else if (evt.type === "tower_destroyed" || evt.type === "first_tower") {
+          this._recordGoldSnapshot("tower", evt.text || "Torre Destruída");
+        } else if (evt.type === "ace") {
+          this._recordGoldSnapshot("ace", evt.text || "Extermínio (ACE)");
+        }
+      }
+      rawOnEvent(evt);
+    };
+
     this.onStructureHit = onStructureHit;
-    this.onStructureDestroyed = onStructureDestroyed;
+
+    const rawOnStructureDestroyed = onStructureDestroyed;
+    this.onStructureDestroyed = (side, id) => {
+      this._recordGoldSnapshot("tower", `Torre destruída: ${id} (${side === "blue" ? "Azul" : "Vermelha"})`);
+      rawOnStructureDestroyed(side, id);
+    };
+
     this.onFinish = onFinish;
     this.onTacticalDecision = onTacticalDecision;
     this.onMultikill = onMultikill;
@@ -5480,6 +5505,20 @@ class MatchSimulator {
     // Placar e Ouro: Início com 500g por campeão = 2.500g por equipe
     this.blueScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
     this.redScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
+
+    // Histórico da Linha do Tempo de Ouro da Partida (CBLOL Gold Advantage Graph)
+    this.goldTimeline = [
+      {
+        time: 0,
+        timeStr: "00:00",
+        blueGold: 2500,
+        redGold: 2500,
+        diff: 0,
+        event: null,
+        detail: null
+      }
+    ];
+    this._lastGoldSampleSec = 0;
 
     // Estruturas Autênticas de Summoner's Rift (Top, Mid, Bot e Base)
     this.blueStructures = this._initStructures("blue");
@@ -6796,6 +6835,11 @@ class MatchSimulator {
     const deltaSeconds = 2;
     this.gameSeconds += deltaSeconds;
     const timeScale = deltaSeconds / 15;
+
+    // Gravação periódica da Linha do Tempo de Ouro da Partida (CBLOL Gold Advantage Graph)
+    if (this.gameSeconds - (this._lastGoldSampleSec || 0) >= 15) {
+      this._recordGoldSnapshot();
+    }
 
     if (this.counterAttackCooldown > 0) {
       this.counterAttackCooldown = Math.max(0, this.counterAttackCooldown - deltaSeconds);
@@ -14682,6 +14726,46 @@ class MatchSimulator {
       }
     });
 
+    // Totais de Dano por Equipe e Métricas Oficiais do CBLOL
+    let blueTotalDamage = 0;
+    let redTotalDamage = 0;
+    blueRosterList.forEach(c => { blueTotalDamage += (c.damageDealt || 0); });
+    redRosterList.forEach(c => { redTotalDamage += (c.damageDealt || 0); });
+    const matchTotalDamage = Math.max(1, blueTotalDamage + redTotalDamage);
+
+    const gameMinutes = Math.max(1, this.gameSeconds / 60);
+    allPlayers.forEach(c => {
+      const isBlue = blueRosterList.some(bc => bc.id === c.id);
+      const teamTotalDmg = isBlue ? Math.max(1, blueTotalDamage) : Math.max(1, redTotalDamage);
+      const teamTotalGold = isBlue ? Math.max(1, this.blueScore.gold) : Math.max(1, this.redScore.gold);
+      c.dmgShare = Number((( (c.damageDealt || 0) / teamTotalDmg ) * 100).toFixed(1));
+      c.dpm = Math.round((c.damageDealt || 0) / gameMinutes);
+      c.goldShare = Number((( (c.goldEarned || 500) / teamTotalGold ) * 100).toFixed(1));
+      c.gpm = Math.round((c.goldEarned || 500) / gameMinutes);
+    });
+
+    // Ponto de desfecho final da Linha do Tempo de Ouro
+    if (!this.goldTimeline || this.goldTimeline.length === 0 || this.goldTimeline[this.goldTimeline.length - 1].time !== this.gameSeconds) {
+      this._recordGoldSnapshot("nexus_destroyed", result === "win" ? "Vitória e Destruição do Nexus" : "Derrota no Nexus");
+    }
+
+    // Picos de Vantagem em Ouro da Partida
+    let maxGoldLeadBlue = 0;
+    let maxGoldLeadBlueTime = "00:00";
+    let maxGoldLeadRed = 0;
+    let maxGoldLeadRedTime = "00:00";
+
+    (this.goldTimeline || []).forEach(pt => {
+      if (pt.diff > maxGoldLeadBlue) {
+        maxGoldLeadBlue = pt.diff;
+        maxGoldLeadBlueTime = pt.timeStr;
+      }
+      if (-pt.diff > maxGoldLeadRed) {
+        maxGoldLeadRed = -pt.diff;
+        maxGoldLeadRedTime = pt.timeStr;
+      }
+    });
+
     const winningRoster = result === "win" ? this.blueRosterState : this.redRosterState;
     const winMvpRole = result === "win" ? (this.blueMvpRole || "adc") : (this.redMvpRole || "adc");
     const mvpChamp = (winningRoster && winningRoster[winMvpRole]) ? winningRoster[winMvpRole] : (topDamageChamp || allPlayers[0]);
@@ -14697,6 +14781,14 @@ class MatchSimulator {
       topDamageChampId: topDamageChamp ? topDamageChamp.id : null,
       topGoldChampId: topGoldChamp ? topGoldChamp.id : null,
       topTakenChampId: topTakenChamp ? topTakenChamp.id : null,
+      blueTotalDamage,
+      redTotalDamage,
+      matchTotalDamage,
+      maxGoldLeadBlue,
+      maxGoldLeadBlueTime,
+      maxGoldLeadRed,
+      maxGoldLeadRedTime,
+      goldTimeline: this.goldTimeline || [],
       blue: {
         ...this.blueScore,
         towers: blueTowers,
@@ -15534,6 +15626,39 @@ class MatchSimulator {
     const mins = Math.floor(this.gameSeconds / 60);
     const secs = this.gameSeconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  _recordGoldSnapshot(eventTag = null, eventDetail = null) {
+    if (!this.goldTimeline) {
+      this.goldTimeline = [];
+    }
+    const blueG = this.blueScore ? (this.blueScore.gold || 2500) : 2500;
+    const redG = this.redScore ? (this.redScore.gold || 2500) : 2500;
+    const diff = blueG - redG;
+
+    // Se já houver um registro no mesmo segundo, enriquece com o evento
+    const lastPoint = this.goldTimeline.length > 0 ? this.goldTimeline[this.goldTimeline.length - 1] : null;
+    if (lastPoint && lastPoint.time === this.gameSeconds) {
+      lastPoint.blueGold = blueG;
+      lastPoint.redGold = redG;
+      lastPoint.diff = diff;
+      if (eventTag) {
+        lastPoint.event = eventTag;
+        lastPoint.detail = eventDetail;
+      }
+      return;
+    }
+
+    this.goldTimeline.push({
+      time: this.gameSeconds,
+      timeStr: this._formatTime(),
+      blueGold: blueG,
+      redGold: redG,
+      diff: diff,
+      event: eventTag,
+      detail: eventDetail
+    });
+    this._lastGoldSampleSec = this.gameSeconds;
   }
 
   getState() {
@@ -17423,7 +17548,7 @@ class ArenaView {
               <span class="tab-icon">⚔️</span> Dano a Campeões
             </button>
             <button class="stats-tab-btn" data-tab="gold">
-              <span class="tab-icon">💰</span> Gráfico de Ouro
+              <span class="tab-icon">📈</span> Linha do Tempo (Ouro)
             </button>
             <button class="stats-tab-btn" data-tab="taken">
               <span class="tab-icon">🛡️</span> Dano Sofrido (Tanque)
@@ -19103,6 +19228,16 @@ class ArenaView {
     const body = this.containerEl.querySelector("#stats-tab-body");
     if (!body) return;
 
+    if (tabKey === "gold") {
+      this._renderGoldTimelineTab(summary, body);
+      return;
+    }
+
+    if (tabKey === "damage") {
+      this._renderDamageTab(summary, body);
+      return;
+    }
+
     const roles = ["top", "jungle", "mid", "adc", "support"];
     const roleLabels = { top: "TOP", jungle: "JUG", mid: "MID", adc: "ADC", support: "SUP" };
 
@@ -19236,6 +19371,587 @@ class ArenaView {
         </div>
       </div>
     `;
+  }
+
+  _renderGoldTimelineTab(summary, body) {
+    const timeline = (summary.goldTimeline && summary.goldTimeline.length > 0)
+      ? summary.goldTimeline
+      : [
+          { time: 0, timeStr: "00:00", blueGold: 2500, redGold: 2500, diff: 0, event: null, detail: null },
+          { time: summary.gameSeconds || 1200, timeStr: summary.duration || "20:00", blueGold: summary.blue?.gold || 2500, redGold: summary.red?.gold || 2500, diff: (summary.blue?.gold || 2500) - (summary.red?.gold || 2500), event: "nexus_destroyed", detail: "Fim de Jogo" }
+        ];
+
+    const blueName = summary.blue?.team?.name || "Seu Time";
+    const redName = summary.red?.team?.name || "CBLOL";
+    const maxBlueLead = summary.maxGoldLeadBlue || 0;
+    const maxBlueLeadTime = summary.maxGoldLeadBlueTime || "00:00";
+    const maxRedLead = summary.maxGoldLeadRed || 0;
+    const maxRedLeadTime = summary.maxGoldLeadRedTime || "00:00";
+    const finalDiff = (summary.blue?.gold || 0) - (summary.red?.gold || 0);
+
+    // Dimensões do Gráfico SVG
+    const svgWidth = 920;
+    const svgHeight = 320;
+    const margin = { top: 35, right: 35, bottom: 45, left: 75 };
+    const chartW = svgWidth - margin.left - margin.right;
+    const chartH = svgHeight - margin.top - margin.bottom;
+    const yZero = margin.top + (chartH / 2);
+
+    const totalDuration = Math.max(60, summary.gameSeconds || timeline[timeline.length - 1].time || 1200);
+
+    // Calcula o maior diferencial de ouro para escala Y simétrica
+    let peakDiff = Math.max(1500, maxBlueLead, maxRedLead);
+    timeline.forEach(pt => {
+      peakDiff = Math.max(peakDiff, Math.abs(pt.diff || 0));
+    });
+    const yMax = Math.max(2000, Math.ceil(peakDiff / 1000) * 1000);
+
+    const getX = (sec) => margin.left + (Math.max(0, Math.min(totalDuration, sec)) / totalDuration) * chartW;
+    const getY = (diff) => {
+      const clamped = Math.max(-yMax, Math.min(yMax, diff));
+      return yZero - (clamped / yMax) * (chartH / 2);
+    };
+
+    // Pontos SVG mapeados
+    const points = timeline.map(pt => ({
+      x: Number(getX(pt.time).toFixed(1)),
+      y: Number(getY(pt.diff).toFixed(1)),
+      diff: pt.diff,
+      time: pt.time,
+      timeStr: pt.timeStr,
+      blueGold: pt.blueGold,
+      redGold: pt.redGold,
+      event: pt.event,
+      detail: pt.detail
+    }));
+
+    // Curva principal
+    const linePathD = points.reduce((acc, p, idx) => {
+      return idx === 0 ? `M ${p.x},${p.y}` : `${acc} L ${p.x},${p.y}`;
+    }, "");
+
+    // Área Superior (Vantagem Azul)
+    const blueAreaPoints = points.map(p => ({
+      x: p.x,
+      y: Math.min(p.y, yZero)
+    }));
+    const blueAreaD = `M ${points[0].x},${yZero} ` +
+      blueAreaPoints.map(p => `L ${p.x},${p.y}`).join(' ') +
+      ` L ${points[points.length - 1].x},${yZero} Z`;
+
+    // Área Inferior (Vantagem Vermelha)
+    const redAreaPoints = points.map(p => ({
+      x: p.x,
+      y: Math.max(p.y, yZero)
+    }));
+    const redAreaD = `M ${points[0].x},${yZero} ` +
+      redAreaPoints.map(p => `L ${p.x},${p.y}`).join(' ') +
+      ` L ${points[points.length - 1].x},${yZero} Z`;
+
+    // Marcações temporais do eixo X
+    const stepMins = totalDuration > 1800 ? 5 : (totalDuration > 600 ? 3 : 2);
+    const xTicks = [];
+    for (let s = 0; s <= totalDuration; s += stepMins * 60) {
+      const mins = Math.floor(s / 60);
+      const secs = s % 60;
+      const str = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+      xTicks.push({ sec: s, str, x: getX(s) });
+    }
+
+    // Linhas de Grade e Valores do eixo Y
+    const yTicks = [
+      { val: yMax, label: `+${(yMax / 1000).toFixed(0)}k`, y: getY(yMax) },
+      { val: Math.round(yMax / 2), label: `+${(yMax / 2000).toFixed(1)}k`, y: getY(yMax / 2) },
+      { val: 0, label: "0g", y: yZero },
+      { val: -Math.round(yMax / 2), label: `-${(yMax / 2000).toFixed(1)}k`, y: getY(-yMax / 2) },
+      { val: -yMax, label: `-${(yMax / 1000).toFixed(0)}k`, y: getY(-yMax) }
+    ];
+
+    const gridLinesSvg = yTicks.map(t => `
+      <line x1="${margin.left}" y1="${t.y}" x2="${svgWidth - margin.right}" y2="${t.y}" stroke="${t.val === 0 ? '#c8aa6e' : 'rgba(200, 170, 110, 0.14)'}" stroke-width="${t.val === 0 ? '1.5' : '1'}" stroke-dasharray="${t.val === 0 ? '5 3' : 'none'}" />
+      <text x="${margin.left - 10}" y="${t.y + 4}" text-anchor="end" font-size="11" fill="${t.val > 0 ? '#0ac8b9' : (t.val < 0 ? '#e84057' : '#c8aa6e')}" font-family="Beaufort, sans-serif" font-weight="bold">${t.label}</text>
+    `).join('');
+
+    const xTicksSvg = xTicks.map(t => `
+      <line x1="${t.x}" y1="${margin.top}" x2="${t.x}" y2="${margin.top + chartH}" stroke="rgba(255, 255, 255, 0.05)" stroke-width="1" />
+      <text x="${t.x}" y="${margin.top + chartH + 20}" text-anchor="middle" font-size="11" fill="#785a28" font-family="Spiegel, sans-serif">${t.str}</text>
+    `).join('');
+
+    // Marcadores de Eventos
+    const eventIcons = {
+      dragon: "🐲",
+      dragon_soul: "🔥",
+      elder: "⚡",
+      elder_dragon: "⚡",
+      baron: "👾",
+      herald: "👁️",
+      herald_charge: "👁️",
+      tower: "🏰",
+      first_tower: "👑",
+      ace: "💀",
+      nexus_destroyed: "🏆"
+    };
+
+    const eventPoints = points.filter(p => p.event);
+    const pinsSvg = eventPoints.map(p => {
+      const icon = eventIcons[p.event] || "⭐";
+      const isBlue = p.diff >= 0;
+      const pinColor = isBlue ? "#0ac8b9" : "#e84057";
+      const yOffset = isBlue ? -16 : 22;
+      return `
+        <g class="chart-event-pin" data-time="${p.timeStr}" data-event="${p.detail || p.event}">
+          <circle cx="${p.x}" cy="${p.y}" r="6" fill="${pinColor}" stroke="#0b1624" stroke-width="2" />
+          <text x="${p.x}" y="${p.y + yOffset}" text-anchor="middle" font-size="14" class="event-pin-icon" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.8))">${icon}</text>
+        </g>
+      `;
+    }).join('');
+
+    // Detalhamento de Ouro por Campeão
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    const roleLabels = { top: "TOP", jungle: "JUG", mid: "MID", adc: "ADC", support: "SUP" };
+
+    const renderGoldPlayerRow = (c, side) => {
+      const champInfo = getChampionById(c.id);
+      const champKey = champInfo ? champInfo.id : (c.id === "Wukong" ? "MonkeyKing" : c.id);
+      const avatarUrl = `https://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/${champKey}.png`;
+      const isMvp = c.id === summary.topGoldChampId;
+      const goldK = ((c.goldEarned || 500) / 1000).toFixed(1) + "k";
+      const pct = Math.max(5, Math.min(100, Math.round(((c.goldEarned || 500) / (summary.maxGold || 1)) * 100)));
+      return `
+        <div class="gold-player-row ${side}-side">
+          <div class="gp-avatar-box">
+            <img src="${avatarUrl}" alt="${c.name}" class="gp-avatar" />
+            <span class="gp-role">${roleLabels[c.role] || c.role}</span>
+          </div>
+          <div class="gp-info">
+            <span class="gp-name">${c.name} ${isMvp ? '👑' : ''}</span>
+            <span class="gp-sub">💰 ${goldK} (${c.goldShare || 20}% time • ${c.gpm || 400} GPM)</span>
+          </div>
+          <div class="gp-bar-track">
+            <div class="gp-bar-fill ${side}-gold-fill ${isMvp ? 'is-gold-mvp' : ''}" style="width: ${pct}%"></div>
+          </div>
+        </div>
+      `;
+    };
+
+    const blueChampsHtml = roles.map(r => renderGoldPlayerRow((summary.blue?.roster || {})[r] || { id: "Aatrox", name: r, role: r }, "blue")).join('');
+    const redChampsHtml = roles.map(r => renderGoldPlayerRow((summary.red?.roster || {})[r] || { id: "Renekton", name: r, role: r }, "red")).join('');
+
+    body.innerHTML = `
+      <div class="gold-timeline-wrapper">
+        <!-- Top KPIs -->
+        <div class="gold-timeline-kpis">
+          <div class="gold-kpi-card blue-kpi">
+            <div class="kpi-icon">🔷</div>
+            <div class="kpi-content">
+              <span class="kpi-title">Maior Vantagem (${blueName})</span>
+              <span class="kpi-val">+${maxBlueLead.toLocaleString('pt-BR')}g</span>
+              <span class="kpi-time">aos ${maxBlueLeadTime}</span>
+            </div>
+          </div>
+
+          <div class="gold-kpi-card balance-kpi">
+            <div class="kpi-icon">⚖️</div>
+            <div class="kpi-content">
+              <span class="kpi-title">Saldo Final de Ouro</span>
+              <span class="kpi-val ${finalDiff >= 0 ? 'blue-text' : 'red-text'}">
+                ${finalDiff >= 0 ? '+' : ''}${finalDiff.toLocaleString('pt-BR')}g
+              </span>
+              <span class="kpi-time">${finalDiff >= 0 ? blueName : redName} à frente</span>
+            </div>
+          </div>
+
+          <div class="gold-kpi-card red-kpi">
+            <div class="kpi-icon">🔶</div>
+            <div class="kpi-content">
+              <span class="kpi-title">Maior Vantagem (${redName})</span>
+              <span class="kpi-val">+${maxRedLead.toLocaleString('pt-BR')}g</span>
+              <span class="kpi-time">aos ${maxRedLeadTime}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive SVG Chart -->
+        <div class="gold-chart-card">
+          <div class="gold-chart-header">
+            <div class="gold-chart-legend">
+              <span class="legend-item blue"><span class="legend-bullet blue"></span> ${blueName} (+ Ouro)</span>
+              <span class="legend-item zero"><span class="legend-line"></span> Equilíbrio (0g)</span>
+              <span class="legend-item red"><span class="legend-bullet red"></span> ${redName} (+ Ouro)</span>
+            </div>
+            <span class="gold-chart-hint">💡 Passe o mouse ou toque para inspecionar os minutos e objetivos</span>
+          </div>
+
+          <div class="gold-svg-scroll-container">
+            <div class="gold-svg-wrapper" style="position: relative;">
+              <svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="gold-timeline-svg" preserveAspectRatio="none" id="gold-timeline-svg">
+                <defs>
+                  <linearGradient id="blueGoldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#0ac8b9" stop-opacity="0.40" />
+                    <stop offset="100%" stop-color="#0ac8b9" stop-opacity="0.02" />
+                  </linearGradient>
+                  <linearGradient id="redGoldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#e84057" stop-opacity="0.02" />
+                    <stop offset="100%" stop-color="#e84057" stop-opacity="0.40" />
+                  </linearGradient>
+                  <filter id="goldLineGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#0ac8b9" flood-opacity="0.7" />
+                  </filter>
+                </defs>
+
+                <!-- Grid lines & axis marks -->
+                ${gridLinesSvg}
+                ${xTicksSvg}
+
+                <!-- Shaded Areas -->
+                <path d="${blueAreaD}" fill="url(#blueGoldGrad)" />
+                <path d="${redAreaD}" fill="url(#redGoldGrad)" />
+
+                <!-- Main timeline curve -->
+                <path d="${linePathD}" fill="none" stroke="#0ac8b9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#goldLineGlow)" />
+
+                <!-- Event Pins -->
+                ${pinsSvg}
+
+                <!-- Crosshair elements -->
+                <line id="svg-crosshair-x" x1="0" y1="${margin.top}" x2="0" y2="${margin.top + chartH}" stroke="#c8aa6e" stroke-width="1.5" stroke-dasharray="3 3" style="display: none;" />
+                <circle id="svg-crosshair-dot" cx="0" cy="0" r="5" fill="#f0e6d2" stroke="#0ac8b9" stroke-width="2.5" style="display: none;" />
+
+                <!-- Tracker overlay -->
+                <rect id="svg-overlay-tracker" x="${margin.left}" y="${margin.top}" width="${chartW}" height="${chartH}" fill="transparent" style="cursor: crosshair;" />
+              </svg>
+
+              <!-- Floating Tooltip Card -->
+              <div id="gold-timeline-tooltip" class="gold-chart-tooltip" style="display: none;">
+                <div class="tooltip-time" id="tt-time">⏱️ 00:00</div>
+                <div class="tooltip-row">
+                  <span class="tt-team blue">🔷 ${blueName}:</span>
+                  <span class="tt-val" id="tt-blue-gold">0k</span>
+                </div>
+                <div class="tooltip-row">
+                  <span class="tt-team red">🔶 ${redName}:</span>
+                  <span class="tt-val" id="tt-red-gold">0k</span>
+                </div>
+                <div class="tooltip-diff" id="tt-diff">+0g</div>
+                <div class="tooltip-event" id="tt-event" style="display: none;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakdown de Ouro por Campeão -->
+        <div class="gold-players-breakdown">
+          <div class="gold-breakdown-title">
+            <span>💰 Distribuição de Ouro por Jogador (% Ouro da Equipe & GPM)</span>
+          </div>
+          <div class="gold-teams-row">
+            <div class="gold-team-col blue-col">
+              <span class="gt-header">🔷 ${blueName}</span>
+              ${blueChampsHtml}
+            </div>
+            <div class="gold-team-col red-col">
+              <span class="gt-header">🔶 ${redName}</span>
+              ${redChampsHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Listeners do cursor interativo
+    const svgEl = body.querySelector("#gold-timeline-svg");
+    const tracker = body.querySelector("#svg-overlay-tracker");
+    const crosshair = body.querySelector("#svg-crosshair-x");
+    const dot = body.querySelector("#svg-crosshair-dot");
+    const tooltip = body.querySelector("#gold-timeline-tooltip");
+    const ttTime = body.querySelector("#tt-time");
+    const ttBlueGold = body.querySelector("#tt-blue-gold");
+    const ttRedGold = body.querySelector("#tt-red-gold");
+    const ttDiff = body.querySelector("#tt-diff");
+    const ttEvent = body.querySelector("#tt-event");
+
+    if (tracker && svgEl && tooltip) {
+      const handleMove = (clientX) => {
+        const rect = svgEl.getBoundingClientRect();
+        if (!rect.width) return;
+        const svgX = ((clientX - rect.left) / rect.width) * svgWidth;
+        const clampedX = Math.max(margin.left, Math.min(svgWidth - margin.right, svgX));
+        const fraction = (clampedX - margin.left) / chartW;
+        const targetSec = fraction * totalDuration;
+
+        let closest = points[0];
+        let minDiff = Infinity;
+        points.forEach(p => {
+          const d = Math.abs(p.time - targetSec);
+          if (d < minDiff) {
+            minDiff = d;
+            closest = p;
+          }
+        });
+
+        if (!closest) return;
+
+        crosshair.setAttribute("x1", closest.x);
+        crosshair.setAttribute("x2", closest.x);
+        crosshair.style.display = "block";
+
+        dot.setAttribute("cx", closest.x);
+        dot.setAttribute("cy", closest.y);
+        dot.style.display = "block";
+
+        ttTime.textContent = `⏱️ Minuto ${closest.timeStr}`;
+        ttBlueGold.textContent = `${((closest.blueGold || 0) / 1000).toFixed(1)}k`;
+        ttRedGold.textContent = `${((closest.redGold || 0) / 1000).toFixed(1)}k`;
+
+        const dVal = closest.diff;
+        const leaderName = dVal >= 0 ? blueName : redName;
+        ttDiff.className = `tooltip-diff ${dVal >= 0 ? 'blue-diff' : 'red-diff'}`;
+        ttDiff.textContent = `${dVal >= 0 ? '+' : ''}${dVal.toLocaleString('pt-BR')}g (${leaderName} à frente)`;
+
+        if (closest.event) {
+          ttEvent.style.display = "block";
+          ttEvent.textContent = `⭐ ${closest.detail || closest.event}`;
+        } else {
+          ttEvent.style.display = "none";
+        }
+
+        tooltip.style.display = "block";
+        const percentLeft = (closest.x / svgWidth) * 100;
+        tooltip.style.left = `${Math.max(10, Math.min(80, percentLeft))}%`;
+        tooltip.style.top = `${Math.max(15, (closest.y / svgHeight) * 100 - 30)}%`;
+      };
+
+      tracker.onmousemove = (e) => handleMove(e.clientX);
+      tracker.ontouchmove = (e) => {
+        if (e.touches && e.touches[0]) handleMove(e.touches[0].clientX);
+      };
+      tracker.onmouseleave = () => {
+        crosshair.style.display = "none";
+        dot.style.display = "none";
+        tooltip.style.display = "none";
+      };
+    }
+  }
+
+  _renderDamageTab(summary, body) {
+    const blue = summary.blue || {};
+    const red = summary.red || {};
+    const blueName = blue.team?.name || "Seu Time";
+    const redName = red.team?.name || "CBLOL";
+
+    const blueTotal = summary.blueTotalDamage || 1;
+    const redTotal = summary.redTotalDamage || 1;
+    const matchTotal = Math.max(1, blueTotal + redTotal);
+    const bluePct = Math.round((blueTotal / matchTotal) * 100);
+    const redPct = 100 - bluePct;
+
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    const roleLabels = { top: "TOP", jungle: "JUG", mid: "MID", adc: "ADC", support: "SUP" };
+    const roleIcons = { top: "🛡️", jungle: "🌲", mid: "⚡", adc: "🏹", support: "✨" };
+
+    if (!this._damageViewMode) {
+      this._damageViewMode = "mirror";
+    }
+
+    const allBlue = roles.map(r => (blue.roster || {})[r] || { id: r, name: r, role: r, damageDealt: 0 });
+    const allRed = roles.map(r => (red.roster || {})[r] || { id: r, name: r, role: r, damageDealt: 0 });
+
+    let contentHtml = "";
+
+    if (this._damageViewMode === "mirror") {
+      // Confronto Espelhado por Rota (TOP vs TOP, JG vs JG...)
+      const duelsHtml = roles.map(role => {
+        const b = (blue.roster || {})[role] || { id: role, name: role, role, damageDealt: 0, dmgShare: 0, dpm: 0 };
+        const r = (red.roster || {})[role] || { id: role, name: role, role, damageDealt: 0, dmgShare: 0, dpm: 0 };
+
+        const bInfo = getChampionById(b.id);
+        const rInfo = getChampionById(r.id);
+        const bKey = bInfo ? bInfo.id : (b.id === "Wukong" ? "MonkeyKing" : b.id);
+        const rKey = rInfo ? rInfo.id : (r.id === "Wukong" ? "MonkeyKing" : r.id);
+        const bAvatar = `https://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/${bKey}.png`;
+        const rAvatar = `https://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/${rKey}.png`;
+
+        const bDmg = b.damageDealt || 0;
+        const rDmg = r.damageDealt || 0;
+        const maxLaneDmg = Math.max(1, bDmg, rDmg);
+        const bBarPct = Math.max(12, Math.round((bDmg / maxLaneDmg) * 100));
+        const rBarPct = Math.max(12, Math.round((rDmg / maxLaneDmg) * 100));
+
+        const blueWinsDuel = bDmg >= rDmg;
+        const diffDmg = Math.abs(bDmg - rDmg);
+        const isMvpB = b.id === summary.topDamageChampId;
+        const isMvpR = r.id === summary.topDamageChampId;
+
+        const bShare = b.dmgShare || (((bDmg / blueTotal) * 100).toFixed(1));
+        const rShare = r.dmgShare || (((rDmg / redTotal) * 100).toFixed(1));
+        const bDpm = b.dpm || Math.round(bDmg / Math.max(1, (summary.gameSeconds || 1200) / 60));
+        const rDpm = r.dpm || Math.round(rDmg / Math.max(1, (summary.gameSeconds || 1200) / 60));
+
+        return `
+          <div class="damage-duel-card">
+            <!-- Blue Laner -->
+            <div class="duel-player blue-side ${blueWinsDuel ? 'duel-winner' : ''}">
+              <div class="dp-avatar-box">
+                <img src="${bAvatar}" alt="${b.name}" class="dp-avatar" />
+                <span class="dp-role-badge">${roleLabels[role]}</span>
+              </div>
+              <div class="dp-text-info">
+                <div class="dp-name-row">
+                  <span class="dp-name">${b.name}</span>
+                  ${isMvpB ? `<span class="mvp-dmg-badge" title="Maior Dano da Partida!">👑 MVP</span>` : (blueWinsDuel ? `<span class="duel-win-tag">🏆 +${diffDmg.toLocaleString('pt-BR')}</span>` : '')}
+                </div>
+                <div class="dp-stats-pills">
+                  <span class="dmg-pill-val">⚔️ ${bDmg.toLocaleString('pt-BR')}</span>
+                  <span class="dmg-pill-share">${bShare}% time</span>
+                  <span class="dmg-pill-dpm">${bDpm} DPM</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- VS Center Badge -->
+            <div class="duel-center-divider">
+              <span class="duel-role-icon">${roleIcons[role]}</span>
+              <span class="duel-vs-label">VS</span>
+            </div>
+
+            <!-- Red Laner -->
+            <div class="duel-player red-side ${!blueWinsDuel ? 'duel-winner' : ''}">
+              <div class="dp-text-info align-right">
+                <div class="dp-name-row justify-end">
+                  ${isMvpR ? `<span class="mvp-dmg-badge" title="Maior Dano da Partida!">👑 MVP</span>` : (!blueWinsDuel ? `<span class="duel-win-tag">🏆 +${diffDmg.toLocaleString('pt-BR')}</span>` : '')}
+                  <span class="dp-name">${r.name}</span>
+                </div>
+                <div class="dp-stats-pills justify-end">
+                  <span class="dmg-pill-dpm">${rDpm} DPM</span>
+                  <span class="dmg-pill-share">${rShare}% time</span>
+                  <span class="dmg-pill-val">⚔️ ${rDmg.toLocaleString('pt-BR')}</span>
+                </div>
+              </div>
+              <div class="dp-avatar-box">
+                <img src="${rAvatar}" alt="${r.name}" class="dp-avatar" />
+                <span class="dp-role-badge red">${roleLabels[role]}</span>
+              </div>
+            </div>
+
+            <!-- Duel comparative bar track -->
+            <div class="duel-dual-bar-track">
+              <div class="duel-bar-half blue-half">
+                <div class="duel-bar-fill blue-fill ${blueWinsDuel ? 'lead-fill' : ''}" style="width: ${bBarPct}%"></div>
+              </div>
+              <div class="duel-bar-half red-half">
+                <div class="duel-bar-fill red-fill ${!blueWinsDuel ? 'lead-fill' : ''}" style="width: ${rBarPct}%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      contentHtml = `<div class="damage-duels-container">${duelsHtml}</div>`;
+    } else {
+      // Ranking Geral de Dano (1º ao 10º)
+      const allPlayers = [
+        ...allBlue.map(c => ({ ...c, teamSide: "blue", teamName: blueName, teamTotal: blueTotal })),
+        ...allRed.map(c => ({ ...c, teamSide: "red", teamName: redName, teamTotal: redTotal }))
+      ].sort((a, b) => (b.damageDealt || 0) - (a.damageDealt || 0));
+
+      const rankMedals = ["🥇 1º", "🥈 2º", "🥉 3º"];
+      const maxGlobalDmg = Math.max(1, allPlayers[0].damageDealt || 1);
+
+      const rankingCardsHtml = allPlayers.map((p, idx) => {
+        const info = getChampionById(p.id);
+        const key = info ? info.id : (p.id === "Wukong" ? "MonkeyKing" : p.id);
+        const avatar = `https://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/${key}.png`;
+        const barPct = Math.max(8, Math.round(((p.damageDealt || 0) / maxGlobalDmg) * 100));
+        const isMvp = idx === 0;
+        const pShare = p.dmgShare || ((((p.damageDealt || 0) / p.teamTotal) * 100).toFixed(1));
+        const pDpm = p.dpm || Math.round((p.damageDealt || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60));
+
+        return `
+          <div class="damage-rank-card ${p.teamSide}-rank-card ${isMvp ? 'is-top-mvp' : ''}">
+            <div class="rank-pos-col">
+              <span class="rank-pos-tag ${idx < 3 ? 'top3' : ''}">${rankMedals[idx] || `#${idx + 1}`}</span>
+            </div>
+            <div class="rank-avatar-wrap">
+              <img src="${avatar}" alt="${p.name}" class="rank-avatar" />
+              <span class="rank-role-mini">${roleLabels[p.role]}</span>
+            </div>
+            <div class="rank-info-col">
+              <div class="rank-name-line">
+                <span class="rank-champ-name">${p.name}</span>
+                <span class="rank-team-tag ${p.teamSide}-text">${p.teamName}</span>
+                ${isMvp ? `<span class="mvp-dmg-badge">👑 MVP DA PARTIDA</span>` : ''}
+              </div>
+              <div class="rank-bar-wrap">
+                <div class="rank-bar-track">
+                  <div class="rank-bar-fill ${p.teamSide}-fill ${isMvp ? 'glow-mvp' : ''}" style="width: ${barPct}%"></div>
+                </div>
+              </div>
+            </div>
+            <div class="rank-stats-col">
+              <span class="rank-dmg-num">⚔️ ${(p.damageDealt || 0).toLocaleString('pt-BR')}</span>
+              <div class="rank-sub-stats">
+                <span class="rank-share">${pShare}% time</span>
+                <span class="rank-dpm">${pDpm} DPM</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      contentHtml = `<div class="damage-ranking-container">${rankingCardsHtml}</div>`;
+    }
+
+    body.innerHTML = `
+      <div class="damage-tab-wrapper">
+        <!-- Team Damage Proportional Bar Header -->
+        <div class="team-damage-summary-bar">
+          <div class="td-header-labels">
+            <div class="td-team-side blue-text">
+              <span class="td-flag">🔷</span>
+              <span class="td-team-name">${blueName}</span>
+              <strong class="td-dmg-val">${blueTotal.toLocaleString('pt-BR')} Dano (${bluePct}%)</strong>
+            </div>
+            <span class="td-center-vs">⚔️ TOTAL DE DANO A CAMPEÕES</span>
+            <div class="td-team-side red-text justify-end">
+              <strong class="td-dmg-val">${redTotal.toLocaleString('pt-BR')} Dano (${redPct}%)</strong>
+              <span class="td-team-name">${redName}</span>
+              <span class="td-flag">🔶</span>
+            </div>
+          </div>
+          <div class="td-split-progress-track">
+            <div class="td-split-fill blue-fill" style="width: ${bluePct}%"></div>
+            <div class="td-split-fill red-fill" style="width: ${redPct}%"></div>
+          </div>
+        </div>
+
+        <!-- Mode Switcher (Mirror vs Ranking) -->
+        <div class="damage-mode-switcher">
+          <button class="mode-btn ${this._damageViewMode === 'mirror' ? 'active' : ''}" id="dmg-mode-mirror">
+            ⚔️ Confronto por Rota (Espelhado)
+          </button>
+          <button class="mode-btn ${this._damageViewMode === 'ranking' ? 'active' : ''}" id="dmg-mode-ranking">
+            📊 Ranking Geral (1º ao 10º)
+          </button>
+        </div>
+
+        ${contentHtml}
+      </div>
+    `;
+
+    const btnMirror = body.querySelector("#dmg-mode-mirror");
+    const btnRanking = body.querySelector("#dmg-mode-ranking");
+    if (btnMirror) {
+      btnMirror.onclick = () => {
+        this._damageViewMode = "mirror";
+        this._renderDamageTab(summary, body);
+      };
+    }
+    if (btnRanking) {
+      btnRanking.onclick = () => {
+        this._damageViewMode = "ranking";
+        this._renderDamageTab(summary, body);
+      };
+    }
   }
 
   handleTacticalDecision(decisionData) {

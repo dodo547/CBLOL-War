@@ -5750,3 +5750,851 @@
   border-color: rgba(10, 200, 185, 0.6);
 }
 
+/* ==========================================================================
+   STEP 6: GRÁFICOS PÓS-JOGO OFICIAIS DO CBLOL (GOLD TIMELINE & DAMAGE CHARTS)
+   ========================================================================== */
+
+/* Aba de Linha do Tempo de Ouro */
+.gold-timeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.gold-timeline-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.gold-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(10, 20, 35, 0.85);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.gold-kpi-card.blue-kpi {
+  border-color: rgba(10, 200, 185, 0.45);
+  background: linear-gradient(135deg, rgba(10, 200, 185, 0.08), rgba(6, 14, 24, 0.95));
+}
+
+.gold-kpi-card.red-kpi {
+  border-color: rgba(232, 64, 87, 0.45);
+  background: linear-gradient(135deg, rgba(232, 64, 87, 0.08), rgba(6, 14, 24, 0.95));
+}
+
+.gold-kpi-card.balance-kpi {
+  border-color: rgba(200, 170, 110, 0.45);
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.08), rgba(6, 14, 24, 0.95));
+}
+
+.gold-kpi-card .kpi-icon {
+  font-size: 26px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+}
+
+.gold-kpi-card .kpi-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.gold-kpi-card .kpi-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--lol-gold-2, #c8aa6e);
+  font-weight: 600;
+}
+
+.gold-kpi-card .kpi-val {
+  font-family: var(--lol-font-title, "Beaufort for LOL"), serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.gold-kpi-card .kpi-val.blue-text {
+  color: #0ac8b9;
+}
+
+.gold-kpi-card .kpi-val.red-text {
+  color: #e84057;
+}
+
+.gold-kpi-card .kpi-time {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Card do Gráfico SVG de Ouro */
+.gold-chart-card {
+  background: linear-gradient(180deg, rgba(8, 16, 28, 0.95), rgba(4, 9, 16, 0.98));
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: inset 0 2px 14px rgba(0, 0, 0, 0.7), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.gold-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gold-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11.5px;
+  color: #e1d8b6;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-bullet {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-bullet.blue {
+  background: #0ac8b9;
+  box-shadow: 0 0 8px #0ac8b9;
+}
+
+.legend-bullet.red {
+  background: #e84057;
+  box-shadow: 0 0 8px #e84057;
+}
+
+.legend-line {
+  width: 16px;
+  height: 2px;
+  background: #c8aa6e;
+  display: inline-block;
+  border-top: 1px dashed #c8aa6e;
+}
+
+.gold-chart-hint {
+  font-size: 10.5px;
+  color: rgba(200, 170, 110, 0.7);
+  font-style: italic;
+}
+
+.gold-svg-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gold-svg-wrapper {
+  position: relative;
+  min-width: 720px;
+  width: 100%;
+}
+
+.gold-timeline-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  user-select: none;
+}
+
+.chart-event-pin {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.chart-event-pin:hover {
+  filter: brightness(1.3) drop-shadow(0 0 8px #ffd700);
+}
+
+.gold-chart-tooltip {
+  position: absolute;
+  background: rgba(6, 12, 20, 0.95);
+  border: 1px solid var(--lol-gold-3, #c8aa6e);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85);
+  transform: translate(-50%, -100%);
+  min-width: 160px;
+  backdrop-filter: blur(4px);
+}
+
+.tooltip-time {
+  font-weight: 700;
+  color: var(--lol-gold-1, #f0e6d2);
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 2px;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.tooltip-row .tt-team.blue {
+  color: #0ac8b9;
+}
+
+.tooltip-row .tt-team.red {
+  color: #e84057;
+}
+
+.tooltip-diff {
+  margin-top: 5px;
+  font-weight: 800;
+  font-size: 11.5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 4px;
+}
+
+.tooltip-diff.blue-diff {
+  color: #0ac8b9;
+}
+
+.tooltip-diff.red-diff {
+  color: #e84057;
+}
+
+.tooltip-event {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #ffd700;
+  font-weight: 700;
+  background: rgba(200, 170, 110, 0.15);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* Detalhamento de Ouro por Campeão */
+.gold-players-breakdown {
+  background: rgba(6, 14, 24, 0.75);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.gold-breakdown-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lol-gold-2, #c8aa6e);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gold-teams-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .gold-teams-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gold-team-col .gt-header {
+  display: block;
+  font-weight: 800;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #f0e6d2;
+}
+
+.gold-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 20, 35, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.gp-avatar-box {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.gp-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid var(--lol-gold-3);
+  object-fit: cover;
+}
+
+.gp-role {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  font-size: 8px;
+  background: #010a13;
+  color: var(--lol-gold-1);
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 800;
+}
+
+.gp-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.gp-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: #f0e6d2;
+}
+
+.gp-sub {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.gp-bar-track {
+  width: 70px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.gp-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.blue-gold-fill {
+  background: #0ac8b9;
+}
+
+.red-gold-fill {
+  background: #e84057;
+}
+
+.gp-bar-fill.is-gold-mvp {
+  background: linear-gradient(90deg, #ffd700, #ff8c00);
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.7);
+}
+
+/* ==========================================================================
+   ABA DE DANO A CAMPEÕES (CBLOL DAMAGE CHARTS)
+   ========================================================================== */
+
+.damage-tab-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.team-damage-summary-bar {
+  background: rgba(10, 20, 35, 0.85);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow: inset 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+.td-header-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.td-team-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.td-team-name {
+  font-weight: 700;
+  color: #fff;
+}
+
+.td-dmg-val {
+  font-family: var(--lol-font-title), serif;
+  font-size: 13px;
+}
+
+.td-center-vs {
+  font-size: 11px;
+  color: var(--lol-gold-2, #c8aa6e);
+  font-weight: 800;
+  letter-spacing: 0.8px;
+}
+
+.td-split-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #010a13;
+  border-radius: 5px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.td-split-fill.blue-fill {
+  background: linear-gradient(90deg, #0ac8b9, #2979ff);
+  transition: width 0.4s ease;
+}
+
+.td-split-fill.red-fill {
+  background: linear-gradient(90deg, #ff1744, #e84057);
+  transition: width 0.4s ease;
+}
+
+/* Alternador de Modo de Visualização */
+.damage-mode-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.damage-mode-switcher .mode-btn {
+  background: rgba(10, 20, 35, 0.85);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  color: #c8aa6e;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.damage-mode-switcher .mode-btn:hover {
+  background: rgba(200, 170, 110, 0.15);
+  color: #fff;
+}
+
+.damage-mode-switcher .mode-btn.active {
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.25), rgba(10, 200, 185, 0.25));
+  border-color: #0ac8b9;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(10, 200, 185, 0.3);
+}
+
+/* Confronto por Rota (Espelhado) */
+.damage-duels-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.damage-duel-card {
+  background: rgba(10, 20, 35, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  position: relative;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.damage-duel-card:hover {
+  border-color: rgba(200, 170, 110, 0.4);
+}
+
+.damage-duel-card {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.duel-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.duel-player.align-right {
+  justify-content: flex-end;
+}
+
+.dp-avatar-box {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.dp-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--lol-gold-3);
+  object-fit: cover;
+}
+
+.dp-role-badge {
+  position: absolute;
+  bottom: -3px;
+  left: -3px;
+  font-size: 8px;
+  background: #0ac8b9;
+  color: #010a13;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 800;
+}
+
+.dp-role-badge.red {
+  background: #e84057;
+  color: #fff;
+  left: auto;
+  right: -3px;
+}
+
+.dp-text-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.dp-text-info.align-right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.dp-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dp-name-row.justify-end {
+  justify-content: flex-end;
+}
+
+.dp-name {
+  font-weight: 800;
+  font-size: 12.5px;
+  color: #f0e6d2;
+}
+
+.duel-win-tag {
+  font-size: 9.5px;
+  background: rgba(200, 170, 110, 0.2);
+  color: #ffd700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.mvp-dmg-badge {
+  font-size: 9.5px;
+  background: linear-gradient(90deg, #ffd700, #ff8c00);
+  color: #010a13;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+}
+
+.dp-stats-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.dp-stats-pills.justify-end {
+  justify-content: flex-end;
+}
+
+.dmg-pill-val {
+  font-weight: 800;
+  color: #fff;
+}
+
+.dmg-pill-share {
+  color: rgba(200, 170, 110, 0.9);
+  background: rgba(200, 170, 110, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.dmg-pill-dpm {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+}
+
+.duel-center-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.duel-role-icon {
+  font-size: 16px;
+}
+
+.duel-vs-label {
+  font-size: 9.5px;
+  color: var(--lol-gold-2);
+  font-weight: 800;
+}
+
+.duel-dual-bar-track {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  height: 6px;
+  background: rgba(1, 10, 19, 0.8);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.duel-bar-half {
+  flex: 1;
+  display: flex;
+  height: 100%;
+}
+
+.duel-bar-half.blue-half {
+  justify-content: flex-end;
+}
+
+.duel-bar-half.red-half {
+  justify-content: flex-start;
+}
+
+.duel-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.duel-bar-fill.blue-fill {
+  background: #0ac8b9;
+}
+
+.duel-bar-fill.red-fill {
+  background: #e84057;
+}
+
+.duel-bar-fill.lead-fill {
+  box-shadow: 0 0 6px currentColor;
+  filter: brightness(1.2);
+}
+
+/* Ranking Geral de Dano */
+.damage-ranking-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.damage-rank-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(10, 20, 35, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 14px;
+  transition: all 0.2s ease;
+}
+
+.damage-rank-card:hover {
+  background: rgba(15, 30, 50, 0.9);
+  border-color: rgba(200, 170, 110, 0.4);
+}
+
+.damage-rank-card.blue-rank-card {
+  border-left: 3px solid #0ac8b9;
+}
+
+.damage-rank-card.red-rank-card {
+  border-left: 3px solid #e84057;
+}
+
+.damage-rank-card.is-top-mvp {
+  background: linear-gradient(90deg, rgba(200, 170, 110, 0.15), rgba(10, 20, 35, 0.9));
+  border-color: #ffd700;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.2);
+}
+
+.rank-pos-col {
+  width: 45px;
+  flex-shrink: 0;
+}
+
+.rank-pos-tag {
+  font-family: var(--lol-font-title), serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.rank-pos-tag.top3 {
+  color: #ffd700;
+  font-size: 14px;
+}
+
+.rank-avatar-wrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.rank-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--lol-gold-3);
+  object-fit: cover;
+}
+
+.rank-role-mini {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  font-size: 8px;
+  background: #010a13;
+  color: var(--lol-gold-1);
+  padding: 1px 3px;
+  border-radius: 2px;
+  font-weight: 800;
+}
+
+.rank-info-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rank-champ-name {
+  font-weight: 800;
+  font-size: 12.5px;
+  color: #f0e6d2;
+}
+
+.rank-team-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.rank-team-tag.blue-text {
+  background: rgba(10, 200, 185, 0.15);
+  color: #0ac8b9;
+}
+
+.rank-team-tag.red-text {
+  background: rgba(232, 64, 87, 0.15);
+  color: #e84057;
+}
+
+.rank-bar-wrap {
+  width: 100%;
+}
+
+.rank-bar-track {
+  width: 100%;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3.5px;
+  overflow: hidden;
+}
+
+.rank-bar-fill {
+  height: 100%;
+  border-radius: 3.5px;
+}
+
+.rank-bar-fill.blue-fill {
+  background: linear-gradient(90deg, #0ac8b9, #2979ff);
+}
+
+.rank-bar-fill.red-fill {
+  background: linear-gradient(90deg, #ff1744, #e84057);
+}
+
+.rank-bar-fill.glow-mvp {
+  background: linear-gradient(90deg, #ffd700, #ff8c00);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+}
+
+.rank-stats-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+.rank-dmg-num {
+  font-family: var(--lol-font-title), serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #fff;
+}
+
+.rank-sub-stats {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.rank-share {
+  color: #c8aa6e;
+  font-weight: 700;
+}
+
+

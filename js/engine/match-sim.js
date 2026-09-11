@@ -25,9 +25,34 @@ export class MatchSimulator {
     this.roundIndex = roundIndex;
     this.speed = speed;
     this.onTick = onTick;
-    this.onEvent = onEvent;
+    
+    // Rastreamento automático de eventos chave na Linha do Tempo de Ouro
+    const rawOnEvent = onEvent;
+    this.onEvent = (evt) => {
+      if (evt && evt.type) {
+        if (evt.type === "dragon" || evt.type === "dragon_soul" || evt.type === "elder" || evt.type === "elder_dragon") {
+          this._recordGoldSnapshot("dragon", evt.text || "Dragão Abatido");
+        } else if (evt.type === "baron") {
+          this._recordGoldSnapshot("baron", evt.text || "Barão Abatido");
+        } else if (evt.type === "herald_charge" || evt.type === "herald_summon") {
+          this._recordGoldSnapshot("herald", evt.text || "Arauto do Vale");
+        } else if (evt.type === "tower_destroyed" || evt.type === "first_tower") {
+          this._recordGoldSnapshot("tower", evt.text || "Torre Destruída");
+        } else if (evt.type === "ace") {
+          this._recordGoldSnapshot("ace", evt.text || "Extermínio (ACE)");
+        }
+      }
+      rawOnEvent(evt);
+    };
+
     this.onStructureHit = onStructureHit;
-    this.onStructureDestroyed = onStructureDestroyed;
+
+    const rawOnStructureDestroyed = onStructureDestroyed;
+    this.onStructureDestroyed = (side, id) => {
+      this._recordGoldSnapshot("tower", `Torre destruída: ${id} (${side === "blue" ? "Azul" : "Vermelha"})`);
+      rawOnStructureDestroyed(side, id);
+    };
+
     this.onFinish = onFinish;
     this.onTacticalDecision = onTacticalDecision;
     this.onMultikill = onMultikill;
@@ -60,6 +85,20 @@ export class MatchSimulator {
     // Placar e Ouro: Início com 500g por campeão = 2.500g por equipe
     this.blueScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
     this.redScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
+
+    // Histórico da Linha do Tempo de Ouro da Partida (CBLOL Gold Advantage Graph)
+    this.goldTimeline = [
+      {
+        time: 0,
+        timeStr: "00:00",
+        blueGold: 2500,
+        redGold: 2500,
+        diff: 0,
+        event: null,
+        detail: null
+      }
+    ];
+    this._lastGoldSampleSec = 0;
 
     // Estruturas Autênticas de Summoner's Rift (Top, Mid, Bot e Base)
     this.blueStructures = this._initStructures("blue");
@@ -1376,6 +1415,11 @@ export class MatchSimulator {
     const deltaSeconds = 2;
     this.gameSeconds += deltaSeconds;
     const timeScale = deltaSeconds / 15;
+
+    // Gravação periódica da Linha do Tempo de Ouro da Partida (CBLOL Gold Advantage Graph)
+    if (this.gameSeconds - (this._lastGoldSampleSec || 0) >= 15) {
+      this._recordGoldSnapshot();
+    }
 
     if (this.counterAttackCooldown > 0) {
       this.counterAttackCooldown = Math.max(0, this.counterAttackCooldown - deltaSeconds);
@@ -9262,6 +9306,46 @@ export class MatchSimulator {
       }
     });
 
+    // Totais de Dano por Equipe e Métricas Oficiais do CBLOL
+    let blueTotalDamage = 0;
+    let redTotalDamage = 0;
+    blueRosterList.forEach(c => { blueTotalDamage += (c.damageDealt || 0); });
+    redRosterList.forEach(c => { redTotalDamage += (c.damageDealt || 0); });
+    const matchTotalDamage = Math.max(1, blueTotalDamage + redTotalDamage);
+
+    const gameMinutes = Math.max(1, this.gameSeconds / 60);
+    allPlayers.forEach(c => {
+      const isBlue = blueRosterList.some(bc => bc.id === c.id);
+      const teamTotalDmg = isBlue ? Math.max(1, blueTotalDamage) : Math.max(1, redTotalDamage);
+      const teamTotalGold = isBlue ? Math.max(1, this.blueScore.gold) : Math.max(1, this.redScore.gold);
+      c.dmgShare = Number((( (c.damageDealt || 0) / teamTotalDmg ) * 100).toFixed(1));
+      c.dpm = Math.round((c.damageDealt || 0) / gameMinutes);
+      c.goldShare = Number((( (c.goldEarned || 500) / teamTotalGold ) * 100).toFixed(1));
+      c.gpm = Math.round((c.goldEarned || 500) / gameMinutes);
+    });
+
+    // Ponto de desfecho final da Linha do Tempo de Ouro
+    if (!this.goldTimeline || this.goldTimeline.length === 0 || this.goldTimeline[this.goldTimeline.length - 1].time !== this.gameSeconds) {
+      this._recordGoldSnapshot("nexus_destroyed", result === "win" ? "Vitória e Destruição do Nexus" : "Derrota no Nexus");
+    }
+
+    // Picos de Vantagem em Ouro da Partida
+    let maxGoldLeadBlue = 0;
+    let maxGoldLeadBlueTime = "00:00";
+    let maxGoldLeadRed = 0;
+    let maxGoldLeadRedTime = "00:00";
+
+    (this.goldTimeline || []).forEach(pt => {
+      if (pt.diff > maxGoldLeadBlue) {
+        maxGoldLeadBlue = pt.diff;
+        maxGoldLeadBlueTime = pt.timeStr;
+      }
+      if (-pt.diff > maxGoldLeadRed) {
+        maxGoldLeadRed = -pt.diff;
+        maxGoldLeadRedTime = pt.timeStr;
+      }
+    });
+
     const winningRoster = result === "win" ? this.blueRosterState : this.redRosterState;
     const winMvpRole = result === "win" ? (this.blueMvpRole || "adc") : (this.redMvpRole || "adc");
     const mvpChamp = (winningRoster && winningRoster[winMvpRole]) ? winningRoster[winMvpRole] : (topDamageChamp || allPlayers[0]);
@@ -9277,6 +9361,14 @@ export class MatchSimulator {
       topDamageChampId: topDamageChamp ? topDamageChamp.id : null,
       topGoldChampId: topGoldChamp ? topGoldChamp.id : null,
       topTakenChampId: topTakenChamp ? topTakenChamp.id : null,
+      blueTotalDamage,
+      redTotalDamage,
+      matchTotalDamage,
+      maxGoldLeadBlue,
+      maxGoldLeadBlueTime,
+      maxGoldLeadRed,
+      maxGoldLeadRedTime,
+      goldTimeline: this.goldTimeline || [],
       blue: {
         ...this.blueScore,
         towers: blueTowers,
@@ -10114,6 +10206,39 @@ export class MatchSimulator {
     const mins = Math.floor(this.gameSeconds / 60);
     const secs = this.gameSeconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  _recordGoldSnapshot(eventTag = null, eventDetail = null) {
+    if (!this.goldTimeline) {
+      this.goldTimeline = [];
+    }
+    const blueG = this.blueScore ? (this.blueScore.gold || 2500) : 2500;
+    const redG = this.redScore ? (this.redScore.gold || 2500) : 2500;
+    const diff = blueG - redG;
+
+    // Se já houver um registro no mesmo segundo, enriquece com o evento
+    const lastPoint = this.goldTimeline.length > 0 ? this.goldTimeline[this.goldTimeline.length - 1] : null;
+    if (lastPoint && lastPoint.time === this.gameSeconds) {
+      lastPoint.blueGold = blueG;
+      lastPoint.redGold = redG;
+      lastPoint.diff = diff;
+      if (eventTag) {
+        lastPoint.event = eventTag;
+        lastPoint.detail = eventDetail;
+      }
+      return;
+    }
+
+    this.goldTimeline.push({
+      time: this.gameSeconds,
+      timeStr: this._formatTime(),
+      blueGold: blueG,
+      redGold: redG,
+      diff: diff,
+      event: eventTag,
+      detail: eventDetail
+    });
+    this._lastGoldSampleSec = this.gameSeconds;
   }
 
   getState() {
