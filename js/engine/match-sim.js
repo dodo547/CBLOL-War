@@ -101,6 +101,8 @@ export class MatchSimulator {
     // Sistema de Matchups de Campeões e Rota Marcada pelo Caçador Rival
     this.laneMatchups = {};
     this.redJungleCampLane = null; // 'top', 'mid', ou 'bot'
+    this.blueJungleCampLane = null; // Rota prioritária que o Caçador azul foca para criar o carregador
+    this._jgPlanIncidentFired = false; // Incidente inicial de plano de rota do caçador
     this.nextJungleCampUpdateAt = 165; // Primeira rotação aos 02:45
 
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
@@ -592,28 +594,89 @@ export class MatchSimulator {
   }
 
   setLaneFocus(lane) {
+    const bJg = this.blueRosterState.jungle?.name || "Caçador";
+    const names = {
+      top: "Rota Superior (Top)",
+      mid: "Rota do Meio (Mid)",
+      bot: "Rota Inferior (Bot)"
+    };
+    const targetRoles = { top: "top", mid: "mid", bot: "adc" };
+    const targetRole = targetRoles[lane] || "adc";
+    const targetChamp = this.blueRosterState[targetRole]?.name || "Carregador";
+
     if (this.focusedLane === lane) {
       this.focusedLane = null;
+      this.blueJungleCampLane = null;
       this.onEvent({
         type: "lane_focus",
         side: "blue",
-        text: `⚖️ FOCO DE ROTA EQUILIBRADO: A equipe agora divide a atenção igualmente entre Top, Mid e Bot.`,
+        text: `⚖️ CAÇADOR EM ROTAÇÃO LIVRE: ${bJg} divide a atenção de ganks e controle de mapa equilibradamente entre todas as rotas.`,
         time: this._formatTime()
       });
     } else {
       this.focusedLane = lane;
-      const names = {
-        top: "Rota Superior (Top)",
-        mid: "Rota do Meio (Mid)",
-        bot: "Rota Inferior (Bot)"
-      };
+      this.blueJungleCampLane = lane;
       this.onEvent({
         type: "lane_focus",
         side: "blue",
-        text: `🎯 FOCO DE ROTA ATIVO: A equipe agora prioriza recursos e jogadas na ${names[lane] || lane}!`,
+        text: `🌲 PLANO DO CAÇADOR ATIVO: ${bJg} agora acampa na ${names[lane] || lane} para dar recursos a ${targetChamp} e torná-lo o Carregador da partida!`,
         time: this._formatTime()
       });
     }
+  }
+
+  _calculateTopPushAdvantage() {
+    const bTop = this.blueRosterState.top;
+    const rTop = this.redRosterState.top;
+    if (!bTop || !rTop) {
+      return { score: 0, leader: "neutral", blueScore: 75, redScore: 75, desc: "Forças de push equiparadas" };
+    }
+
+    // 1. Estatística base de push do time e características do campeão
+    let bPush = (this.blueTeam.stats?.push || 75) * 0.35;
+    let rPush = (this.redTeam.stats?.push || 75) * 0.35;
+
+    // Campeões com waveclear nato de área e duelistas split-push (Tiamat/Hydra/AOE)
+    const waveclearChamps = ["Fiora", "Aatrox", "Renekton", "Jax", "Camille", "Sion", "Gnar", "Jayce", "Irelia", "Kled", "Darius", "Garen", "Rumble", "Mordekaiser"];
+    if (waveclearChamps.includes(bTop.id)) bPush += 8;
+    if (waveclearChamps.includes(rTop.id)) rPush += 8;
+
+    // 2. Itens fechados (+14 de velocidade de avanço e dano a tropas por item)
+    bPush += (bTop.items ? bTop.items.length * 14 : 0);
+    rPush += (rTop.items ? rTop.items.length * 14 : 0);
+
+    // 3. Ouro acumulado (+1 por cada 250g de vantagem econômica)
+    const goldDiff = (bTop.goldEarned || 500) - (rTop.goldEarned || 500);
+    bPush += Math.max(-25, Math.min(25, Math.round(goldDiff * 0.004)));
+
+    // 4. Abates (+3.5 por kill de vantagem)
+    bPush += Math.max(-18, Math.min(18, Math.round(((bTop.kills || 0) - (rTop.kills || 0)) * 3.5)));
+
+    // 5. Estado das estruturas da rota superior
+    const redTopT1 = this.redStructures.find(s => s.id === "top_t1");
+    const blueTopT1 = this.blueStructures.find(s => s.id === "top_t1");
+    if (redTopT1 && redTopT1.destroyed) bPush += 10;
+    if (blueTopT1 && blueTopT1.destroyed) rPush += 10;
+
+    const diff = Math.round(bPush - rPush);
+    let leader = "neutral";
+    let desc = "Push parelho: nenhuma equipe consegue criar tempo de rotação livre.";
+
+    if (diff >= 6) {
+      leader = "blue";
+      desc = `${bTop.name} limpa as ondas muito mais rápido (${diff > 12 ? 'Dominante' : 'Vantagem'}). Ganha tempo de descida para o rio/time!`;
+    } else if (diff <= -6) {
+      leader = "red";
+      desc = `${rTop.name} tem prioridade de avanço (${Math.abs(diff) > 12 ? 'Dominante' : 'Vantagem'}). ${bTop.name} fica preso sob a torre limpando tropas.`;
+    }
+
+    return {
+      score: diff,
+      leader,
+      desc,
+      blueScore: Math.round(bPush),
+      redScore: Math.round(rPush)
+    };
   }
 
   triggerCounterAttack() {
@@ -736,6 +799,21 @@ export class MatchSimulator {
     // Atualiza a rota favorita de gank do caçador rival periodicamente
     if (this.gameSeconds >= this.nextJungleCampUpdateAt) {
       this._updateRedJungleCampTarget(false);
+    }
+
+    // Auxílio e foco de gank do Caçador Aliado (Blue JG) na rota escolhida
+    if (this.blueJungleCampLane) {
+      const targetRole = this.blueJungleCampLane === "bot" ? "adc" : this.blueJungleCampLane;
+      const targetChamp = this.blueRosterState[targetRole];
+      if (targetChamp && targetChamp.alive) {
+        if (this.gameSeconds % 30 === 0) {
+          targetChamp.goldEarned = (targetChamp.goldEarned || 500) + 35;
+          targetChamp.goldCurrent = (targetChamp.goldCurrent || 0) + 35;
+        }
+        if (this.lanePressures && this.lanePressures[this.blueJungleCampLane] !== undefined) {
+          this.lanePressures[this.blueJungleCampLane] = Math.min(100, this.lanePressures[this.blueJungleCampLane] + 1.5);
+        }
+      }
     }
 
     // Contra-ataque orgânico: dispara automaticamente quando a equipe defende a base reunida
@@ -1156,6 +1234,18 @@ export class MatchSimulator {
       redMvpBonus = Math.min(14, (redMvp.items ? redMvp.items.length * 2.5 : 0) + Math.max(0, (redMvp.laneGoldDiff || 0) * 0.003));
     }
 
+    // Macro de Rotas Laterais Pós-15 minutos (Push Rápido do Top & Tempo de Descida 5v4)
+    let blueTopPushBonus = 0;
+    let redTopPushBonus = 0;
+    if (this.gameSeconds >= 900) {
+      const topAdv = this._calculateTopPushAdvantage();
+      if (topAdv.leader === "blue") {
+        blueTopPushBonus = Math.min(12, Math.round(topAdv.score * 0.35));
+      } else if (topAdv.leader === "red") {
+        redTopPushBonus = Math.min(12, Math.round(Math.abs(topAdv.score) * 0.35));
+      }
+    }
+
     let blueBasePower = ((bDmgStat + tacticDmg) * 0.28 +
                          (bTankStat + tacticTank) * 0.24 +
                          (bUtilStat) * 0.20 +
@@ -1164,6 +1254,7 @@ export class MatchSimulator {
                          blueDefendingBonus +
                          blueItemPower +
                          blueMvpBonus +
+                         blueTopPushBonus +
                          (blueHasBaron ? 16 : 0) +
                          (this.blueSuperMinions ? 12 : 0)) * blueManpowerMod;
 
@@ -1175,6 +1266,7 @@ export class MatchSimulator {
                          redDefendingBonus +
                          redItemPower +
                          redMvpBonus +
+                         redTopPushBonus +
                          (redHasBaron ? 16 : 0) +
                          (this.redSuperMinions ? 12 : 0)) * redManpowerMod;
 
@@ -2249,11 +2341,26 @@ export class MatchSimulator {
     const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
     const phase = this.gameSeconds < 720 ? "early" : (this.gameSeconds < 1500 ? "mid" : "late");
 
+    // Incidente Prioritário de Early Game: Escolha do Plano de Foco do Caçador (02:30 a 06:00)
+    if (this.gameSeconds >= 150 && this.gameSeconds <= 360 && !this._jgPlanIncidentFired) {
+      this._jgPlanIncidentFired = true;
+      const decisionData = this._buildDynamicIncidentData("jg_camp_plan", phase, isAhead, isBehind);
+      if (decisionData) {
+        this._triggerTacticalDecision(decisionData);
+        return true;
+      }
+    }
+
     // Pool de tipos candidatos
     const candidateTypes = ["top_lane", "jungle_river", "mid_lane", "bot_lane"];
     if (isAhead) candidateTypes.push("situational_snowball");
     if (isBehind) candidateTypes.push("situational_comeback");
     if (phase !== "early" && !isAhead && !isBehind) candidateTypes.push("situational_clash");
+
+    // Candidato Especial: Pós-15 minutos - Macro do Top (Push Rápido vs Rotação 5v4)
+    if (this.gameSeconds >= 900) {
+      candidateTypes.push("top_push_priority_macro");
+    }
 
     // Candidato: Risco de Gank sob a Torre se alguma rota estiver pressionando debaixo da torre inimiga
     const hasOverextendedLane = ["top", "mid", "bot"].some(l => (this.lanePressures[l] || 0) >= 26);
@@ -2297,6 +2404,192 @@ export class MatchSimulator {
     const rSupp = this.redRosterState.support?.name || "Suporte Rival";
 
     const timeStr = this._formatTime();
+
+    if (type === "jg_camp_plan") {
+      const probTop = this._calculateSuccessProbability(76, "tactical", "combat", { targetLane: "top" });
+      const probMid = this._calculateSuccessProbability(74, "tactical", "utility", { targetLane: "mid" });
+      const probBot = this._calculateSuccessProbability(72, "tactical", "damage", { targetLane: "bot" });
+
+      return {
+        id: `dynamic_jg_plan_${this.gameSeconds}`,
+        meta: { targetLane: "all" },
+        badge: `PLANO DE JOGO • SELVA & ROTAS`,
+        title: "🌲 PLANO DO CAÇADOR: ESCOLHA A ROTA DE FOCO & CARREGADOR",
+        subtitle: `Com qual rota ${bJg} deve jogar junto para criar o Carregador da partida e vencer o jogo?`,
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE SELVA & PATHING",
+          enemyAction: `${rJg} iniciando rotação na selva • Escolha qual companheiro alimentar para ditar o ritmo da partida.`
+        },
+        options: [
+          {
+            id: "jg_camp_top",
+            icon: "🏔️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Acampar no Topo: Alimentar ${bTop} (Duelista de Split)`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Foco no Top",
+            probability: probTop,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `Gank no Top (+400g) + Pressão de Barricadas + ${bTop} Carregador 1v1`,
+            failureConsequence: `${rTop} recua sob a torre e gasta Flash com segurança`,
+            desc: `Direcionar ganks repetidos para o topo, conceder abates a ${bTop} e criar uma força de split push imparável.`
+          },
+          {
+            id: "jg_camp_mid",
+            icon: "⚡",
+            zone: "mid",
+            zoneLabel: "⚡ ROTA CENTRAL",
+            name: `Prioridade no Meio: Habilitar ${bMid} (Mago/Assassino de Roam)`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Foco no Mid",
+            probability: probMid,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `Abate no Mid (+400g) + Controle Central + Liberdade de Roaming para ${bMid}`,
+            failureConsequence: `${rMid} esquiva do gank e contra-ataca à distância`,
+            desc: `Garantir visão no rio, punir ${rMid} e dar espaço para ${bMid} liderar as lutas e rotações no mapa todo.`
+          },
+          {
+            id: "jg_camp_bot",
+            icon: "🏹",
+            zone: "bot",
+            zoneLabel: "🏹 ROTA INFERIOR",
+            name: `Blindagem no Bot: Recursos & Ouro para ${bAdc} (Late Game Carry)`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Foco no Bot",
+            probability: probBot,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `Double Kill no Bot (+600g) + Barricadas + ${bAdc} Hiper-Carregador`,
+            failureConsequence: `A dupla rival joga recuada sob a torre e atrasa o gank`,
+            desc: `Colapsar 3v2 na bot lane, arrancar placas de ouro para ${bAdc} e transformá-lo na máquina de dano da partida.`
+          }
+        ]
+      };
+    }
+
+    if (type === "top_push_priority_macro") {
+      const adv = this._calculateTopPushAdvantage();
+      const isBlueAhead = adv.score >= 0;
+      const probRotate = this._calculateSuccessProbability(isBlueAhead ? 78 : 55, "simple", "combat", { targetLane: "top" });
+      const probShoveT2 = this._calculateSuccessProbability(isBlueAhead ? 70 : 48, "complex", "push", { targetLane: "top" });
+      const probSafety = this._calculateSuccessProbability(80, "simple", "utility", { targetLane: "top" });
+
+      const advText = isBlueAhead 
+        ? `🌊 VANTAGEM DE PUSH: ${bTop} limpa tropas mais rápido (+${adv.score} de Push). ${rTop} está preso sob a torre.`
+        : `⚠️ DESVANTAGEM DE PUSH: ${rTop} tem prioridade de avanço (+${Math.abs(adv.score)} de Push). ${bTop} precisa segurar sob a torre.`;
+
+      return {
+        id: `dynamic_top_macro_${this.gameSeconds}`,
+        meta: { targetLane: "top" },
+        badge: `15:00+ MACRO • ROTA LATERAL`,
+        title: isBlueAhead 
+          ? "🌊 15:00+ MACRO DO TOPO: PUSH RÁPIDO & ROTAÇÃO 5v4" 
+          : "🛡️ 15:00+ MACRO DO TOPO: RESPOSTA À PRESSÃO LATERAL",
+        subtitle: isBlueAhead
+          ? `${bTop} limpou a onda primeiro e conquistou tempo de mapa livre. Qual será a movimentação tática?`
+          : `${rTop} empurrou a onda contra a estrutura aliada. Como sua equipe deve reagir?`,
+        scouting: {
+          intelTag: "📡 RADAR DE AVANÇO DE ROTA (SIDE LANE)",
+          enemyAction: `${advText} • Duelo de velocidade de limpeza de tropas dita o ritmo dos objetivos neutros.`
+        },
+        options: isBlueAhead ? [
+          {
+            id: "top_macro_rotate_5v4",
+            icon: "⚡",
+            zone: "map",
+            zoneLabel: "⚔️ MAPA GLOBAL",
+            name: `Push Rápido & Descer para o Rio: Forçar Luta 5v4 no Objetivo`,
+            complexity: "simple",
+            complexityLabel: "🟢 Rotação de Tempo",
+            probability: probRotate,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: `Luta 5v4 Vitoriosa no Rio (+550g) + Objetivo Neutro Garantido`,
+            failureConsequence: `${rTop} gasta teleporte e iguala os números a tempo`,
+            desc: `Aproveitar que ${rTop} está preso limpando tropas sob a torre para descer correndo e esmagar o CBLOL em superioridade numérica.`
+          },
+          {
+            id: "top_macro_shove_t2",
+            icon: "🏰",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Split Push Furioso na T2 do Topo & Dano de Cerco`,
+            complexity: "complex",
+            complexityLabel: "🔴 Cerco Implacável",
+            probability: probShoveT2,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: `Destruição da Torre T2 (+600g para ${bTop}) + Pressão de Inibidor`,
+            failureConsequence: `CBLOL colapsa em 2 jogadores e força recuo sem a torre`,
+            desc: `Manter a pressão implacável na rota lateral, castigar a torre Tier 2 e forçar o adversário a deslocar múltiplos membros.`
+          },
+          {
+            id: "top_macro_freeze_deny",
+            icon: "❄️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Congelar Onda Lateral & Negar Tropas a ${rTop}`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Sufocamento de CS",
+            probability: probSafety,
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: `Negação de Farm (+200g) + Controle de Visão Profunda na Selva`,
+            failureConsequence: `${rTop} quebra o congelamento com magias de longa distância`,
+            desc: `Congelar as tropas na sua metade do mapa para forçar ${rTop} a se expor perigosamente ou definhar em recursos.`
+          }
+        ] : [
+          {
+            id: "top_macro_defend_t2",
+            icon: "🛡️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Defender sob a Torre T2 com Paciência & Coletar a Onda`,
+            complexity: "simple",
+            complexityLabel: "🟢 Defesa Estrutural",
+            probability: probSafety,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: `Torre T2 Protegida + Coleta Segura de Farm (+250g)`,
+            failureConsequence: `${rTop} consegue lascar dano residual na estrutura`,
+            desc: `Limpar as tropas sob a proteção da torre T2, recuperar vida e negar ouro de estrutura ao adversário.`
+          },
+          {
+            id: "top_macro_gank_collapse",
+            icon: "🌲",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Colapso com ${bJg}: Emboscar o Splitter Rival Avançado`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Emboscada 2v1",
+            probability: probRotate,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `Shutdown em ${rTop} (+500g) + Alívio da Pressão Lateral`,
+            failureConsequence: `${rTop} escapa pelo mato ou troca kill no 1v2`,
+            desc: `Punir a ganância do top laner rival que avançou sem visão: ${bJg} fecha o cerco pelas costas e garante o abate.`
+          },
+          {
+            id: "top_macro_trade_crossmap",
+            icon: "🏹",
+            zone: "bot",
+            zoneLabel: "🏹 ROTA INFERIOR",
+            name: `Troca de Mapa: Forçar Objetivo Rápido no Lado Oposto`,
+            complexity: "complex",
+            complexityLabel: "🔴 Troca Agressiva",
+            probability: probShoveT2,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: `Torre / Dragão no Bot (+500g) enquanto o rival perde tempo no Top`,
+            failureConsequence: `O rival derruba a torre no topo antes de sua equipe concluir o bot`,
+            desc: `Ignorar o avanço rival no topo e acelerar 4 ou 5 membros no lado inferior para cobrar uma estrutura maior.`
+          }
+        ]
+      };
+    }
 
     if (type === "top_lane") {
       const isEarly = phase === "early";
@@ -5611,6 +5904,337 @@ export class MatchSimulator {
       }
     }
 
+    if (choiceId === "jg_camp_top") {
+      this.blueJungleCampLane = "top";
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop && rTop) {
+          this._recordKill("blue", "red", "top", "top", "Gank Focado no Top", `🌲 FOCO NO TOPO! ${bJg?.name || 'Caçador'} colapsou no topo e alimentou ${bTop.name}, abatendo ${rTop.name}!`);
+        }
+        this._awardTeamGold("blue", 400);
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 18, false, 1.3, "top");
+        this.blueMvpRole = "top";
+        if (bTop) bTop.isMvp = true;
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Caçador fixou prioridade no Topo! ${bTop?.name || 'Top'} passa a receber assistência contínua e foco para carregar!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "PLANO NO TOPO EXECUTADO COM SUCESSO!",
+          subtitle: `Foco em ${bTop?.name || 'Top Laner'} Estabelecido (${prob}% chance)`,
+          text: `Seu caçador aplicou o primeiro gank com precisão, conquistou o abate para ${bTop?.name || 'Top Laner'} (+400g) e cravou o topo como rota prioritária!`
+        };
+      } else {
+        this.blueMvpRole = "top";
+        if (bTop) bTop.isMvp = true;
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 15);
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Caçador iniciou foco no Topo, forçando o flash de ${rTop?.name || 'Top Rival'}.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "PLANO INICIADO NO TOPO",
+          subtitle: `Flash Rival Queimado (${prob}% chance)`,
+          text: `${rTop?.name || 'O rival'} queimou o feitiço de fuga sob a torre. A rota continuará sob foco e vigilância do seu caçador!`
+        };
+      }
+    }
+
+    if (choiceId === "jg_camp_mid") {
+      this.blueJungleCampLane = "mid";
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        if (bMid && rMid) {
+          this._recordKill("blue", "red", "mid", "mid", "Gank Focado no Mid", `🌲 CONTROLE CENTRAL! ${bJg?.name || 'Caçador'} emboscou o meio e habilitou ${bMid.name}, abatendo ${rMid.name}!`);
+        }
+        this._awardTeamGold("blue", 400);
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this.blueMvpRole = "mid";
+        if (bMid) bMid.isMvp = true;
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Caçador estabeleceu eixo no Meio! ${bMid?.name || 'Mid'} recebe controle de rio e rotações prioritárias!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "CONTROLE DA ROTA CENTRAL CONQUISTADO!",
+          subtitle: `Foco em ${bMid?.name || 'Mid Laner'} Estabelecido (${prob}% chance)`,
+          text: `Gank letal no mid! ${bMid?.name || 'Mid Laner'} recebeu o abate (+400g) e agora ditará as rotações para ambos os lados do mapa!`
+        };
+      } else {
+        this.blueMvpRole = "mid";
+        if (bMid) bMid.isMvp = true;
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 15);
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Caçador colocou pressão no Meio e assumiu o controle das sentinelas do rio.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "PRESSÃO NO MID ESTABELECIDA",
+          subtitle: `Rio Dominado (${prob}% chance)`,
+          text: `${rMid?.name || 'O mid rival'} recuou assustado e perdeu a visão do rio. ${bMid?.name || 'Mid Laner'} assume a rédea dos movimentos!`
+        };
+      }
+    }
+
+    if (choiceId === "jg_camp_bot") {
+      this.blueJungleCampLane = "bot";
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        if (bAdc && rAdc) {
+          this._recordKill("blue", "red", "adc", "adc", "Gank Focado no Bot", `🏹 TRIÂNGULO NO BOT! ${bJg?.name || 'Caçador'} colapsou 3v2 na rota inferior e concedeu abates a ${bAdc.name}!`);
+        }
+        this._awardTeamGold("blue", 500);
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 40);
+        this.lanePressure = Math.min(100, this.lanePressure + 15);
+        this._damageNextStructure("blue", this.redStructures, 20, false, 1.3, "bot");
+        this.blueMvpRole = "adc";
+        if (bAdc) bAdc.isMvp = true;
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Foco total na Bot Lane! ${bAdc?.name || 'Atirador'} recebe toda a economia para ser o Hiper-Carregador!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "BOT LANE ALIMENTADA COM SUCESSO!",
+          subtitle: `Foco em ${bAdc?.name || 'Atirador'} Estabelecido (${prob}% chance)`,
+          text: `Colapso perfeito 3v2! ${bAdc?.name || 'Atirador'} garantiu abates e barricadas (+500g) e ruma ao pico de poder do late game!`
+        };
+      } else {
+        this.blueMvpRole = "adc";
+        if (bAdc) bAdc.isMvp = true;
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 15);
+        this.onEvent({
+          type: "tactical_jg_plan",
+          side: "blue",
+          text: `🌲 PLANO DEFINIDO: Caçador protegeu a Bot Lane e assegurou prioridade no covil do Dragão.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "BLINDAGEM NO BOT INICIADA",
+          subtitle: `Linha Segura (${prob}% chance)`,
+          text: `A bot lane rival recuou defensiva. Sua dupla coletou as ondas com tranquilidade e visão assegurada!`
+        };
+      }
+    }
+
+    // 9. Macro de Rota Lateral Pós-15m (Top Wave Clear & Rotações 5v4)
+    if (choiceId === "top_macro_rotate_5v4") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        const victim = rAdc?.alive ? rAdc : (rMid?.alive ? rMid : rTop);
+        if (bTop && victim) {
+          this._recordKill("blue", "red", "top", victim.role || "adc", "Flanco 5v4 de Push Rápido", `⚡ TEMPO DE MAPA BRILHANTE! ${bTop.name} limpou a rota superior velozmente, desceu flanqueando no rio e explodiu ${victim.name} em luta 5v4!`);
+        }
+        this._awardTeamGold("blue", 550);
+        this.lanePressure = Math.min(100, this.lanePressure + 25);
+        this._applyTeamBuff("blue", { id: "top_tempo_5v4", name: "Tempo de Rotação 5v4", icon: "🌊", bonusCombat: 10, duration: 180 });
+        this.onEvent({
+          type: "skirmish",
+          side: "blue",
+          text: `🌊 VANTAGEM DE PUSH CONVERTIDA: ${bTop?.name || 'Top'} usou a vantagem de avanço de rota, forçou 5v4 no rio e massacrou o CBLOL (+550g)!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "ROTAÇÃO 5v4 NO RIO DEVASTADORA!",
+          subtitle: `Tempo de Mapa Perfeito (+550g) (${prob}% chance)`,
+          text: `Aula magna de macro! Enquanto ${rTop?.name || 'Top Rival'} limpava a onda sob a torre, ${bTop?.name || 'Top Laner'} apareceu pelo flanco do rio e dizimou o time adversário em superioridade 5v4!`
+        };
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `⚠️ A rotação 5v4 no rio foi avistada e o rival conseguiu recuar sem baixas graves.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "ROTAÇÃO CONTIDA",
+          subtitle: `CBLOL Evitou o 5v4 (${prob}% chance)`,
+          text: `O adversário leu a movimentação do Top Laner pelas sentinelas e recuou antes do confronto estourar.`
+        };
+      }
+    }
+
+    if (choiceId === "top_macro_shove_t2") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        this._damageNextStructure("blue", this.redStructures, 40, false, 2.0, "top");
+        this._awardTeamGold("blue", 600);
+        if (bTop) {
+          bTop.goldEarned = (bTop.goldEarned || 500) + 350;
+          bTop.goldCurrent = (bTop.goldCurrent || 0) + 350;
+          bTop.cs = (bTop.cs || 0) + 18;
+        }
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 45);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        this.onEvent({
+          type: "split_push",
+          side: "blue",
+          text: `🏰 CERCO NA T2 DO TOPO! ${bTop?.name || 'Top'} puniu a lentidão rival de limpeza e demoliu a torre T2 lateral (+600g)!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "TORRE T2 DO TOPO DEMOLIDA!",
+          subtitle: `Split Push & Ouro Lateral (+600g) (${prob}% chance)`,
+          text: `Pressão colossal! ${bTop?.name || 'Top Laner'} impôs a superioridade de avanço de rota, pulverizou a torre Tier 2 e embolsou montanha de ouro individual!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 15);
+        return {
+          success: false, roll, probability: prob,
+          title: "CERCO INTERROMPIDO",
+          subtitle: `Cobertura Rival (${prob}% chance)`,
+          text: `O CBLOL deslocou a cobertura a tempo para defender a T2, forçando o recuo cauteloso.`
+        };
+      }
+    }
+
+    if (choiceId === "top_macro_freeze_deny") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop) {
+          bTop.goldEarned = (bTop.goldEarned || 500) + 300;
+          bTop.goldCurrent = (bTop.goldCurrent || 0) + 300;
+          bTop.cs = (bTop.cs || 0) + 16;
+        }
+        this._awardTeamGold("blue", 250);
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 20);
+        this.onEvent({
+          type: "wave_freeze",
+          side: "blue",
+          text: `❄️ CONGELAMENTO LATERAL: ${bTop?.name || 'Top'} congelou a onda e negou 2 levas completas de tropas a ${rTop?.name || 'Top Rival'}!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "CONTROLE DE ONDA LATERAL CIRÚRGICO!",
+          subtitle: `Negação de Tropas (+250g) (${prob}% chance)`,
+          text: `Economia sufocada! ${bTop?.name || 'Top Laner'} congelou a rota perfeitamente, deixando ${rTop?.name || 'Top Rival'} sem recursos enquanto acumulava vantagem de CS e itens!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "ONDA RESETADA",
+          subtitle: `Habilidades de Longo Alcance (${prob}% chance)`,
+          text: `${rTop?.name || 'O rival'} utilizou habilidades de longa distância para quebrar o congelamento e resetar as tropas.`
+        };
+      }
+    }
+
+    if (choiceId === "top_macro_defend_t2") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop) {
+          bTop.goldEarned = (bTop.goldEarned || 500) + 250;
+          bTop.goldCurrent = (bTop.goldCurrent || 0) + 250;
+          bTop.cs = (bTop.cs || 0) + 14;
+        }
+        this.lanePressures.top = 10;
+        this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+        this.onEvent({
+          type: "turret_defense",
+          side: "blue",
+          text: `🛡️ DEFESA DA T2 IMPECÁVEL! ${bTop?.name || 'Top'} limpou a super-onda rival e preservou a estrutura intacta!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "TORRE T2 SALVA COM SUCESSO!",
+          subtitle: `Defesa de Estrutura (+250g) (${prob}% chance)`,
+          text: `Paciência e sangue frio! ${bTop?.name || 'Top Laner'} coletou as tropas sob a torre sem se afobar, salvou a integridade da estrutura e garantiu o ouro para fechar o próximo item!`
+        };
+      } else {
+        this._damageNextStructure("red", this.blueStructures, 15, false, 1.2, "top");
+        return {
+          success: false, roll, probability: prob,
+          title: "DANO RESIDUAL NA T2",
+          subtitle: `Pressão Rival (${prob}% chance)`,
+          text: `${rTop?.name || 'O adversário'} conseguiu lascar alguns golpes na torre T2 antes da onda de tropas ser completamente limpa.`
+        };
+      }
+    }
+
+    if (choiceId === "top_macro_gank_collapse") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop && rTop) {
+          this._recordKill("blue", "red", "top", "top", "Colapso no Splitter", `🌲 EMBOSCADA 2v1 NO TOPO! ${bTop.name} e ${bJg?.name || 'Caçador'} fecharam a pinça e executaram ${rTop.name} overextended!`);
+        }
+        this._awardTeamGold("blue", 500);
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 15);
+        this.onEvent({
+          type: "skirmish",
+          side: "blue",
+          text: `🌲 SHUTDOWN NO SPLITTER RIVAL! Colapso 2v1 puniu ${rTop?.name || 'Top Rival'} e destravou a rota superior (+500g)!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "COLAPSO 2v1 LETAL NO TOPO!",
+          subtitle: `Shutdown no Avanço Rival (+500g) (${prob}% chance)`,
+          text: `Armadilha impecável! ${bTop?.name || 'Top Laner'} e ${bJg?.name || 'Caçador'} fecharam o flanco no top rival ganancioso, conquistaram o shutdown e aliviaram toda a pressão lateral!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "EMBOSCADA DESVIADA",
+          subtitle: `Fuga Rival (${prob}% chance)`,
+          text: `${rTop?.name || 'O rival'} pressentiu o perigo, saltou a parede com habilidade de mobilidade e escapou com vida.`
+        };
+      }
+    }
+
+    if (choiceId === "top_macro_trade_crossmap") {
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        this._damageNextStructure("blue", this.redStructures, 35, false, 1.8, "bot");
+        this._awardTeamGold("blue", 550);
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 40);
+        this.lanePressure = Math.min(100, this.lanePressure + 16);
+        this.onEvent({
+          type: "crossmap_play",
+          side: "blue",
+          text: `🏹 TROCA DE MAPA DE ALTO NÍVEL! Enquanto o rival batia no topo, seu time derreteu a torre inferior e faturou +550g!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "JOGADA CRUZADA DE SUCESSO!",
+          subtitle: `Troca de Torres Opostas (+550g) (${prob}% chance)`,
+          text: `Inteligência estratégica! Em vez de correr atrás do prejuízo no topo, seu quarteto acelerou a rota inferior, demoliu a estrutura rival e equilibrou a corrida do mapa!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "TROCA INCOMPLETA",
+          subtitle: `Defesa Rival Rápida (${prob}% chance)`,
+          text: `O adversário retornou a tempo de defender a rota inferior, limitando o avanço cruzado.`
+        };
+      }
+    }
+
     // Padrão fallback
     return {
       success: isSuccess, roll, probability: prob,
@@ -7142,6 +7766,8 @@ export class MatchSimulator {
         bot: Math.round(this.lanePressures ? this.lanePressures.bot : 0)
       },
       focusedLane: this.focusedLane,
+      blueJungleCampLane: this.blueJungleCampLane,
+      topPushAdvantage: this._calculateTopPushAdvantage(),
       laneMatchups: this.laneMatchups,
       redJungleCampLane: this.redJungleCampLane,
       playerTactics: this.playerTactics,

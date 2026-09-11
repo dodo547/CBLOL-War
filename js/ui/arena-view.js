@@ -773,11 +773,32 @@ export class ArenaView {
       const el = this.containerEl.querySelector(`#pressure-val-${lane}`);
       const badge = this.containerEl.querySelector(`#badge-lane-${lane}`);
       const isFocused = state.focusedLane === lane;
-      if (el) el.textContent = formatPressure(val) + (isFocused ? " 🎯" : "");
+      const isBlueCamped = state.blueJungleCampLane === lane;
+      const isRedCamped = state.redJungleCampLane === lane;
+
+      let suffix = "";
+      if (isFocused) suffix += " 🎯";
+      if (isBlueCamped) suffix += " 🌲";
+      if (isRedCamped) suffix += " 🔴";
+      if (lane === "top" && state.gameSeconds >= 900 && state.topPushAdvantage) {
+        if (state.topPushAdvantage.leader === "blue") suffix += " 🌊";
+        else if (state.topPushAdvantage.leader === "red") suffix += " ⚠️";
+      }
+
+      if (el) el.textContent = formatPressure(val) + suffix;
       if (badge) {
         badge.classList.toggle("blue-push", val > 8);
         badge.classList.toggle("red-push", val < -8);
         badge.classList.toggle("active-focus", isFocused);
+        badge.classList.toggle("blue-camped", isBlueCamped);
+        badge.classList.toggle("red-camped", isRedCamped);
+        let titleTip = `Clique para alternar o foco da equipe e do seu Caçador nesta rota!`;
+        if (isBlueCamped) titleTip += ` (🌲 Foco do Seu Caçador)`;
+        if (isRedCamped) titleTip += ` (⚠️ Alvo do Caçador Rival)`;
+        if (lane === "top" && state.topPushAdvantage && state.gameSeconds >= 900) {
+          titleTip += ` • ${state.topPushAdvantage.desc}`;
+        }
+        badge.title = titleTip;
       }
     };
 
@@ -863,6 +884,9 @@ export class ArenaView {
     const roles = ["top", "jungle", "mid", "adc", "support"];
     const laneMatchups = (fullState && fullState.laneMatchups) || (this.matchSim && this.matchSim.laneMatchups) || {};
     const campedLane = (fullState && fullState.redJungleCampLane) || (this.matchSim && this.matchSim.redJungleCampLane) || null;
+    const blueCampedLane = (fullState && fullState.blueJungleCampLane) || (this.matchSim && this.matchSim.blueJungleCampLane) || null;
+    const topAdv = (fullState && fullState.topPushAdvantage) || (this.matchSim && this.matchSim._calculateTopPushAdvantage && this.matchSim._calculateTopPushAdvantage()) || null;
+    const gameSecs = (fullState && fullState.gameSeconds) || (this.matchSim && this.matchSim.gameSeconds) || 0;
 
     roles.forEach(role => {
       const m = rosterState[role];
@@ -881,12 +905,13 @@ export class ArenaView {
           }
         }
 
-        // Atualiza matchup tags e alerta de foco do caçador rival
+        // Atualiza matchup tags e alerta de foco do caçador rival e aliado
         const slot = row.querySelector(`#matchup-slot-${side}-${role}`);
         if (slot) {
           const laneKey = (role === "adc" || role === "support") ? "bot" : role;
           const matchup = laneMatchups[laneKey];
           const isCamped = (campedLane === laneKey);
+          const isBlueCamped = (blueCampedLane === laneKey);
 
           let badgesHtml = "";
           if (side === "blue") {
@@ -902,9 +927,31 @@ export class ArenaView {
             if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
               badgesHtml += `<span class="camp-target-tag" title="Alvo preferencial do Caçador Rival! Cuidado redobrado ao forçar pressão!">🎯 Marcado</span>`;
             }
+            if (isBlueCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="blue-camp-helper-tag" title="Foco Prioritário do Seu Caçador! Recebe ganks contínuos, cobertura e aceleração de ouro!">🌲 Foco JG</span>`;
+            }
+            if (role === "top" && topAdv && gameSecs >= 900) {
+              if (topAdv.leader === "blue") {
+                badgesHtml += `<span class="push-prio-tag blue" title="${topAdv.desc}">🌊 Push (+${topAdv.score})</span>`;
+              } else if (topAdv.leader === "red") {
+                badgesHtml += `<span class="push-prio-tag red" title="${topAdv.desc}">⚠️ Sob Pressão (${topAdv.score})</span>`;
+              } else {
+                badgesHtml += `<span class="push-prio-tag neutral" title="${topAdv.desc}">⚖️ Push Equilibrado</span>`;
+              }
+            }
           } else if (side === "red") {
             if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
               badgesHtml += `<span class="camp-helper-tag" title="Rota prioritária de gank e emboscada">🌲 Foco Gank</span>`;
+            }
+            if (isBlueCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="blue-camp-threat-tag" title="Rota pressionada pelo Caçador Aliado!">⚠️ Alvo JG Azul</span>`;
+            }
+            if (role === "top" && topAdv && gameSecs >= 900) {
+              if (topAdv.leader === "red") {
+                badgesHtml += `<span class="push-prio-tag red" title="${topAdv.desc}">🌊 Push (+${Math.abs(topAdv.score)})</span>`;
+              } else if (topAdv.leader === "blue") {
+                badgesHtml += `<span class="push-prio-tag blue" title="${topAdv.desc}">⚠️ Preso sob Torre</span>`;
+              }
             }
           }
           if (slot.innerHTML !== badgesHtml) {
