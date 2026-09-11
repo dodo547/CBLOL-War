@@ -14931,7 +14931,7 @@ class ArenaView {
         </g>
 
         <!-- ROTA INFERIOR (BOT): Dourado Solar / Atiradores (#f59e0b) -->
-        <g id="clash-bot" class="minion-clash-wave clash-bot" data-lane="bot" transform="translate(757, 558)" cursor="pointer">
+        <g id="clash-bot" class="minion-clash-wave clash-bot" data-lane="bot" transform="translate(814, 610)" cursor="pointer">
           <circle class="clash-hitbox" r="24" fill="transparent" />
           <circle r="16" fill="#f59e0b" opacity="0.35" class="clash-wave-pulse pulse-bot" />
           <circle r="8.5" fill="#78350f" stroke="#fbbf24" stroke-width="2" class="clash-core core-bot" />
@@ -16751,7 +16751,7 @@ class ArenaView {
         { x: 356, y: 654, name: "blue_t3" }, // 0: Torre T3 Azul
         { x: 484, y: 636, name: "blue_t2" }, // 1: Torre T2 Azul
         { x: 690, y: 656, name: "blue_t1" }, // 2: Torre T1 Azul
-        { x: 757, y: 558, name: "river" },   // 3: Rio / Curva Inferior
+        { x: 814, y: 610, name: "river" },   // 3: Centro Neutro da Rota Bot (Curva do Alcove)
         { x: 864, y: 484, name: "red_t1" },  // 4: Torre T1 Vermelha
         { x: 804, y: 328, name: "red_t2" },  // 5: Torre T2 Vermelha
         { x: 836, y: 222, name: "red_t3" },  // 6: Torre T3 Vermelha
@@ -16813,14 +16813,23 @@ class ArenaView {
       pos = centerIdx - (-p / 100) * (centerIdx - minIdx);
     }
 
-    // Interpolação suave ao longo da polilinha de waypoints
-    const baseIdx = Math.max(0, Math.min(waypoints.length - 2, Math.floor(pos)));
-    const frac = Math.max(0, Math.min(1, pos - baseIdx));
-    const pA = waypoints[baseIdx];
-    const pB = waypoints[baseIdx + 1];
+    // Interpolação de coordenadas:
+    // Na rota inferior (Bot), entre Blue T1 (2.0) e Red T1 (4.0), a rota contorna suavemente
+    // o alcove inferior (Curva Bezier P0=(690,656), P1=(850,650), P2=(864,484)), sem cortar pelo rio.
+    let x, y;
+    if (lane === "bot" && pos >= 2.0 && pos <= 4.0) {
+      const t = (pos - 2.0) / 2.0; // Normalizado em [0, 1]
+      x = (1 - t) * (1 - t) * 690 + 2 * (1 - t) * t * 850 + t * t * 864;
+      y = (1 - t) * (1 - t) * 656 + 2 * (1 - t) * t * 650 + t * t * 484;
+    } else {
+      const baseIdx = Math.max(0, Math.min(waypoints.length - 2, Math.floor(pos)));
+      const frac = Math.max(0, Math.min(1, pos - baseIdx));
+      const pA = waypoints[baseIdx];
+      const pB = waypoints[baseIdx + 1];
 
-    const x = pA.x + (pB.x - pA.x) * frac;
-    const y = pA.y + (pB.y - pA.y) * frac;
+      x = pA.x + (pB.x - pA.x) * frac;
+      y = pA.y + (pB.y - pA.y) * frac;
+    }
 
     return {
       x: Math.round(x),
