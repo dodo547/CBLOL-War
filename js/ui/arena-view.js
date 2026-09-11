@@ -876,44 +876,14 @@ export class ArenaView {
     updatePressureBadge("bot", pressures.bot || 0);
 
     // Movimentação dos pontos de colisão ao longo das rotas do mapa 3D oficial
-    // Top Lane: (216, 208) <-> (268, 136) <-> (660, 92)
-    const clashTop = this.containerEl.querySelector("#clash-top");
-    if (clashTop) {
-      const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
-      let x = 268, y = 136;
-      if (pTop >= 0) {
-        x = 268 + (pTop / 100) * 392;
-        y = 136 - (pTop / 100) * 44;
-      } else {
-        x = 268 - (-pTop / 100) * 52;
-        y = 136 + (-pTop / 100) * 72;
+    // Respeita estritamente as torres vivas: tropas NUNCA passam de uma torre em pé!
+    ["top", "mid", "bot"].forEach(lane => {
+      const clashEl = this.containerEl.querySelector(`#clash-${lane}`);
+      if (clashEl) {
+        const coords = this._getLaneClashPosition(lane, pressures[lane] || 0, state);
+        clashEl.setAttribute("transform", `translate(${coords.x}, ${coords.y})`);
       }
-      clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
-    }
-
-    // Mid Lane: Diagonal (430, 395) <-> (514, 344) <-> (597, 292)
-    const clashMid = this.containerEl.querySelector("#clash-mid");
-    if (clashMid) {
-      const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
-      const x = 514 + (pMid / 100) * 83;
-      const y = 344 - (pMid / 100) * 52;
-      clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
-    }
-
-    // Bot Lane: (326, 654) <-> (757, 558) <-> (842, 492)
-    const clashBot = this.containerEl.querySelector("#clash-bot");
-    if (clashBot) {
-      const pBot = Math.max(-100, Math.min(100, pressures.bot || 0));
-      let x = 757, y = 558;
-      if (pBot >= 0) {
-        x = 757 + (pBot / 100) * 85;
-        y = 558 - (pBot / 100) * 66;
-      } else {
-        x = 757 - (-pBot / 100) * 431;
-        y = 558 + (-pBot / 100) * 96;
-      }
-      clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
-    }
+    });
 
     // Atualiza contadores e status visuais de tropas nas pílulas flutuantes de cada rota
     const clashLanes = ["top", "mid", "bot"];
@@ -2271,6 +2241,114 @@ export class ArenaView {
     this._initItemShopModal();
   }
 
+  _getLaneClashPosition(lane, pressure, state) {
+    const LANE_WAYPOINTS = {
+      top: [
+        { x: 154, y: 464, name: "blue_t3" }, // 0: Torre T3 Azul
+        { x: 198, y: 389, name: "blue_t2" }, // 1: Torre T2 Azul
+        { x: 216, y: 208, name: "blue_t1" }, // 2: Torre T1 Azul
+        { x: 268, y: 136, name: "river" },   // 3: Rio / Choque Neutro
+        { x: 338, y: 84,  name: "red_t1" },  // 4: Torre T1 Vermelha
+        { x: 525, y: 116, name: "red_t2" },  // 5: Torre T2 Vermelha
+        { x: 660, y: 92,  name: "red_t3" },  // 6: Torre T3 Vermelha
+        { x: 692, y: 88,  name: "red_inhib" } // 7: Inibidor Vermelho
+      ],
+      mid: [
+        { x: 322, y: 524, name: "blue_t3" }, // 0: Torre T3 Azul
+        { x: 398, y: 460, name: "blue_t2" }, // 1: Torre T2 Azul
+        { x: 430, y: 395, name: "blue_t1" }, // 2: Torre T1 Azul
+        { x: 514, y: 344, name: "river" },   // 3: Rio / Centro da Rota
+        { x: 597, y: 292, name: "red_t1" },  // 4: Torre T1 Vermelha
+        { x: 626, y: 240, name: "red_t2" },  // 5: Torre T2 Vermelha
+        { x: 692, y: 190, name: "red_t3" },  // 6: Torre T3 Vermelha
+        { x: 718, y: 172, name: "red_inhib" } // 7: Inibidor Vermelho
+      ],
+      bot: [
+        { x: 356, y: 654, name: "blue_t3" }, // 0: Torre T3 Azul
+        { x: 484, y: 636, name: "blue_t2" }, // 1: Torre T2 Azul
+        { x: 690, y: 656, name: "blue_t1" }, // 2: Torre T1 Azul
+        { x: 757, y: 558, name: "river" },   // 3: Rio / Curva Inferior
+        { x: 864, y: 484, name: "red_t1" },  // 4: Torre T1 Vermelha
+        { x: 804, y: 328, name: "red_t2" },  // 5: Torre T2 Vermelha
+        { x: 836, y: 222, name: "red_t3" },  // 6: Torre T3 Vermelha
+        { x: 812, y: 198, name: "red_inhib" } // 7: Inibidor Vermelho
+      ]
+    };
+
+    const waypoints = LANE_WAYPOINTS[lane] || LANE_WAYPOINTS.mid;
+
+    // Helper para verificar se a estrutura está ativa / de pé
+    const isAlive = (structures, structId, tier) => {
+      if (!structures || !Array.isArray(structures)) return true;
+      const s = structures.find(st => st.id === structId || (st.lane === lane && st.tier === tier));
+      return s ? !s.destroyed : true;
+    };
+
+    const blueT1Alive = isAlive(state?.blue?.structures, `${lane}_t1`, 1);
+    const blueT2Alive = isAlive(state?.blue?.structures, `${lane}_t2`, 2);
+    const blueT3Alive = isAlive(state?.blue?.structures, `${lane}_t3`, 3);
+
+    const redT1Alive = isAlive(state?.red?.structures, `${lane}_t1`, 1);
+    const redT2Alive = isAlive(state?.red?.structures, `${lane}_t2`, 2);
+    const redT3Alive = isAlive(state?.red?.structures, `${lane}_t3`, 3);
+
+    // Determina a fronteira máxima de avanço (onde fica a primeira torre inimiga viva)
+    // Red frontier: as tropas azuis NUNCA ultrapassam a primeira torre vermelha de pé!
+    let maxIdx = 3.85; // Default: para em frente à Torre Red T1 (índice 4)
+    if (!redT1Alive) {
+      if (redT2Alive) {
+        maxIdx = 4.85; // Red T1 caiu, avança até a Torre Red T2 (índice 5)
+      } else if (redT3Alive) {
+        maxIdx = 5.85; // Red T1 e T2 caíram, avança até a Torre Red T3 (índice 6)
+      } else {
+        maxIdx = 6.85; // T1, T2 e T3 caíram, avança até o Inibidor
+      }
+    }
+
+    // Blue frontier: as tropas vermelhas NUNCA ultrapassam a primeira torre azul de pé!
+    let minIdx = 2.15; // Default: para em frente à Torre Blue T1 (índice 2)
+    if (!blueT1Alive) {
+      if (blueT2Alive) {
+        minIdx = 1.15; // Blue T1 caiu, recua até a Torre Blue T2 (índice 1)
+      } else if (blueT3Alive) {
+        minIdx = 0.15; // Blue T1 e T2 caíram, recua até a Torre Blue T3 (índice 0)
+      } else {
+        minIdx = -0.15; // T1, T2 e T3 azuis caíram, recua até o Inibidor
+      }
+    }
+
+    const p = Math.max(-100, Math.min(100, pressure || 0));
+    const centerIdx = 3.0; // Ponto neutro / Rio
+
+    let pos = centerIdx;
+    if (p >= 0) {
+      // Avanço Azul em direção ao lado Vermelho
+      pos = centerIdx + (p / 100) * (maxIdx - centerIdx);
+    } else {
+      // Avanço Vermelho em direção ao lado Azul
+      pos = centerIdx - (-p / 100) * (centerIdx - minIdx);
+    }
+
+    // Interpolação suave ao longo da polilinha de waypoints
+    const baseIdx = Math.max(0, Math.min(waypoints.length - 2, Math.floor(pos)));
+    const frac = Math.max(0, Math.min(1, pos - baseIdx));
+    const pA = waypoints[baseIdx];
+    const pB = waypoints[baseIdx + 1];
+
+    const x = pA.x + (pB.x - pA.x) * frac;
+    const y = pA.y + (pB.y - pA.y) * frac;
+
+    return {
+      x: Math.round(x),
+      y: Math.round(y),
+      pos,
+      maxIdx,
+      minIdx,
+      targetEnemyTower: redT1Alive ? "T1" : (redT2Alive ? "T2" : (redT3Alive ? "T3" : "Inibidor")),
+      targetAllyTower: blueT1Alive ? "T1" : (blueT2Alive ? "T2" : (blueT3Alive ? "T3" : "Inibidor"))
+    };
+  }
+
   _getLaneWaveData(lane, pressure, gameSeconds, state) {
     const isCannonWave = (gameSeconds < 900 && Math.floor(gameSeconds / 30) % 3 === 0) ||
                          (gameSeconds >= 900 && gameSeconds < 1500 && Math.floor(gameSeconds / 30) % 2 === 0) ||
@@ -2309,20 +2387,38 @@ export class ArenaView {
     const redMelee = Math.min(3, Math.max(1, Math.floor((redTotal - redCannon - redSuperCount) * 0.5)));
     const redCasters = Math.max(0, redTotal - redMelee - redCannon - redSuperCount);
 
+    // Identifica dinamicamente a torre alvo do confronto com base nas estruturas
+    const isAlive = (structures, structId, tier) => {
+      if (!structures || !Array.isArray(structures)) return true;
+      const s = structures.find(st => st.id === structId || (st.lane === lane && st.tier === tier));
+      return s ? !s.destroyed : true;
+    };
+
+    const redT1Alive = isAlive(state?.red?.structures, `${lane}_t1`, 1);
+    const redT2Alive = isAlive(state?.red?.structures, `${lane}_t2`, 2);
+    const redT3Alive = isAlive(state?.red?.structures, `${lane}_t3`, 3);
+
+    const blueT1Alive = isAlive(state?.blue?.structures, `${lane}_t1`, 1);
+    const blueT2Alive = isAlive(state?.blue?.structures, `${lane}_t2`, 2);
+    const blueT3Alive = isAlive(state?.blue?.structures, `${lane}_t3`, 3);
+
+    const targetRedStr = redT1Alive ? "Torre T1" : (redT2Alive ? "Torre T2" : (redT3Alive ? "Torre T3" : "Inibidor"));
+    const targetBlueStr = blueT1Alive ? "sua Torre T1" : (blueT2Alive ? "sua Torre T2" : (blueT3Alive ? "sua Torre T3" : "seu Inibidor"));
+
     let waveStatus = "⚖️ Onda Equilibrada (Freeze)";
     let waveDesc = "As tropas estão se enfrentando no meio da rota com forças proporcionais.";
     if (p >= 50) {
-      waveStatus = "🔥 Onda Gigante Batendo na Torre!";
-      waveDesc = `A tropa azul acumulou ${blueTotal} minions e está castigando a estrutura adversária!`;
+      waveStatus = `🔥 Onda Gigante Batendo na ${targetRedStr}!`;
+      waveDesc = `A tropa azul acumulou ${blueTotal} minions e está colidindo contra a ${targetRedStr} adversária!`;
     } else if (p >= 20) {
       waveStatus = "🌊 Slow Push Aliado (+Vantagem Numérica)";
-      waveDesc = `Sua equipe tem superioridade de tropas (+${blueTotal - redTotal}) avançando a rota.`;
+      waveDesc = `Sua equipe tem superioridade de tropas (+${blueTotal - redTotal}) avançando em direção à ${targetRedStr}.`;
     } else if (p <= -50) {
-      waveStatus = "⚠️ Onda Inimiga Quebrando sob a Torre (Crash)";
-      waveDesc = `O time vermelho acumulou ${redTotal} tropas e está ameaçando a sua torre!`;
+      waveStatus = `⚠️ Onda Inimiga Quebrando sob ${targetBlueStr} (Crash)`;
+      waveDesc = `O time vermelho acumulou ${redTotal} tropas e está ameaçando a ${targetBlueStr}!`;
     } else if (p <= -20) {
       waveStatus = "⚠️ Onda Inimiga Avançando (Sob Pressão)";
-      waveDesc = `O time rival tem superioridade de tropas (+${redTotal - blueTotal}) empurrando em sua direção.`;
+      waveDesc = `O time rival tem superioridade de tropas (+${redTotal - blueTotal}) empurrando em direção à ${targetBlueStr}.`;
     }
 
     const laneThemes = {
