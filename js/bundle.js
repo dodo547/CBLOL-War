@@ -5787,6 +5787,184 @@ class MatchSimulator {
     });
   }
 
+  _executeHeraldCharge(attackerSide, preferredLane = null, options = {}) {
+    const defenderSide = attackerSide === "blue" ? "red" : "blue";
+    const targetStructures = defenderSide === "red" ? this.redStructures : this.blueStructures;
+    
+    // Rota alvo: prioriza preferredLane, depois focusedLane, ou a menor T1 disponível
+    let lane = preferredLane;
+    if (!lane) {
+      if (this.focusedLane && targetStructures.some(s => s.lane === this.focusedLane && s.tier === 1 && !s.destroyed)) {
+        lane = this.focusedLane;
+      } else {
+        const activeT1s = targetStructures.filter(s => s.tier === 1 && !s.destroyed);
+        if (activeT1s.length > 0) {
+          const midT1 = activeT1s.find(s => s.lane === "mid");
+          if (midT1) {
+            lane = "mid";
+          } else {
+            activeT1s.sort((a, b) => a.currentHp - b.currentHp);
+            lane = activeT1s[0].lane;
+          }
+        } else {
+          lane = "mid";
+        }
+      }
+    }
+
+    const target = this._getCurrentTargetStructure(targetStructures, lane);
+    if (!target) return null;
+
+    const attackerTeam = attackerSide === "blue" ? this.blueTeam : this.redTeam;
+    const laneLabel = { top: "Rota Superior", mid: "Rota do Meio", bot: "Rota Inferior" }[lane] || "Rota";
+
+    // 1. Invocação do Olho do Arauto no mapa
+    this.onEvent({
+      type: "herald_summon",
+      side: attackerSide,
+      icon: "👁️",
+      lane: lane,
+      text: `👁️ INVOCOU O ARAUTO! ${attackerTeam.name} libertou o Olho do Arauto na ${laneLabel}! O monstro prepara uma investida colossal contra a ${target.name}!`,
+      time: this._formatTime()
+    });
+
+    // 2. Cálculo do Dano da Cabeçada (Dano Verdadeiro Massivo: 1800-2200 HP, ou 850-1150 se mitigado)
+    let chargeDamage;
+    if (options.absorbed) {
+      chargeDamage = Math.floor(850 + Math.random() * 300);
+    } else if (options.customDamage) {
+      chargeDamage = options.customDamage;
+    } else {
+      chargeDamage = Math.floor(1800 + Math.random() * 400);
+    }
+
+    target.currentHp = Math.max(0, target.currentHp - chargeDamage);
+
+    // 3. Barricadas destruídas pelo impacto (válidas antes de 14:00 na T1)
+    let platesDestroyed = 0;
+    let plateGoldAwarded = 0;
+    if (this.gameSeconds < 840 && target.tier === 1 && target.plates > 0) {
+      const hpPerPlate = target.maxHp / 5;
+      const expectedPlates = Math.max(0, Math.ceil(target.currentHp / hpPerPlate));
+      if (expectedPlates < target.plates) {
+        platesDestroyed = target.plates - expectedPlates;
+        target.plates = expectedPlates;
+        plateGoldAwarded = platesDestroyed * 125;
+        this._awardTeamGold(attackerSide, plateGoldAwarded);
+      }
+    }
+
+    // 4. Alteração de pressão da rota
+    const pressureShift = options.absorbed ? 15 : 35;
+    if (attackerSide === "blue") {
+      this.lanePressure = Math.min(100, this.lanePressure + pressureShift);
+      if (this.lanePressures && this.lanePressures[lane] !== undefined) {
+        this.lanePressures[lane] = Math.min(100, this.lanePressures[lane] + pressureShift);
+      }
+    } else {
+      this.lanePressure = Math.max(-100, this.lanePressure - pressureShift);
+      if (this.lanePressures && this.lanePressures[lane] !== undefined) {
+        this.lanePressures[lane] = Math.max(-100, this.lanePressures[lane] - pressureShift);
+      }
+    }
+
+    // 5. Evento de impacto da cabeçada
+    let chargeDesc = "";
+    if (options.absorbed) {
+      chargeDesc = `🛡️ DEFESA SOB A TORRE! O Arauto investiu contra a ${target.name}, mas a contenção defensiva absorveu o impacto (-${chargeDamage} HP)!`;
+    } else if (platesDestroyed > 0) {
+      chargeDesc = `👁️💥 CABEÇADA COLOSSAL DO ARAUTO! O Arauto investiu e estilhaçou ${platesDestroyed} BARRICADA(S) da ${target.name} (+${plateGoldAwarded}g) com ${chargeDamage} de dano real!`;
+    } else {
+      chargeDesc = `👁️💥 CABEÇADA DEVASTADORA DO ARAUTO! O monstro atingiu em cheio a ${target.name} causando ${chargeDamage} de dano verdadeiro!`;
+    }
+
+    this.onEvent({
+      type: "herald_charge",
+      side: attackerSide,
+      icon: "👁️💥",
+      lane: lane,
+      damage: chargeDamage,
+      platesDestroyed: platesDestroyed,
+      structureId: target.id,
+      text: chargeDesc,
+      time: this._formatTime()
+    });
+
+    // Notifica acerto na estrutura
+    this.onStructureHit(defenderSide, target.id, target.currentHp, target.maxHp);
+
+    // 6. Queda da torre se HP zerar
+    let towerDestroyed = false;
+    let firstBrickAwarded = false;
+    if (target.currentHp <= 0 && !target.destroyed) {
+      target.destroyed = true;
+      towerDestroyed = true;
+      let bountyBonus = 0;
+      if (attackerSide === "blue" && this.objectiveBountiesActive && target.id !== "nexus") {
+        bountyBonus = 300;
+        this.onEvent({
+          type: "objective_bounty",
+          side: "blue",
+          text: `🎯 RECOMPENSA DE OBJETIVO COLETADA! A ${target.name} rendeu +300 Ouro Global de Virada!`,
+          time: this._formatTime()
+        });
+      }
+      const attackerScore = attackerSide === "blue" ? this.blueScore : this.redScore;
+      attackerScore.gold += (target.goldValue + bountyBonus);
+
+      if (target.tier === "inhib") {
+        attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
+      } else if (target.id !== "nexus") {
+        attackerScore.towers = (attackerScore.towers || 0) + 1;
+      }
+
+      const attackerRosterObj = attackerSide === "blue" ? this.blueRosterState : this.redRosterState;
+      const aliveAttackers = Object.values(attackerRosterObj).filter(c => c.alive);
+      const splitTurretGold = Math.round((target.goldValue + bountyBonus) / Math.max(1, aliveAttackers.length));
+      aliveAttackers.forEach(c => {
+        c.goldEarned = (c.goldEarned || 500) + splitTurretGold;
+        c.turrets = (c.turrets || 0) + 1;
+      });
+
+      this.onStructureDestroyed(defenderSide, target.id);
+
+      const firstBrick = (target.tier === 1 && !this._firstBrickGiven);
+      if (firstBrick) {
+        this._firstBrickGiven = true;
+        firstBrickAwarded = true;
+        attackerScore.gold += 250;
+        const splitBrick = Math.round(250 / Math.max(1, aliveAttackers.length));
+        aliveAttackers.forEach(c => {
+          c.goldEarned = (c.goldEarned || 500) + splitBrick;
+        });
+        this.onEvent({
+          type: "tower_destroyed",
+          side: attackerSide,
+          text: `🏰 PRIMEIRA TORRE DO JOGO (FIRST BRICK)! A ${target.name} foi DERRUBADA pela cabeçada do Arauto! (+250 Ouro Bônus)`,
+          time: this._formatTime()
+        });
+      } else {
+        this.onEvent({
+          type: "tower_destroyed",
+          side: attackerSide,
+          text: `🏰 A ${target.name} foi DESTRUÍDA pela investida devastadora do Arauto!`,
+          time: this._formatTime()
+        });
+      }
+      this._syncTeamGold();
+    }
+
+    return {
+      targetId: target.id,
+      targetName: target.name,
+      damage: chargeDamage,
+      platesDestroyed,
+      plateGoldAwarded,
+      destroyed: towerDestroyed,
+      firstBrick: firstBrickAwarded
+    };
+  }
+
   _formatCustomTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -13105,8 +13283,6 @@ class MatchSimulator {
         }
         this.blueScore.heralds = (this.blueScore.heralds || 0) + 1;
         this._awardTeamGold("blue", (350 + bountyGold));
-        this.lanePressure = Math.min(100, this.lanePressure + 28);
-        this._damageNextStructure("blue", this.redStructures, 50, false, 3.0);
         this._applyTeamBuff("blue", {
           id: "herald_buff",
           name: "Olho do Arauto",
@@ -13117,6 +13293,8 @@ class MatchSimulator {
 
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", blueAliveRoles[0] || "top", redAliveRoles[0]);
 
+        const chargeResult = this._executeHeraldCharge("blue", "top");
+
         this.onEvent({
           type: "herald",
           side: "blue",
@@ -13124,19 +13302,20 @@ class MatchSimulator {
           time: this._formatTime()
         });
 
+        const platesMsg = (chargeResult && chargeResult.platesDestroyed > 0) ? ` (${chargeResult.platesDestroyed} barricadas derrubadas)` : "";
+        const towerMsg = (chargeResult && chargeResult.destroyed) ? " A torre inimiga foi ao chão!" : "";
+
         return {
           success: true,
           roll,
           probability: prob,
           title: "ARAUTO DO VALE GARANTIDO!",
           subtitle: `Domínio Superior (${prob}% chance)`,
-          text: "Sua equipe venceu o duelo no rio superior, abateu o adversário e soltou a cabeçada do Arauto nas barricadas!"
+          text: `Sua equipe venceu o duelo no rio superior, abateu o adversário e soltou o Olho do Arauto! A cabeçada causou ${chargeResult ? chargeResult.damage : 2000} de dano real${platesMsg}.${towerMsg}`
         };
       } else {
         this.redScore.heralds = (this.redScore.heralds || 0) + 1;
         this._awardTeamGold("red", 150);
-        this.lanePressure = Math.max(-100, this.lanePressure - 30);
-        this._damageNextStructure("red", this.blueStructures, 35, false, 1.4);
         this._applyTeamBuff("red", {
           id: "herald_buff",
           name: "Olho do Arauto",
@@ -13147,6 +13326,8 @@ class MatchSimulator {
 
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "top", blueAliveRoles[0]);
 
+        const chargeResult = this._executeHeraldCharge("red", "top");
+
         this.onEvent({
           type: "herald",
           side: "red",
@@ -13154,17 +13335,26 @@ class MatchSimulator {
           time: this._formatTime()
         });
 
+        const platesMsg = (chargeResult && chargeResult.platesDestroyed > 0) ? ` (-${chargeResult.platesDestroyed} barricadas)` : "";
+
         return {
           success: false,
           roll,
           probability: prob,
           title: "ARAUTO CEDIDO",
           subtitle: `CBLOL Venceu o Rio (${prob}% chance)`,
-          text: "O CBLOL levou a melhor na disputa do rio superior e utilizou a investida do monstro para derrubar defesas da sua torre."
+          text: `O CBLOL levou a melhor na disputa do rio superior e utilizou a investida do Arauto para infligir ${chargeResult ? chargeResult.damage : 2000} de dano${platesMsg} na sua torre.`
         };
       }
     } else if (choiceId === "dive_bot") {
       this.redScore.heralds = (this.redScore.heralds || 0) + 1;
+      this._applyTeamBuff("red", {
+        id: "herald_buff",
+        name: "Olho do Arauto",
+        icon: "👁️",
+        bonusSiege: 0.35,
+        duration: 120
+      });
       if (isSuccess) {
         let bountyGold = 0;
         if (this.objectiveBountiesActive) {
@@ -13177,8 +13367,11 @@ class MatchSimulator {
           });
         }
         this._awardTeamGold("red", 150);
-        // Destrói a Primeira Torre (T1) vermelha instantaneamente garantindo a promessa de escolha
-        this._destroyCurrentStructure("blue", this.redStructures, 250 + bountyGold);
+        // Red usa o Arauto no Topo enquanto Azul mergulha no Bot
+        const redCharge = this._executeHeraldCharge("red", "top");
+
+        // Destrói a Primeira Torre (T1) vermelha da rota inferior
+        this._destroyCurrentStructure("blue", this.redStructures, 250 + bountyGold, "bot");
         this.lanePressure = Math.min(100, this.lanePressure + 35);
 
         const redAdc = "adc";
@@ -13203,12 +13396,11 @@ class MatchSimulator {
           probability: prob,
           title: "DIVE DEVASTADOR NA BOT LANE!",
           subtitle: `Primeira Torre Garantida (${prob}% chance)`,
-          text: "Enquanto o rival perdia tempo no Arauto, seu time desceu 4 homens na bot lane, abateu o Atirador e o Suporte adversários e levou a torre!"
+          text: "Enquanto o rival perdia tempo soltando o Arauto no top, seu time desceu 4 homens na bot lane, abateu o Atirador e o Suporte adversários e levou a torre!"
         };
       } else {
         this._awardTeamGold("red", 200);
-        this.lanePressure = Math.max(-100, this.lanePressure - 35);
-        this._damageNextStructure("red", this.blueStructures, 40, false, 1.5);
+        const redCharge = this._executeHeraldCharge("red", "bot");
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Tiro de Torre", `🔴 O dive foi punido pela torre defensiva!`);
         if (blueAliveRoles.length > 1) this._recordKill("red", "blue", redAliveRoles[1] || "adc", blueAliveRoles[1], "Contra-Ataque sob a Torre");
         return {
@@ -13217,7 +13409,7 @@ class MatchSimulator {
           probability: prob,
           title: "DIVE DESASTROSO",
           subtitle: `Punição sob a Torre (${prob}% chance)`,
-          text: "A torre causou dano massivo aos invasores e o CBLOL virou a luta com 2 abates, aproveitando o Arauto para avançar nas rotas."
+          text: "A torre causou dano massivo aos invasores e o CBLOL virou a luta com 2 abates, aproveitando a investida do Arauto para destroçar defesas."
         };
       }
     } else if (choiceId === "herald_dive_mid") {
@@ -13234,8 +13426,6 @@ class MatchSimulator {
         }
         this.blueScore.heralds = (this.blueScore.heralds || 0) + 1;
         this._awardTeamGold("blue", (400 + bountyGold));
-        this.lanePressure = Math.min(100, this.lanePressure + 40);
-        this._damageNextStructure("blue", this.redStructures, 65, false, 3.0);
         this._applyTeamBuff("blue", {
           id: "herald_buff",
           name: "Olho do Arauto",
@@ -13249,6 +13439,9 @@ class MatchSimulator {
           this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redMid, "Dive Brutal no Mid");
         }
 
+        // Cabeçada focada no Mid
+        const chargeResult = this._executeHeraldCharge("blue", "mid");
+
         this.onEvent({
           type: "herald",
           side: "blue",
@@ -13256,25 +13449,35 @@ class MatchSimulator {
           time: this._formatTime()
         });
 
+        const platesMsg = (chargeResult && chargeResult.platesDestroyed > 0) ? ` com ${chargeResult.platesDestroyed} barricadas esmagadas` : "";
+
         return {
           success: true,
           roll,
           probability: prob,
           title: "ARAUTO & DIVE DEVASTADOR NO MID!",
           subtitle: `Domínio Total da Rota Central (${prob}% chance)`,
-          text: "Sua equipe pegou o Arauto e marchou direto para o meio, abatendo o Mid laner sob a torre e soltando a cabeçada colossal!"
+          text: `Sua equipe pegou o Arauto e marchou direto para o meio, abatendo o Mid laner sob a torre e soltando a cabeçada colossal (${chargeResult ? chargeResult.damage : 2000} dano${platesMsg})!`
         };
       } else {
+        this.redScore.heralds = (this.redScore.heralds || 0) + 1;
         this._awardTeamGold("red", 200);
-        this.lanePressure = Math.max(-100, this.lanePressure - 25);
+        this._applyTeamBuff("red", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Defesa de Torre");
+        const redCharge = this._executeHeraldCharge("red", "mid");
         return {
           success: false,
           roll,
           probability: prob,
           title: "DIVE NO MID FRUSTRADO",
           subtitle: `Torre Defendida (${prob}% chance)`,
-          text: "O Mid inimigo usou o desarme sob a torre, resistiu ao dive e forçou o recuo da sua equipe."
+          text: "O Mid inimigo usou o desarme sob a torre, resistiu ao dive e o CBLOL virou invocando o Arauto na rota central."
         };
       }
     } else if (choiceId === "bush_trap") {
@@ -13291,33 +13494,54 @@ class MatchSimulator {
         }
         this.blueScore.heralds = (this.blueScore.heralds || 0) + 1;
         this._awardTeamGold("blue", (150 + bountyGold));
+        this._applyTeamBuff("blue", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0], "Emboscada no Mato do Arauto");
-        this._damageNextStructure("blue", this.redStructures, 25, false, 1.3);
+        const chargeResult = this._executeHeraldCharge("blue", "top");
         return {
           success: true,
           roll,
           probability: prob,
           title: "ARMADILHA NO MATO PERFEITA!",
           subtitle: `Emboscada Fulminante (${prob}% chance)`,
-          text: "O Caçador inimigo veio fazer o Arauto sozinho e caiu direto no mato do rio! Abate limpo e monstro garantido!"
+          text: "O Caçador inimigo veio fazer o Arauto sozinho e caiu direto no mato do rio! Abate limpo, monstro garantido e investida nas barricadas rivais!"
         };
       } else {
         this.redScore.heralds = (this.redScore.heralds || 0) + 1;
         this._awardTeamGold("red", 150);
-        this.lanePressure = Math.max(-100, this.lanePressure - 30);
-        this._damageNextStructure("red", this.blueStructures, 35, false, 1.4);
+        this._applyTeamBuff("red", {
+          id: "herald_buff",
+          name: "Olho do Arauto",
+          icon: "👁️",
+          bonusSiege: 0.35,
+          duration: 120
+        });
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0], "Cercado no Mato");
+        const chargeResult = this._executeHeraldCharge("red", "top");
         return {
           success: false,
           roll,
           probability: prob,
           title: "ARMADILHA REVELADA",
           subtitle: `CBLOL Antecipou (${prob}% chance)`,
-          text: "Uma sentinela revelou a emboscada: o time adversário cercou o arbusto, eliminou um aliado e garantiu o Arauto."
+          text: "Uma sentinela revelou a emboscada: o time adversário cercou o arbusto, eliminou um aliado e soltou a cabeçada do Arauto nas suas estruturas."
         };
       }
     } else {
       // vision_control / cross_trade_herald
+      this.redScore.heralds = (this.redScore.heralds || 0) + 1;
+      this._applyTeamBuff("red", {
+        id: "herald_buff",
+        name: "Olho do Arauto",
+        icon: "👁️",
+        bonusSiege: 0.35,
+        duration: 120
+      });
       if (isSuccess) {
         let bountyGold = 0;
         if (this.objectiveBountiesActive) {
@@ -13331,10 +13555,12 @@ class MatchSimulator {
         }
         this._awardTeamGold("red", 150);
         this._awardTeamGold("blue", (150 + bountyGold));
+        // Absorção defensiva atenua a cabeçada
+        const chargeResult = this._executeHeraldCharge("red", "top", { absorbed: true });
         this.onEvent({
           type: "skirmish",
           side: "blue",
-          text: `🛡️ DEFESA SÓLIDA! Seu time absorveu o Arauto sob a torre com maestria sem sofrer dano estrutural!`,
+          text: `🛡️ DEFESA SÓLIDA! Seu time absorveu o Arauto sob a torre com maestria mitigando o impacto!`,
           time: this._formatTime()
         });
         return {
@@ -13344,20 +13570,19 @@ class MatchSimulator {
           title: choiceId === "cross_trade_herald" ? "ABSORÇÃO & FARM DE BARRICADAS" : "ABSORÇÃO DEFENSIVA PERFEITA",
           subtitle: `Defesa sob a Torre (${prob}% chance)`,
           text: choiceId === "cross_trade_herald"
-            ? "Sua equipe concedeu o Arauto deliberadamente, recuou sob a torre e cobrou recursos farmando barricadas na rota oposta!"
-            : "Sua equipe posicionou sentinelas, limpou a investida do Arauto com facilidade e coletou o ouro da onda com total segurança."
+            ? "Sua equipe concedeu o Arauto deliberadamente, recuou sob a torre e conteve a investida, cobrando recursos com segurança!"
+            : "Sua equipe posicionou sentinelas, limpou a investida do Arauto com facilidade e minimizou o dano estrutural."
         };
       } else {
         this._awardTeamGold("red", 150);
-        this.lanePressure = Math.max(-100, this.lanePressure - 20);
-        this._damageNextStructure("red", this.blueStructures, 25, false, 1.2);
+        const chargeResult = this._executeHeraldCharge("red", "top", { absorbed: false });
         return {
           success: false,
           roll,
           probability: prob,
           title: "TORRE PRESSIONADA PELO ARAUTO",
           subtitle: `Dano Estrutural (${prob}% chance)`,
-          text: "A cabeçada do Arauto acertou em cheio as defesas da torre antes das tropas serem limpas (+450g para o CBLOL)."
+          text: `A cabeçada do Arauto acertou em cheio as defesas da torre (${chargeResult ? chargeResult.damage : 2000} dano) antes das tropas serem limpas!`
         };
       }
     }
@@ -13819,8 +14044,8 @@ class MatchSimulator {
     });
   }
 
-  _destroyCurrentStructure(attackerSide, targetStructures, bonusTeamGold = 0) {
-    const target = this._getCurrentTargetStructure(targetStructures);
+  _destroyCurrentStructure(attackerSide, targetStructures, bonusTeamGold = 0, preferredLane = null) {
+    const target = this._getCurrentTargetStructure(targetStructures, preferredLane);
     if (!target) return;
     target.plates = 0;
     target.currentHp = 0;
@@ -17796,7 +18021,8 @@ class ArenaView {
 
         const isSoul = b.id && (b.id.startsWith("dragon_soul") || b.id === "dragon_soul");
         const isElder = b.id === "elder_buff";
-        const extraClass = isSoul ? `dragon-soul-buff soul-${b.soulKey || 'infernal'}` : (isElder ? 'elder-dragon-buff' : '');
+        const isHerald = b.id === "herald_buff";
+        const extraClass = isSoul ? `dragon-soul-buff soul-${b.soulKey || 'infernal'}` : (isElder ? 'elder-dragon-buff' : (isHerald ? 'herald-buff' : ''));
 
         return `<span class="active-buff-pill ${side} ${extraClass}" title="${b.name}: ${tooltip}">${b.icon || '⚡'} ${b.name}${remainingText}</span>`;
       }).join("");
@@ -18333,11 +18559,13 @@ class ArenaView {
       `;
     }
 
-    // 3. OBJETIVOS NEUTROS (Dragão, Barão, Arauto)
-    if (["dragon", "baron", "herald", "elder"].includes(evt.type)) {
-      const icon = evt.type === "baron" ? "👑" : (evt.type === "dragon" || evt.type === "elder" ? "🐲" : "👾");
+    // 3. OBJETIVOS NEUTROS E ARAUTO DO VALE
+    if (["dragon", "baron", "herald", "elder", "herald_summon", "herald_charge"].includes(evt.type)) {
+      const isHeraldCharge = evt.type === "herald_charge";
+      const icon = isHeraldCharge ? "👁️💥" : (evt.type === "baron" ? "👑" : (evt.type === "dragon" || evt.type === "elder" ? "🐲" : (evt.type === "herald_summon" || evt.type === "herald" ? "👁️" : "👾")));
+      const cardClass = isHeraldCharge ? "kfeed-herald-charge" : `kfeed-objective ${evt.type}`;
       return `
-        <div class="kfeed-card kfeed-objective ${side}-side ${evt.type}">
+        <div class="kfeed-card ${cardClass} ${side}-side">
           <span class="kfeed-time">${evt.time || ''}</span>
           <div class="kfeed-highlight-content">
             <span class="kfeed-icon">${icon}</span>
@@ -18374,6 +18602,24 @@ class ArenaView {
     if (evt.type === "skirmish") return; // Filtra ruído sem impacto tático
     const feed = this.containerEl.querySelector("#killfeed-container");
     if (!feed) return;
+
+    // Efeito de impacto e tremor de tela na Cabeçada do Arauto
+    if (evt.type === "herald_charge") {
+      if (this.containerEl) {
+        this.containerEl.classList.add("screen-shake");
+        setTimeout(() => {
+          if (this.containerEl) this.containerEl.classList.remove("screen-shake");
+        }, 600);
+      }
+      if (evt.structureId) {
+        const targetSide = evt.side === "blue" ? "red" : "blue";
+        const targetEl = this.containerEl.querySelector(`#struct-${targetSide}-${evt.structureId}`);
+        if (targetEl) {
+          targetEl.classList.add("herald-impact");
+          setTimeout(() => targetEl.classList.remove("herald-impact"), 800);
+        }
+      }
+    }
 
     // Deduplicação defensiva: impede que o mesmo abate apareça 2x no feed no mesmo segundo
     if (evt.type === "kill" || evt.type === "shutdown") {

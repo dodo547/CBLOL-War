@@ -1099,7 +1099,8 @@ export class ArenaView {
 
         const isSoul = b.id && (b.id.startsWith("dragon_soul") || b.id === "dragon_soul");
         const isElder = b.id === "elder_buff";
-        const extraClass = isSoul ? `dragon-soul-buff soul-${b.soulKey || 'infernal'}` : (isElder ? 'elder-dragon-buff' : '');
+        const isHerald = b.id === "herald_buff";
+        const extraClass = isSoul ? `dragon-soul-buff soul-${b.soulKey || 'infernal'}` : (isElder ? 'elder-dragon-buff' : (isHerald ? 'herald-buff' : ''));
 
         return `<span class="active-buff-pill ${side} ${extraClass}" title="${b.name}: ${tooltip}">${b.icon || '⚡'} ${b.name}${remainingText}</span>`;
       }).join("");
@@ -1636,11 +1637,13 @@ export class ArenaView {
       `;
     }
 
-    // 3. OBJETIVOS NEUTROS (Dragão, Barão, Arauto)
-    if (["dragon", "baron", "herald", "elder"].includes(evt.type)) {
-      const icon = evt.type === "baron" ? "👑" : (evt.type === "dragon" || evt.type === "elder" ? "🐲" : "👾");
+    // 3. OBJETIVOS NEUTROS E ARAUTO DO VALE
+    if (["dragon", "baron", "herald", "elder", "herald_summon", "herald_charge"].includes(evt.type)) {
+      const isHeraldCharge = evt.type === "herald_charge";
+      const icon = isHeraldCharge ? "👁️💥" : (evt.type === "baron" ? "👑" : (evt.type === "dragon" || evt.type === "elder" ? "🐲" : (evt.type === "herald_summon" || evt.type === "herald" ? "👁️" : "👾")));
+      const cardClass = isHeraldCharge ? "kfeed-herald-charge" : `kfeed-objective ${evt.type}`;
       return `
-        <div class="kfeed-card kfeed-objective ${side}-side ${evt.type}">
+        <div class="kfeed-card ${cardClass} ${side}-side">
           <span class="kfeed-time">${evt.time || ''}</span>
           <div class="kfeed-highlight-content">
             <span class="kfeed-icon">${icon}</span>
@@ -1677,6 +1680,24 @@ export class ArenaView {
     if (evt.type === "skirmish") return; // Filtra ruído sem impacto tático
     const feed = this.containerEl.querySelector("#killfeed-container");
     if (!feed) return;
+
+    // Efeito de impacto e tremor de tela na Cabeçada do Arauto
+    if (evt.type === "herald_charge") {
+      if (this.containerEl) {
+        this.containerEl.classList.add("screen-shake");
+        setTimeout(() => {
+          if (this.containerEl) this.containerEl.classList.remove("screen-shake");
+        }, 600);
+      }
+      if (evt.structureId) {
+        const targetSide = evt.side === "blue" ? "red" : "blue";
+        const targetEl = this.containerEl.querySelector(`#struct-${targetSide}-${evt.structureId}`);
+        if (targetEl) {
+          targetEl.classList.add("herald-impact");
+          setTimeout(() => targetEl.classList.remove("herald-impact"), 800);
+        }
+      }
+    }
 
     // Deduplicação defensiva: impede que o mesmo abate apareça 2x no feed no mesmo segundo
     if (evt.type === "kill" || evt.type === "shutdown") {
