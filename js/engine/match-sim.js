@@ -1,6 +1,6 @@
 // Motor Avançado de Simulação: Disputas Decisivas, Pressão de Rota (Momentum), Vantagem Numérica e Pacing Competitivo do CBLOL
 import { getChampionById, calculateTeamStats } from "../data/champions.js";
-import { getRecommendedItemForChampion, LOL_ITEMS } from "../data/items.js";
+import { getRecommendedItemForChampion, getStarterItemForChampion, getNextPurchaseStep, LOL_ITEMS, getItemById } from "../data/items.js";
 import { getPlayerById } from "../data/players.js";
 
 export class MatchSimulator {
@@ -490,6 +490,14 @@ export class MatchSimulator {
       const isSignature = !!(proPlayer && champ && proPlayer.signatureChampions && proPlayer.signatureChampions.includes(champ.id));
       const champResolvedName = champ ? champ.name : (typeof rawChamp === "object" ? (rawChamp.name || rawChamp.id || "Champion") : String(rawChamp));
 
+      const starterItem = getStarterItemForChampion(champ);
+      const startingItems = [];
+      let startingCurrentGold = 500;
+      if (starterItem) {
+        startingItems.push(starterItem);
+        startingCurrentGold = Math.max(0, 500 - (starterItem.cost || 450));
+      }
+
       state[r] = {
         id: champ ? champ.id : (typeof rawChamp === "object" ? (rawChamp.id || "champ") : String(rawChamp)),
         role: r,
@@ -503,7 +511,7 @@ export class MatchSimulator {
         damageDealt: 0,
         damageTaken: 0,
         goldEarned: 500, // Ouro inicial de partida
-        goldCurrent: 500, // Ouro líquido na carteira individual
+        goldCurrent: startingCurrentGold, // Ouro líquido restante após compra inicial (Doran/Pet/Atlas)
         cs: 0,
         csPerMin: 0.0,
         travelingBackUntil: 0, // Tempo de volta da base para a rota
@@ -513,7 +521,7 @@ export class MatchSimulator {
         turrets: 0,
         alive: true,
         respawnAt: 0,
-        items: [] // Itens lendários concluídos
+        items: startingItems // Itens equipados (até 6 slots)
       };
     });
     return state;
@@ -970,7 +978,6 @@ export class MatchSimulator {
         const member = rosterState[role];
         if (!member) return;
         if (!member.items) member.items = [];
-        if (member.items.length >= 4) return;
 
         const champ = getChampionById(member.id);
         const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
@@ -980,20 +987,27 @@ export class MatchSimulator {
         if (!nextItem) return;
 
         member.nextItem = nextItem;
-        const itemCost = nextItem.cost || 3000;
 
-        // Compra quando tem o valor completo na carteira individual (power spike atingido)
-        const canBuyNow = (member.goldCurrent || 0) >= itemCost;
+        // Avalia o próximo passo na árvore de receitas do item
+        const step = getNextPurchaseStep(member.items, nextItem.id, member.goldCurrent || 0);
+        if (!step) return;
 
-        if (canBuyNow) {
-          member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - itemCost);
-          member.items.push(nextItem);
+        if (step.type === "COMBINE") {
+          // Combinação: deduz combineCost e consome componentes
+          member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
+          if (step.consumeItems && step.consumeItems.length > 0) {
+            step.consumeItems.forEach(consumed => {
+              const idx = member.items.findIndex(it => it && it.id === consumed.id);
+              if (idx !== -1) member.items.splice(idx, 1);
+            });
+          }
+          member.items.push(step.item);
 
           // Aplica bônus do item ao time
-          if (nextItem.stats && teamObj.stats) {
-            Object.keys(nextItem.stats).forEach(stat => {
+          if (step.item.stats && teamObj.stats) {
+            Object.keys(step.item.stats).forEach(stat => {
               if (teamObj.stats[stat] !== undefined) {
-                teamObj.stats[stat] += Math.round(nextItem.stats[stat] / 4);
+                teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 4);
               }
             });
           }
@@ -1001,20 +1015,79 @@ export class MatchSimulator {
           this.onItemPurchased({
             side,
             champion: member,
-            item: nextItem
+            item: step.item,
+            isCombined: true
           });
 
           this.onEvent({
             type: "item",
             side,
             championName: member.name,
-            itemName: nextItem.name,
-            text: `🛒 ${member.playerNick || member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) comprou ${nextItem.name} (${itemCost.toLocaleString()}g)!`,
+            itemName: step.item.name,
+            text: `🛒 ${member.playerNick || member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) completou ${step.item.name} (${step.item.cost.toLocaleString()}g)!`,
             time: this._formatTime()
           });
 
-          // Atualiza o próximo item pretendido
+          // Atualiza próximo item da build
           member.nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+        } else if (step.type === "COMPONENT" || step.type === "COMPLETE") {
+          // Se inventário cheio (6 slots), vende item inicial (Doran/Pet/Atlas) para liberar espaço no late game
+          if (member.items.length >= 6) {
+            const starterIdx = member.items.findIndex(it => it && (it.tier === "STARTER" || [1055, 1056, 1054, 1101, 3865].includes(it.id)));
+            if (starterIdx !== -1) {
+              const sold = member.items.splice(starterIdx, 1)[0];
+              const sellVal = Math.round((sold.cost || 400) * 0.4);
+              member.goldCurrent = (member.goldCurrent || 0) + sellVal;
+              this.onEvent({
+                type: "item_sell",
+                side,
+                championName: member.name,
+                text: `💰 ${member.playerNick || member.name} vendeu ${sold.name} (+${sellVal}g) para abrir espaço no inventário!`,
+                time: this._formatTime()
+              });
+            }
+          }
+
+          if (member.items.length < 6) {
+            member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
+            member.items.push(step.item);
+
+            if (step.item.stats && teamObj.stats) {
+              Object.keys(step.item.stats).forEach(stat => {
+                if (teamObj.stats[stat] !== undefined) {
+                  teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 6);
+                }
+              });
+            }
+
+            this.onItemPurchased({
+              side,
+              champion: member,
+              item: step.item,
+              isComponent: step.type === "COMPONENT"
+            });
+
+            if (step.type === "COMPLETE") {
+              this.onEvent({
+                type: "item",
+                side,
+                championName: member.name,
+                itemName: step.item.name,
+                text: `🛒 ${member.playerNick || member.name} comprou ${step.item.name} (${step.cost.toLocaleString()}g)!`,
+                time: this._formatTime()
+              });
+              member.nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+            } else {
+              this.onEvent({
+                type: "item_component",
+                side,
+                championName: member.name,
+                itemName: step.item.name,
+                text: `📦 ${member.playerNick || member.name} comprou ${step.item.name} (${step.cost.toLocaleString()}g) para montar ${nextItem.name}!`,
+                time: this._formatTime()
+              });
+            }
+          }
         }
       });
     };

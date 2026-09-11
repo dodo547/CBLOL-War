@@ -1481,7 +1481,7 @@
   color: #94a3b8;
   letter-spacing: 0.8px;
   font-weight: 700;
-  min-width: 90px;
+  min-width: 132px;
   text-align: center;
 }
 
@@ -4102,3 +4102,699 @@
 .metric-cell .m-val.gold {
   color: #c8aa6e;
 }
+
+/* =========================================================
+   BOTÃO DE ACESSO À LOJA HEXTECH NA BARRA DE CONTROLES
+   ========================================================= */
+.open-shop-btn {
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.22) 0%, rgba(10, 20, 40, 0.9) 100%);
+  border: 1px solid var(--lol-gold-1);
+  color: #f0e6d2;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: var(--lol-font-title, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 0 6px rgba(200, 170, 110, 0.2);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.open-shop-btn:hover {
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.4) 0%, rgba(30, 45, 75, 0.95) 100%);
+  border-color: #ffd700;
+  box-shadow: 0 0 14px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.3);
+  transform: translateY(-1px);
+  color: #ffffff;
+}
+
+/* Indicadores sutis de tier nos slots dos campeões */
+.item-slot-icon.filled.legendary {
+  border-color: #ffd700;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+}
+
+.item-slot-icon.filled.epic {
+  border-color: #c084fc;
+  box-shadow: 0 0 5px rgba(192, 132, 252, 0.35);
+}
+
+.item-slot-icon.filled.boots {
+  border-color: #38bdf8;
+  box-shadow: 0 0 5px rgba(56, 189, 248, 0.3);
+}
+
+.item-slot-icon.filled.starter {
+  border-color: #4ade80;
+}
+
+/* =========================================================
+   MODAL DA LOJA HEXTECH & ÁRVORE DE RECEITAS OFICIAL DO LOL
+   ========================================================= */
+.item-shop-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(1, 10, 19, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 12000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  animation: modalFadeIn 0.22s ease-out forwards;
+}
+
+.item-shop-modal.active {
+  display: flex;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.item-shop-modal-card {
+  background: radial-gradient(circle at top right, rgba(20, 35, 60, 0.98), rgba(9, 20, 40, 0.99));
+  border: 2px solid var(--lol-gold-1);
+  border-radius: 12px;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.9), 0 0 35px rgba(200, 170, 110, 0.2);
+  width: 95vw;
+  max-width: 1180px;
+  height: 88vh;
+  max-height: 850px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Topo do Modal */
+.shop-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, rgba(10, 20, 40, 0.95), rgba(1, 10, 19, 0.95));
+  border-bottom: 1px solid rgba(200, 170, 110, 0.3);
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.shop-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shop-gold-icon {
+  font-size: 26px;
+  background: rgba(200, 170, 110, 0.15);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+}
+
+.shop-modal-title {
+  font-family: var(--lol-font-title, sans-serif);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #f0e6d2;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(200, 170, 110, 0.5);
+}
+
+.shop-modal-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin: 2px 0 0 0;
+}
+
+.shop-modal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.shop-search-wrap {
+  position: relative;
+}
+
+.shop-search-input {
+  background: rgba(1, 10, 19, 0.85);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  border-radius: 6px;
+  padding: 7px 14px;
+  color: #f0e6d2;
+  font-size: 12px;
+  width: 280px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.shop-search-input:focus {
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  width: 320px;
+}
+
+.shop-search-input::placeholder {
+  color: #64748b;
+}
+
+/* Abas de Categorias */
+.shop-categories-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(5, 15, 30, 0.95);
+  border-bottom: 1px solid rgba(200, 170, 110, 0.2);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.shop-categories-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.shop-categories-tabs::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.3);
+  border-radius: 2px;
+}
+
+.shop-category-tab {
+  background: rgba(10, 20, 40, 0.6);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 6px;
+  color: #94a3b8;
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.shop-category-tab:hover {
+  background: rgba(200, 170, 110, 0.15);
+  color: #f0e6d2;
+  border-color: rgba(200, 170, 110, 0.5);
+}
+
+.shop-category-tab.active {
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.3) 0%, rgba(10, 25, 50, 0.9) 100%);
+  border-color: #ffd700;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.25);
+}
+
+.shop-cat-icon {
+  font-size: 13px;
+}
+
+/* Corpo Principal (Catálogo à Esquerda + Inspetor à Direita) */
+.shop-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 430px;
+  flex: 1;
+  overflow: hidden;
+  background: rgba(1, 10, 19, 0.5);
+}
+
+/* Grade de Itens do Catálogo */
+.shop-items-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.shop-items-grid-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shop-items-grid-container::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.3);
+  border-radius: 3px;
+}
+
+.shop-empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #64748b;
+  text-align: center;
+}
+
+.shop-empty-state .empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+/* Card Individual de Item na Grade */
+.shop-item-card {
+  background: rgba(10, 20, 40, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+.shop-item-card:hover {
+  transform: translateY(-2px);
+  background: rgba(15, 30, 60, 0.85);
+  border-color: rgba(200, 170, 110, 0.7);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(200, 170, 110, 0.3);
+}
+
+.shop-item-card.selected {
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.25) 0%, rgba(10, 30, 65, 0.9) 100%);
+  border-color: #ffd700;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.45);
+}
+
+.shop-item-card.tier-legendary {
+  border-color: rgba(255, 215, 0, 0.4);
+}
+
+.shop-item-card.tier-epic {
+  border-color: rgba(192, 132, 252, 0.4);
+}
+
+.shop-item-card.tier-boots {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.shop-card-icon-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(200, 170, 110, 0.4);
+  margin-bottom: 6px;
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+.shop-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.shop-card-tier-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(1, 10, 19, 0.85);
+  font-size: 8px;
+  font-weight: 700;
+  color: #c8aa6e;
+  letter-spacing: 0.5px;
+  padding: 1px 0;
+  text-align: center;
+}
+
+.shop-card-info {
+  width: 100%;
+}
+
+.shop-card-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f0e6d2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+
+.shop-card-cost {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+/* Painel Inspetor à Direita */
+.shop-item-inspector {
+  background: rgba(5, 12, 25, 0.95);
+  border-left: 1px solid rgba(200, 170, 110, 0.25);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.shop-item-inspector::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shop-item-inspector::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.3);
+  border-radius: 3px;
+}
+
+.inspector-placeholder {
+  margin: auto;
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  padding: 30px;
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.2);
+  margin-bottom: 14px;
+}
+
+.inspector-icon-container {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  border: 2px solid var(--lol-gold-1);
+  box-shadow: 0 0 15px rgba(200, 170, 110, 0.4);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.inspector-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.inspector-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(1, 10, 19, 0.9);
+  font-size: 9px;
+  font-weight: 800;
+  color: #ffd700;
+  letter-spacing: 0.5px;
+  text-align: center;
+  padding: 2px 0;
+}
+
+.inspector-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.inspector-title {
+  font-family: var(--lol-font-title, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  color: #f0e6d2;
+  margin: 0 0 5px 0;
+  line-height: 1.2;
+}
+
+.inspector-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-class-pill {
+  background: rgba(30, 50, 80, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.inspector-cost-tag {
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.inspector-combine-cost {
+  color: #cbd5e1;
+  font-size: 11px;
+  background: rgba(10, 25, 50, 0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px dashed rgba(200, 170, 110, 0.3);
+}
+
+.inspector-section {
+  margin-bottom: 14px;
+}
+
+.inspector-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c8aa6e;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.inspector-stat-pill {
+  background: rgba(10, 20, 40, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 5px;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+}
+
+.inspector-stat-pill .stat-icon {
+  font-size: 12px;
+}
+
+.inspector-stat-pill .stat-name {
+  color: #94a3b8;
+  flex: 1;
+}
+
+.inspector-stat-pill .stat-val {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.inspector-no-stats {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.inspector-desc-box {
+  background: rgba(10, 20, 40, 0.5);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+/* Árvore Genealógica de Receitas */
+.recipe-tree-wrapper {
+  background: rgba(3, 8, 18, 0.8);
+  border: 1px solid rgba(200, 170, 110, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.recipe-tree-root-only {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.recipe-tree-note {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.recipe-tree-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.recipe-tree-root-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.recipe-tree-branch-lines {
+  width: 70%;
+  height: 8px;
+  border-left: 2px solid rgba(200, 170, 110, 0.4);
+  border-right: 2px solid rgba(200, 170, 110, 0.4);
+  border-top: 2px solid rgba(200, 170, 110, 0.4);
+  margin-top: -4px;
+}
+
+.recipe-tree-children-row {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.recipe-tree-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-sub-children {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sub-branch-line {
+  width: 60%;
+  height: 6px;
+  border-left: 1px solid rgba(200, 170, 110, 0.3);
+  border-right: 1px solid rgba(200, 170, 110, 0.3);
+  border-top: 1px solid rgba(200, 170, 110, 0.3);
+}
+
+.tree-sub-children-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* Nós da Árvore de Receitas */
+.tree-node-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(10, 20, 40, 0.85);
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: center;
+  max-width: 96px;
+  transition: all 0.2s ease;
+}
+
+.tree-node-item.current-root {
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  background: rgba(20, 40, 75, 0.9);
+  max-width: 180px;
+}
+
+.tree-node-item.clickable {
+  cursor: pointer;
+}
+
+.tree-node-item.clickable:hover {
+  transform: translateY(-2px);
+  border-color: #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+}
+
+.tree-node-item img {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  margin-bottom: 3px;
+}
+
+.tree-node-item.sub-node img {
+  width: 26px;
+  height: 26px;
+}
+
+.tree-node-price {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.tree-node-name {
+  font-size: 9.5px;
+  color: #f0e6d2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.inspector-upgrades-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Responsividade Mobile e Telas Menores */
+@media (max-width: 950px) {
+  .shop-modal-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .shop-item-inspector {
+    border-left: none;
+    border-top: 1px solid rgba(200, 170, 110, 0.25);
+  }
+  .shop-search-input {
+    width: 180px;
+  }
+  .shop-search-input:focus {
+    width: 210px;
+  }
+}
+

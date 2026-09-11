@@ -1,7 +1,6 @@
-// Componente da Arena de Batalha: Simulação de Summoner's Rift com Torres, Inibidores, Nexus e Controle Tático
 import { sound } from "../engine/audio.js";
 import { getChampionById } from "../data/champions.js";
-import { getItemIconUrl } from "../data/items.js";
+import { getItemIconUrl, LOL_ITEMS, getItemById, getItemRecipeTree, ITEM_CATEGORIES } from "../data/items.js";
 
 export class ArenaView {
   constructor({ containerEl, simulator, onMatchFinished }) {
@@ -89,6 +88,9 @@ export class ArenaView {
           </div>
 
           <div class="speed-buttons-group">
+            <button class="speed-btn shop-modal-btn" id="open-shop-modal-btn" title="Abrir Loja Hextech e Árvore de Receitas do LoL" style="background: linear-gradient(135deg, rgba(200, 170, 110, 0.25), rgba(10, 200, 185, 0.25)); border-color: var(--lol-gold-1); color: #f0e6d2; font-weight: 800;">
+              🛒 Loja & Receitas
+            </button>
             <button class="speed-btn ${this.sim.speed === 1 ? 'active' : ''}" data-speed="1">1x</button>
             <button class="speed-btn ${this.sim.speed === 2 ? 'active' : ''}" data-speed="2">2x</button>
             <button class="speed-btn ${this.sim.speed === 4 ? 'active' : ''}" data-speed="4">4x</button>
@@ -229,6 +231,45 @@ export class ArenaView {
           <div class="decision-feedback-banner" id="decision-feedback-banner" style="display: none;">
             <div class="decision-feedback-icon" id="decision-feedback-icon">⚡</div>
             <div class="decision-feedback-text" id="decision-feedback-text">Executando estratégia...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal da Loja Hextech de Itens & Árvore de Receitas Oficial do LoL -->
+      <div class="item-shop-modal" id="item-shop-modal">
+        <div class="item-shop-modal-card">
+          <div class="shop-modal-header">
+            <div class="shop-modal-header-left">
+              <span class="shop-gold-icon">🛒</span>
+              <div>
+                <h2 class="shop-modal-title">LOJA HEXTECH & ÁRVORE DE RECEITAS</h2>
+                <p class="shop-modal-subtitle">Catálogo Oficial de Itens de League of Legends • Patch 14.20</p>
+              </div>
+            </div>
+            <div class="shop-modal-header-right">
+              <div class="shop-search-wrap">
+                <input type="text" id="shop-search-input" class="shop-search-input" placeholder="🔍 Buscar item ou atributo (ex: Gume, Vida, MR)..." />
+              </div>
+              <button type="button" class="decision-modal-close-btn" id="shop-modal-close-btn" title="Fechar Loja">✕</button>
+            </div>
+          </div>
+
+          <!-- Filtro de Categorias em Abas -->
+          <div class="shop-categories-tabs" id="shop-categories-tabs">
+            <!-- Abas geradas dinamicamente com ITEM_CATEGORIES -->
+          </div>
+
+          <!-- Conteúdo Principal da Loja: Catálogo à Esquerda | Inspetor & Árvore de Receitas à Direita -->
+          <div class="shop-modal-body">
+            <!-- Grade de Itens do Catálogo -->
+            <div class="shop-items-grid-container" id="shop-items-grid">
+              <!-- Itens injetados dinamicamente -->
+            </div>
+
+            <!-- Painel Inspetor do Item Selecionado e Árvore Genealógica -->
+            <div class="shop-item-inspector" id="shop-item-inspector">
+              <!-- Detalhes do item e árvore de receita -->
+            </div>
           </div>
         </div>
       </div>
@@ -544,15 +585,19 @@ export class ArenaView {
   }
 
   _renderChampItems(items) {
-    const slots = [0, 1, 2, 3];
+    const slots = [0, 1, 2, 3, 4, 5];
     return `
       <div class="champ-items-tray">
         ${slots.map(idx => {
           const itm = items && items[idx];
           if (itm) {
-            return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+            const recipeInfo = (itm.from && itm.from.length > 0)
+              ? ` • Receita: ${itm.from.map(cId => { const c = getItemById(cId); return c ? c.name : cId; }).join(' + ')}`
+              : '';
+            const tierBadge = itm.tier ? `[${itm.tier}] ` : '';
+            return `<div class="item-slot-icon filled ${itm.tier ? itm.tier.toLowerCase() : ''}" data-item-id="${itm.id}" title="${tierBadge}${itm.name} (${(itm.cost || 0).toLocaleString()}g)\n${itm.description || ''}${recipeInfo} (Clique para ver receita na Loja)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
           }
-          return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
+          return `<div class="item-slot-icon empty" title="Espaço de item (Slot ${idx + 1}/6)"></div>`;
         }).join('')}
       </div>
     `;
@@ -972,13 +1017,17 @@ export class ArenaView {
           const itemKey = m.items.map(it => it ? it.id : '0').join(',');
           if (tray._renderedKey !== itemKey) {
             tray._renderedKey = itemKey;
-            const slots = [0, 1, 2, 3];
+            const slots = [0, 1, 2, 3, 4, 5];
             tray.innerHTML = slots.map(idx => {
               const itm = m.items[idx];
               if (itm) {
-                return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+                const recipeInfo = (itm.from && itm.from.length > 0)
+                  ? ` • Receita: ${itm.from.map(cId => { const c = getItemById(cId); return c ? c.name : cId; }).join(' + ')}`
+                  : '';
+                const tierBadge = itm.tier ? `[${itm.tier}] ` : '';
+                return `<div class="item-slot-icon filled ${itm.tier ? itm.tier.toLowerCase() : ''}" data-item-id="${itm.id}" title="${tierBadge}${itm.name} (${(itm.cost || 0).toLocaleString()}g)\n${itm.description || ''}${recipeInfo} (Clique para ver receita na Loja)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
               }
-              return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
+              return `<div class="item-slot-icon empty" title="Espaço de item (Slot ${idx + 1}/6)"></div>`;
             }).join('');
           }
         }
@@ -2111,6 +2160,383 @@ export class ArenaView {
         });
       }
     });
+
+    // Inicializa o modal da Loja Hextech e Árvore de Receitas
+    this._initItemShopModal();
+  }
+
+  _initItemShopModal() {
+    const modal = this.containerEl.querySelector("#item-shop-modal");
+    if (!modal) return;
+
+    this._activeShopCategory = "all";
+    this._activeShopSearch = "";
+    this._selectedShopItemId = 3031; // Default: Gume do Infinito
+
+    const openBtn = this.containerEl.querySelector("#open-shop-modal-btn");
+    if (openBtn) {
+      openBtn.addEventListener("click", () => {
+        this._openItemShopModal();
+      });
+    }
+
+    const closeBtn = this.containerEl.querySelector("#shop-modal-close-btn");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        this._closeItemShopModal();
+      });
+    }
+
+    // Fecha ao clicar no backdrop (fora do card)
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this._closeItemShopModal();
+      }
+    });
+
+    // Fecha com tecla ESC
+    if (!this._shopEscBound) {
+      this._shopEscBound = true;
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modal.classList.contains("active")) {
+          this._closeItemShopModal();
+        }
+      });
+    }
+
+    // Busca rápida com filtro em tempo real
+    const searchInput = modal.querySelector("#shop-search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        this._activeShopSearch = (e.target.value || "").trim().toLowerCase();
+        this._renderShopItemsGrid();
+      });
+    }
+
+    // Clique em qualquer item nos inventários dos campeões abre o modal com o item inspecionado
+    this.containerEl.addEventListener("click", (e) => {
+      const slot = e.target.closest(".item-slot-icon.filled");
+      if (slot && slot.dataset.itemId) {
+        const itmId = Number(slot.dataset.itemId);
+        if (itmId) {
+          this._openItemShopModal(itmId);
+        }
+      }
+    });
+  }
+
+  _openItemShopModal(selectedItemId = null) {
+    const modal = this.containerEl.querySelector("#item-shop-modal");
+    if (!modal) return;
+    sound.playClick();
+
+    if (selectedItemId && LOL_ITEMS[selectedItemId]) {
+      this._selectedShopItemId = Number(selectedItemId);
+    } else if (!this._selectedShopItemId || !LOL_ITEMS[this._selectedShopItemId]) {
+      this._selectedShopItemId = 3031;
+    }
+
+    this._renderShopCategories();
+    this._renderShopItemsGrid();
+    this._renderShopItemInspector(this._selectedShopItemId);
+
+    modal.classList.add("active");
+  }
+
+  _closeItemShopModal() {
+    const modal = this.containerEl.querySelector("#item-shop-modal");
+    if (modal) modal.classList.remove("active");
+  }
+
+  _renderShopCategories() {
+    const tabsContainer = this.containerEl.querySelector("#shop-categories-tabs");
+    if (!tabsContainer) return;
+
+    tabsContainer.innerHTML = ITEM_CATEGORIES.map(cat => {
+      const isActive = (cat.id === this._activeShopCategory) ? "active" : "";
+      return `<button type="button" class="shop-category-tab ${isActive}" data-cat-id="${cat.id}">
+        <span class="shop-cat-icon">${cat.icon}</span>
+        <span class="shop-cat-name">${cat.name}</span>
+      </button>`;
+    }).join("");
+
+    tabsContainer.querySelectorAll(".shop-category-tab").forEach(tabBtn => {
+      tabBtn.onclick = () => {
+        sound.playClick();
+        tabsContainer.querySelectorAll(".shop-category-tab").forEach(b => b.classList.remove("active"));
+        tabBtn.classList.add("active");
+        this._activeShopCategory = tabBtn.dataset.catId;
+        this._renderShopItemsGrid();
+      };
+    });
+  }
+
+  _renderShopItemsGrid() {
+    const gridContainer = this.containerEl.querySelector("#shop-items-grid");
+    if (!gridContainer) return;
+
+    const allItems = Object.values(LOL_ITEMS);
+    const catDef = ITEM_CATEGORIES.find(c => c.id === this._activeShopCategory) || ITEM_CATEGORIES[0];
+    const search = this._activeShopSearch;
+
+    let filtered = allItems;
+    if (catDef.id !== "all" && catDef.filter) {
+      filtered = filtered.filter(catDef.filter);
+    }
+
+    if (search) {
+      filtered = filtered.filter(item => {
+        const matchName = item.name.toLowerCase().includes(search);
+        const matchDesc = (item.description || "").toLowerCase().includes(search);
+        const matchClass = (item.class || "").toLowerCase().includes(search);
+        const matchTier = (item.tier || "").toLowerCase().includes(search);
+        const matchStats = Object.keys(item.stats || {}).some(k => k.toLowerCase().includes(search));
+        return matchName || matchDesc || matchClass || matchTier || matchStats;
+      });
+    }
+
+    // Ordena por importância de tier e preço decrescente
+    const tierPriority = { LEGENDARY: 4, BOOTS: 3, EPIC: 2, BASIC: 1, STARTER: 0 };
+    filtered.sort((a, b) => {
+      const pDiff = (tierPriority[b.tier] || 0) - (tierPriority[a.tier] || 0);
+      if (pDiff !== 0) return pDiff;
+      return (b.cost || 0) - (a.cost || 0);
+    });
+
+    if (filtered.length === 0) {
+      gridContainer.innerHTML = `
+        <div class="shop-empty-state">
+          <span class="empty-icon">🔍</span>
+          <p>Nenhum item encontrado para a busca ou filtro selecionado.</p>
+        </div>
+      `;
+      return;
+    }
+
+    gridContainer.innerHTML = filtered.map(item => {
+      const isSelected = item.id === this._selectedShopItemId ? "selected" : "";
+      const tierBadge = item.tier ? item.tier.toLowerCase() : "";
+      return `
+        <div class="shop-item-card ${isSelected} tier-${tierBadge}" data-item-id="${item.id}" tabindex="0" title="${item.name} (${(item.cost || 0).toLocaleString()}g)">
+          <div class="shop-card-icon-wrap">
+            <img class="shop-card-img" src="${getItemIconUrl(item.id)}" alt="${item.name}" loading="lazy" />
+            <span class="shop-card-tier-badge">${item.tier || "ITEM"}</span>
+          </div>
+          <div class="shop-card-info">
+            <div class="shop-card-name">${item.name}</div>
+            <div class="shop-card-cost">💰 <span>${(item.cost || 0).toLocaleString()}</span>g</div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    gridContainer.querySelectorAll(".shop-item-card").forEach(card => {
+      card.onclick = () => {
+        sound.playClick();
+        gridContainer.querySelectorAll(".shop-item-card").forEach(c => c.classList.remove("selected"));
+        card.classList.add("selected");
+        this._selectedShopItemId = Number(card.dataset.itemId);
+        this._renderShopItemInspector(this._selectedShopItemId);
+      };
+    });
+  }
+
+  _renderShopItemInspector(itemId) {
+    const inspectorEl = this.containerEl.querySelector("#shop-item-inspector");
+    if (!inspectorEl) return;
+
+    const item = getItemById(itemId);
+    if (!item) {
+      inspectorEl.innerHTML = `<div class="inspector-placeholder">Selecione um item no catálogo para inspecionar seus atributos e árvore genealógica de receitas.</div>`;
+      return;
+    }
+
+    const statLabels = {
+      ad: { label: "Dano de Ataque (AD)", icon: "🗡️", unit: "" },
+      ap: { label: "Poder de Habilidade (AP)", icon: "🔮", unit: "" },
+      hp: { label: "Vida Máxima", icon: "❤️", unit: "" },
+      armor: { label: "Armadura", icon: "🛡️", unit: "" },
+      mr: { label: "Resistência Mágica", icon: "✨", unit: "" },
+      haste: { label: "Aceleração de Habilidade", icon: "⏳", unit: "" },
+      as: { label: "Velocidade de Ataque", icon: "⚡", unit: "%" },
+      crit: { label: "Acerto Crítico", icon: "🎯", unit: "%" },
+      ms: { label: "Velocidade de Movimento", icon: "👟", unit: "" },
+      lethality: { label: "Letalidade", icon: "🗡️", unit: "" },
+      omnivamp: { label: "Vampirismo / Cura", icon: "🩸", unit: "%" },
+      healShield: { label: "Poder de Cura e Escudo", icon: "🌟", unit: "%" },
+      mana: { label: "Mana Máxima", icon: "💧", unit: "" },
+      healthRegen: { label: "Regeneração de Vida", icon: "💚", unit: "%" }
+    };
+
+    const statsHtml = item.stats && Object.keys(item.stats).length > 0
+      ? Object.entries(item.stats).map(([k, v]) => {
+          const sMeta = statLabels[k] || { label: k.toUpperCase(), icon: "✦", unit: "" };
+          const valFormatted = sMeta.unit === "%" ? `+${Math.round(v * 100)}%` : `+${v}`;
+          return `
+            <div class="inspector-stat-pill">
+              <span class="stat-icon">${sMeta.icon}</span>
+              <span class="stat-name">${sMeta.label}:</span>
+              <strong class="stat-val">${valFormatted}</strong>
+            </div>
+          `;
+        }).join("")
+      : `<span class="inspector-no-stats">Item Utilitário / Atributos Especiais</span>`;
+
+    // Constrói em (Itens que usam este item como componente)
+    const upgrades = Object.values(LOL_ITEMS).filter(it => it.from && it.from.includes(item.id));
+    const upgradesHtml = upgrades.length > 0
+      ? `
+        <div class="inspector-section">
+          <div class="inspector-section-title">⬆️ Constrói em (${upgrades.length} Itens):</div>
+          <div class="inspector-upgrades-row">
+            ${upgrades.map(up => `
+              <div class="tree-node-item clickable" data-target-id="${up.id}" title="${up.name} (💰 ${(up.cost || 0).toLocaleString()}g)">
+                <img src="${getItemIconUrl(up.id)}" alt="${up.name}" />
+                <span class="tree-node-price">💰 ${up.cost}g</span>
+                <span class="tree-node-name">${up.name}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `
+      : "";
+
+    // Árvore de receitas
+    const recipeTreeHtml = this._renderRecipeTreeHtml(item);
+
+    inspectorEl.innerHTML = `
+      <div class="inspector-content">
+        <!-- Header do Item Selecionado -->
+        <div class="inspector-header">
+          <div class="inspector-icon-container">
+            <img class="inspector-icon" src="${getItemIconUrl(item.id)}" alt="${item.name}" />
+            <span class="inspector-badge ${item.tier ? item.tier.toLowerCase() : ''}">${item.tier || 'ITEM'}</span>
+          </div>
+          <div class="inspector-header-info">
+            <h3 class="inspector-title">${item.name}</h3>
+            <div class="inspector-meta-row">
+              <span class="inspector-class-pill">${item.class || 'Geral'}</span>
+              <span class="inspector-cost-tag">💰 Preço Total: <strong>${(item.cost || 0).toLocaleString()}g</strong></span>
+              ${item.combineCost !== undefined && item.from && item.from.length > 0 ? `<span class="inspector-combine-cost">Combinação: 💰 <strong>${item.combineCost.toLocaleString()}g</strong></span>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <!-- Atributos -->
+        <div class="inspector-section">
+          <div class="inspector-section-title">📊 Atributos de Combate:</div>
+          <div class="inspector-stats-grid">
+            ${statsHtml}
+          </div>
+        </div>
+
+        <!-- Descrição / Passiva -->
+        <div class="inspector-section">
+          <div class="inspector-section-title">📜 Descrição & Efeito Passivo:</div>
+          <div class="inspector-desc-box">
+            ${item.description || "Nenhuma descrição detalhada disponível."}
+          </div>
+        </div>
+
+        <!-- Árvore de Receita Oficial -->
+        <div class="inspector-section">
+          <div class="inspector-section-title">🌿 Árvore de Receita & Montagem:</div>
+          <div class="recipe-tree-wrapper">
+            ${recipeTreeHtml}
+          </div>
+        </div>
+
+        <!-- Upgrades Futuros -->
+        ${upgradesHtml}
+      </div>
+    `;
+
+    // Interatividade em todos os nós de receita ou upgrade
+    inspectorEl.querySelectorAll(".tree-node-item.clickable").forEach(node => {
+      node.onclick = () => {
+        const tId = Number(node.dataset.targetId);
+        if (tId && LOL_ITEMS[tId]) {
+          sound.playClick();
+          this._selectedShopItemId = tId;
+          this._renderShopItemInspector(tId);
+          const cardInGrid = this.containerEl.querySelector(`.shop-item-card[data-item-id="${tId}"]`);
+          if (cardInGrid) {
+            this.containerEl.querySelectorAll(".shop-item-card").forEach(c => c.classList.remove("selected"));
+            cardInGrid.classList.add("selected");
+            cardInGrid.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        }
+      };
+    });
+  }
+
+  _renderRecipeTreeHtml(item) {
+    if (!item.from || item.from.length === 0) {
+      return `
+        <div class="recipe-tree-root-only">
+          <div class="tree-node-item current-root">
+            <img src="${getItemIconUrl(item.id)}" alt="${item.name}" />
+            <span class="tree-node-price">💰 ${item.cost}g</span>
+            <span class="tree-node-name">${item.name}</span>
+          </div>
+          <div class="recipe-tree-note">🌱 Item Básico ou Inicial — Não necessita de combinação prévia.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="recipe-tree-tree">
+        <!-- Nó Raiz (Item Fechado) -->
+        <div class="recipe-tree-root-row">
+          <div class="tree-node-item current-root">
+            <img src="${getItemIconUrl(item.id)}" alt="${item.name}" />
+            <span class="tree-node-price">💰 ${item.cost}g (Combinação: ${item.combineCost}g)</span>
+            <span class="tree-node-name">${item.name}</span>
+          </div>
+        </div>
+
+        <div class="recipe-tree-branch-lines"></div>
+
+        <!-- Componentes Imediatos -->
+        <div class="recipe-tree-children-row">
+          ${item.from.map(cId => {
+            const comp = getItemById(cId);
+            if (!comp) return '';
+            const subRecipe = (comp.from && comp.from.length > 0)
+              ? `
+                <div class="tree-sub-children">
+                  <div class="sub-branch-line"></div>
+                  <div class="tree-sub-children-row">
+                    ${comp.from.map(scId => {
+                      const sc = getItemById(scId);
+                      if (!sc) return '';
+                      return `
+                        <div class="tree-node-item sub-node clickable" data-target-id="${sc.id}" title="${sc.name} (💰 ${(sc.cost || 0).toLocaleString()}g)">
+                          <img src="${getItemIconUrl(sc.id)}" alt="${sc.name}" />
+                          <span class="tree-node-price">💰 ${sc.cost}g</span>
+                          <span class="tree-node-name">${sc.name}</span>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              `
+              : '';
+
+            return `
+              <div class="recipe-tree-branch">
+                <div class="tree-node-item clickable" data-target-id="${comp.id}" title="${comp.name} (💰 ${(comp.cost || 0).toLocaleString()}g)">
+                  <img src="${getItemIconUrl(comp.id)}" alt="${comp.name}" />
+                  <span class="tree-node-price">💰 ${comp.cost}g</span>
+                  <span class="tree-node-name">${comp.name}</span>
+                </div>
+                ${subRecipe}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
   }
 
   // Exibe a legenda flutuante com a fala oficial do campeão escolhido

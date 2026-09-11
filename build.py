@@ -71,6 +71,12 @@ if (typeof window !== 'undefined') {
   window.calculateTeamStats = calculateTeamStats;
   window.getChampionVoiceUrl = getChampionVoiceUrl;
   window.LOL_ITEMS = LOL_ITEMS;
+  window.getItemById = getItemById;
+  window.getItemIconUrl = getItemIconUrl;
+  window.getItemRecipeTree = getItemRecipeTree;
+  window.getNextPurchaseStep = getNextPurchaseStep;
+  window.getStarterItemForChampion = getStarterItemForChampion;
+  window.ITEM_CATEGORIES = ITEM_CATEGORIES;
   window.getRecommendedItemForChampion = getRecommendedItemForChampion;
   window.PRO_PLAYERS = PRO_PLAYERS;
   window.getPlayersByRole = getPlayersByRole;
