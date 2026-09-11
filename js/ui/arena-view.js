@@ -738,10 +738,12 @@ export class ArenaView {
     const updatePressureBadge = (lane, val) => {
       const el = this.containerEl.querySelector(`#pressure-val-${lane}`);
       const badge = this.containerEl.querySelector(`#badge-lane-${lane}`);
-      if (el) el.textContent = formatPressure(val);
+      const isFocused = state.focusedLane === lane;
+      if (el) el.textContent = formatPressure(val) + (isFocused ? " 🎯" : "");
       if (badge) {
         badge.classList.toggle("blue-push", val > 8);
         badge.classList.toggle("red-push", val < -8);
+        badge.classList.toggle("active-focus", isFocused);
       }
     };
 
@@ -750,27 +752,27 @@ export class ArenaView {
     updatePressureBadge("bot", pressures.bot || 0);
 
     // Movimentação dos pontos de colisão ao longo das rotas do mapa 3D oficial
-    // Top Lane: (213, 205) <-> (268, 136) <-> (666, 90)
+    // Top Lane: (216, 208) <-> (268, 136) <-> (660, 92)
     const clashTop = this.containerEl.querySelector("#clash-top");
     if (clashTop) {
       const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
       let x = 268, y = 136;
       if (pTop >= 0) {
-        x = 268 + (pTop / 100) * 398;
-        y = 136 - (pTop / 100) * 46;
+        x = 268 + (pTop / 100) * 392;
+        y = 136 - (pTop / 100) * 44;
       } else {
-        x = 268 - (-pTop / 100) * 55;
-        y = 136 + (-pTop / 100) * 69;
+        x = 268 - (-pTop / 100) * 52;
+        y = 136 + (-pTop / 100) * 72;
       }
       clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
-    // Mid Lane: Diagonal (430, 388) <-> (502, 344) <-> (574, 301)
+    // Mid Lane: Diagonal (430, 395) <-> (514, 344) <-> (597, 292)
     const clashMid = this.containerEl.querySelector("#clash-mid");
     if (clashMid) {
       const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
-      const x = 502 + (pMid / 100) * 72;
-      const y = 344 - (pMid / 100) * 43;
+      const x = 514 + (pMid / 100) * 83;
+      const y = 344 - (pMid / 100) * 52;
       clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
@@ -1901,6 +1903,26 @@ export class ArenaView {
       pit.addEventListener("click", () => {
         sound.playClick();
       });
+    });
+
+    // Interatividade de Foco Tático de Rota (Top, Mid, Bot)
+    const laneBadges = [
+      { id: "badge-lane-top", lane: "top" },
+      { id: "badge-lane-mid", lane: "mid" },
+      { id: "badge-lane-bot", lane: "bot" }
+    ];
+    laneBadges.forEach(({ id, lane }) => {
+      const badgeEl = this.containerEl.querySelector(`#${id}`);
+      if (badgeEl) {
+        badgeEl.addEventListener("click", () => {
+          sound.playClick();
+          if (this.sim && this.sim.setLaneFocus) {
+            this.sim.setLaneFocus(lane);
+            const liveState = this.sim.getState();
+            this.updateTick(liveState);
+          }
+        });
+      }
     });
   }
 

@@ -1944,6 +1944,7 @@ export function getRandomTeamRoster() {
 
 // Calcula estatísticas globais da equipe
 export function calculateTeamStats(rosterObj, upgrades = []) {
+  const safeRoster = rosterObj || {};
   const roles = ["top", "jungle", "mid", "adc", "support"];
   let totalDmg = 0;
   let totalTank = 0;
@@ -1953,8 +1954,9 @@ export function calculateTeamStats(rosterObj, upgrades = []) {
   let count = 0;
 
   roles.forEach(role => {
-    const champId = rosterObj[role];
-    const champ = getChampionById(champId);
+    const rawChamp = safeRoster[role];
+    const champKey = typeof rawChamp === "object" ? (rawChamp.id || rawChamp.name) : rawChamp;
+    const champ = getChampionById(champKey);
     if (champ) {
       totalDmg += champ.stats.damage;
       totalTank += champ.stats.tank;

@@ -87,6 +87,9 @@ export class MatchSimulator {
     this.nextBaronAt = 1200; // 20:00
     this.heraldTaken = false;
     this.level1Taken = false;
+    this.laneFocusTaken = false;
+    this.laneMacroTaken = false;
+    this.focusedLane = null; // 'top', 'mid', 'bot' ou null (equilibrado)
     this.elderTaken = false;
     this.nextElderAt = 1680; // 28:00 (Elder Dragon)
 
@@ -112,19 +115,27 @@ export class MatchSimulator {
 
     // Garante que o time do jogador tenha atributos calculados
     if (!this.blueTeam.stats || typeof this.blueTeam.stats.damage !== "number") {
-      this.blueTeam.stats = calculateTeamStats(this.blueTeam.roster, this.blueTeam.upgrades || []);
+      this.blueTeam.stats = calculateTeamStats(this.blueTeam.roster || {}, this.blueTeam.upgrades || []);
     }
 
     // Calcula os atributos autênticos da composição do time do CBLOL
-    const baseRedStats = calculateTeamStats(this.redTeam.roster || this.redTeam.defaultRoster);
-
-    this.redTeam.stats = {
-      damage: Math.round(baseRedStats.damage * diffMult),
-      tank: Math.round(baseRedStats.tank * diffMult),
-      push: Math.round(baseRedStats.push * diffMult),
-      utility: Math.round(baseRedStats.utility * diffMult),
-      scaling: Math.round(baseRedStats.scaling * diffMult)
-    };
+    if (!this.redTeam.stats || typeof this.redTeam.stats.damage !== "number") {
+      const baseRedStats = calculateTeamStats(this.redTeam.roster || this.redTeam.defaultRoster || {});
+      this.redTeam.stats = {
+        damage: Math.round(baseRedStats.damage * diffMult),
+        tank: Math.round(baseRedStats.tank * diffMult),
+        push: Math.round(baseRedStats.push * diffMult),
+        utility: Math.round(baseRedStats.utility * diffMult),
+        scaling: Math.round(baseRedStats.scaling * diffMult)
+      };
+    } else if (!this.redTeam._diffApplied) {
+      this.redTeam._diffApplied = true;
+      this.redTeam.stats.damage = Math.round(this.redTeam.stats.damage * diffMult);
+      this.redTeam.stats.tank = Math.round(this.redTeam.stats.tank * diffMult);
+      this.redTeam.stats.push = Math.round(this.redTeam.stats.push * diffMult);
+      this.redTeam.stats.utility = Math.round((this.redTeam.stats.utility || this.redTeam.stats.push || 75) * diffMult);
+      this.redTeam.stats.scaling = Math.round((this.redTeam.stats.scaling || this.redTeam.stats.damage || 75) * diffMult);
+    }
 
     // Bônus de maestria quando os Pro Players pilotam seus Campeões de Conforto (+3 de Dano cada)
     let blueSignatureBonus = 0;
@@ -233,16 +244,18 @@ export class MatchSimulator {
     const teamPlayers = (team && team.proPlayers) || (team && team.players) || {};
 
     roles.forEach(r => {
-      const champId = safeRoster[r] || fallbackChamps[r];
-      const champ = getChampionById(champId);
+      const rawChamp = safeRoster[r] || fallbackChamps[r];
+      const champKey = typeof rawChamp === "object" ? (rawChamp.id || rawChamp.name || fallbackChamps[r]) : rawChamp;
+      const champ = getChampionById(champKey);
       const playerId = teamPlayers[r];
       const proPlayer = getPlayerById(playerId);
       const isSignature = !!(proPlayer && champ && proPlayer.signatureChampions && proPlayer.signatureChampions.includes(champ.id));
+      const champResolvedName = champ ? champ.name : (typeof rawChamp === "object" ? (rawChamp.name || rawChamp.id || "Champion") : String(rawChamp));
 
       state[r] = {
-        id: champ ? champ.id : champId,
+        id: champ ? champ.id : (typeof rawChamp === "object" ? (rawChamp.id || "champ") : String(rawChamp)),
         role: r,
-        name: champ ? champ.name : champId,
+        name: champResolvedName,
         proPlayer: proPlayer || null,
         playerNick: proPlayer ? proPlayer.nick : null,
         isSignature: isSignature,
@@ -333,6 +346,31 @@ export class MatchSimulator {
       text: `📋 Postura Tática definida para: ${names[tacticKey] || tacticKey}!`,
       time: this._formatTime()
     });
+  }
+
+  setLaneFocus(lane) {
+    if (this.focusedLane === lane) {
+      this.focusedLane = null;
+      this.onEvent({
+        type: "lane_focus",
+        side: "blue",
+        text: `⚖️ FOCO DE ROTA EQUILIBRADO: A equipe agora divide a atenção igualmente entre Top, Mid e Bot.`,
+        time: this._formatTime()
+      });
+    } else {
+      this.focusedLane = lane;
+      const names = {
+        top: "Rota Superior (Top)",
+        mid: "Rota do Meio (Mid)",
+        bot: "Rota Inferior (Bot)"
+      };
+      this.onEvent({
+        type: "lane_focus",
+        side: "blue",
+        text: `🎯 FOCO DE ROTA ATIVO: A equipe agora prioriza recursos e jogadas na ${names[lane] || lane}!`,
+        time: this._formatTime()
+      });
+    }
   }
 
   triggerCounterAttack() {
@@ -757,8 +795,9 @@ export class MatchSimulator {
       // Avanço Azul
       allLanes.forEach(l => {
         let lDelta = pressureDelta;
-        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(pressureDelta * 1.35);
-        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(pressureDelta * 0.7));
+        if (this.focusedLane === l) lDelta = Math.round(lDelta * 1.45);
+        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(lDelta * 1.35);
+        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(lDelta * 0.7));
         this.lanePressures[l] = Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1));
       });
     } else if (diff < -2.0) {
@@ -1096,6 +1135,145 @@ export class MatchSimulator {
     const goldDiff = this.blueScore.gold - this.redScore.gold;
     const isAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
     const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
+
+    // 0.5. Decisão de Foco e Prioridade de Rota de Early Game (aos 03:30 = 210s)
+    if (!this.laneFocusTaken && this.gameSeconds >= 210 && this.gameSeconds < 280) {
+      this.laneFocusTaken = true;
+
+      const bTopName = this.blueRosterState.top ? this.blueRosterState.top.name : "Top";
+      const bMidName = this.blueRosterState.mid ? this.blueRosterState.mid.name : "Mid";
+      const bAdcName = this.blueRosterState.adc ? this.blueRosterState.adc.name : "Atirador";
+      const bJgName = this.blueRosterState.jungle ? this.blueRosterState.jungle.name : "Caçador";
+
+      const topProb = this._calculateSuccessProbability(72, "tactical", "combat");
+      const midProb = this._calculateSuccessProbability(76, "simple", "damage");
+      const botProb = this._calculateSuccessProbability(65, "complex", "damage");
+
+      const decisionData = {
+        id: "lane_focus_early",
+        meta: {},
+        badge: "ROTAS • EARLY GAME (03:30)",
+        title: "🗺️ ESCOLHA DE ROTA PRIORITÁRIA (INÍCIO DE PARTIDA)",
+        subtitle: "Os caçadores completaram o primeiro percurso da selva. Qual rota sua equipe vai priorizar para acelerar a partida?",
+        scouting: {
+          intelTag: "📡 RADAR DE ROTAS • NÍVEL 3",
+          enemyAction: "Top: disputa acirrada de troca 1v1 • Mid: pressão de magos no centro • Bot: duo adversário avançado na Rota Inferior."
+        },
+        options: [
+          {
+            id: "focus_top_lane",
+            icon: "🏔️",
+            name: `Foco no Top: Cobertura a ${bTopName} & Dano de Barricadas`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Rota Superior (Top)",
+            probability: topProb,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Solo Kill no Top (+300g) + Pressão Top (+30%) + Barricada Atingida",
+            failureConsequence: "Top rival recua seguro sob a torre e congela a onda",
+            desc: `Enviar ${bJgName} para dar cobertura na rota superior, permitindo que ${bTopName} jogue agressivo, congele a onda ou arranque placas da T1 rival.`
+          },
+          {
+            id: "focus_mid_lane",
+            icon: "⚡",
+            name: `Foco no Meio: Shove Rápido com ${bMidName} & Domínio do Rio`,
+            complexity: "simple",
+            complexityLabel: "🟢 Rota do Meio (Mid)",
+            probability: midProb,
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Abate no Mid (+300g) + Pressão Mid (+30%) + Visão Total do Rio",
+            failureConsequence: "Mago adversário limpa onda à distância sem perdas",
+            desc: `Acelerar a limpeza de tropas no meio com ${bMidName} para ganhar prioridade de rio, abrindo rotações de gank para ambos os lados.`
+          },
+          {
+            id: "focus_bot_lane",
+            icon: "🏹",
+            name: `Foco no Bot: All-In com ${bAdcName} & Prio para o Dragão`,
+            complexity: "complex",
+            complexityLabel: "🔴 Rota Inferior (Bot)",
+            probability: botProb,
+            risk: "Alto Risco / Alto Retorno",
+            riskClass: "high",
+            reward: "Abate Duplo no Bot (+450g) + Pressão Bot (+35%) + Bônus para o Dragão",
+            failureConsequence: "Duo rival queima feitiços defensivos e recua em segurança",
+            desc: `Acumular onda de minions na rota inferior para forçar dive ou troca letal 2v2, garantindo o controle total do primeiro Dragão Elemental.`
+          }
+        ]
+      };
+
+      this._triggerTacticalDecision(decisionData);
+      return true;
+    }
+
+    // 0.8. Decisão de Macro de Transição e Cerco de Rota (aos 13:30 = 810s)
+    if (!this.laneMacroTaken && this.gameSeconds >= 810 && this.gameSeconds < 900) {
+      this.laneMacroTaken = true;
+
+      const bTopName = this.blueRosterState.top ? this.blueRosterState.top.name : "Top";
+      const bMidName = this.blueRosterState.mid ? this.blueRosterState.mid.name : "Mid";
+      const bAdcName = this.blueRosterState.adc ? this.blueRosterState.adc.name : "Atirador";
+
+      const splitProb = this._calculateSuccessProbability(68, "tactical", "push");
+      const midProb = this._calculateSuccessProbability(75, "simple", "combat");
+      const botProb = this._calculateSuccessProbability(62, "complex", "damage");
+
+      const decisionData = {
+        id: "lane_macro_midgame",
+        meta: {},
+        badge: "MACRO • TRANSIÇÃO (13:30)",
+        title: "⚔️ MACRO DE TRANSIÇÃO: CERCO E FOCO DE ROTA",
+        subtitle: "As barricadas caíram e a partida entra na fase de transição de mapa. Em qual rota a equipe vai concentrar o avanço ofensivo?",
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE MACRO • MAPA ABERTO",
+          enemyAction: "CBLOL tentando defender suas torres T2 externas e proteger as entradas da selva."
+        },
+        options: [
+          {
+            id: "macro_split_top",
+            icon: "🏔️",
+            name: `Split Push Top 1-3-1: ${bTopName} Isolado em Avanço Contínuo`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Rota Superior (Top)",
+            probability: splitProb,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "T2 do Topo Destruída (+550g) + Tropas até a Base + Pressão Lateral",
+            failureConsequence: "CBLOL colapsa em 2 no Topo e intercepta o avanço",
+            desc: `Colocar ${bTopName} para pressionar a rota superior sozinho, obrigando múltiplos adversários a responderem enquanto o time controla o mapa.`
+          },
+          {
+            id: "macro_group_mid",
+            icon: "⚡",
+            name: `Agrupamento 5v5 no Mid: Cerco & Quebra da T2 Central`,
+            complexity: "simple",
+            complexityLabel: "🟢 Rota do Meio (Mid)",
+            probability: midProb,
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "T2 Central Derrubada (+600g) + Acesso Total a Ambas as Selvas Rivais",
+            failureConsequence: "Adversário limpa a onda de minions sob a torre com feitiços de área",
+            desc: `Reunir os 5 campeões na rota do meio para derrubar a torre central, abrir a visão de ambas as selvas e sufocar a economia rival.`
+          },
+          {
+            id: "macro_siege_bot",
+            icon: "🏹",
+            name: `Marcha Inferior no Bot: Cerco com ${bAdcName} & Controle de Alma`,
+            complexity: "complex",
+            complexityLabel: "🔴 Rota Inferior (Bot)",
+            probability: botProb,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: "T2 do Bot Devastada (+600g) + Eliminação no ADC Inimigo + Domínio do Covil",
+            failureConsequence: "Torre defensiva pune o avanço com recuo forçado",
+            desc: `Descer em força máxima pela rota inferior com ${bAdcName} para quebrar a T2, empurrar as tropas e consolidar a rota para a Alma do Dragão.`
+          }
+        ]
+      };
+
+      this._triggerTacticalDecision(decisionData);
+      return true;
+    }
 
     // 1. Dragão Ancião (Late Game >= 28:00 = 1680s, maior prioridade se vivo, respawn a cada 6 min)
     if (this.gameSeconds >= this.nextElderAt) {
@@ -1767,6 +1945,10 @@ export class MatchSimulator {
 
       if (dec.id === "level1") {
         result = this._resolveLevel1Decision(opt.id, isSuccess, roll, opt.probability);
+      } else if (dec.id === "lane_focus_early") {
+        result = this._resolveLaneFocusEarlyDecision(opt.id, isSuccess, roll, opt.probability);
+      } else if (dec.id === "lane_macro_midgame") {
+        result = this._resolveLaneMacroMidgameDecision(opt.id, isSuccess, roll, opt.probability);
       } else if (dec.id === "dragon") {
         result = this._resolveDragonDecision(opt.id, dec.meta.dType, isSuccess, roll, opt.probability);
       } else if (dec.id === "baron") {
@@ -3552,6 +3734,261 @@ export class MatchSimulator {
     }
   }
 
+  _resolveLaneFocusEarlyDecision(choiceId, isSuccess, roll, prob) {
+    const bTop = this.blueRosterState.top;
+    const bMid = this.blueRosterState.mid;
+    const bAdc = this.blueRosterState.adc;
+    const rTop = this.redRosterState.top;
+    const rMid = this.redRosterState.mid;
+    const rAdc = this.redRosterState.adc;
+
+    if (choiceId === "focus_top_lane") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop && rTop) {
+          this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ JOGADA PERFEITA NO TOPO! ${bTop.name} encaixou a troca com maestria e abateu ${rTop.name}!`);
+        }
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 32);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 16, false, 1.25, "top");
+        this._awardTeamGold("blue", 200);
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "DOMÍNIO NA ROTA SUPERIOR (TOP)!",
+          subtitle: `Execução Perfeita (${prob}% chance)`,
+          text: `Seu Top Laner venceu a disputa na rota superior, garantiu o abate (+300g), arrancou barricadas da torre inimiga e estabeleceu o domínio no topo!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 15);
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ O Top Laner adversário recuou a tempo para a torre e absorveu a pressão.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "TOP ADVERSÁRIO RECUOU",
+          subtitle: `Defesa sob a Torre (${prob}% chance)`,
+          text: `O rival percebeu a movimentação, recuou para debaixo da torre e estabilizou a onda de tropas sem mortes.`
+        };
+      }
+    } else if (choiceId === "focus_mid_lane") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        if (bMid && rMid) {
+          this._recordKill("blue", "red", "mid", "mid", "Pressão no Mid", `⚡ CONTROLE DO MID! ${bMid.name} acertou todo o combo mágico e abateu ${rMid.name}!`);
+        }
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 32);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 16, false, 1.25, "mid");
+        this._applyTeamBuff("blue", {
+          id: "river_dominance",
+          name: "Domínio do Rio",
+          icon: "⚡",
+          bonusCombat: 8,
+          duration: 150
+        });
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "PRIORIDADE ABSOLUTA NO MEIO (MID)!",
+          subtitle: `Pressão Central Total (${prob}% chance)`,
+          text: `Seu Mid Laner conquistou o abate no meio (+300g), castigou a T1 central e garantiu visão avançada no rio para as próximas lutas!`
+        };
+      } else {
+        this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 15);
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ O Mid rival limpou a onda com magias à distância e segurou a posição.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "MID LANER RIVAL SEGUROU O MEIO",
+          subtitle: `Limpeza à Distância (${prob}% chance)`,
+          text: `O mago adversário usou habilidades de longo alcance para evaporar as tropas e evitou o confronto direto.`
+        };
+      }
+    } else {
+      // focus_bot_lane
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        if (bAdc && rAdc) {
+          const victimRole = this.redRosterState.support?.alive ? "support" : "adc";
+          const victimName = this.redRosterState[victimRole].name;
+          this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
+        }
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 14);
+        this._damageNextStructure("blue", this.redStructures, 18, false, 1.3, "bot");
+        this._applyTeamBuff("blue", {
+          id: "dragon_prep",
+          name: "Prioridade de Dragão",
+          icon: "🐲",
+          bonusCombat: 10,
+          duration: 180
+        });
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "MASSACRE NA ROTA INFERIOR (BOT)!",
+          subtitle: `All-In Vitorioso (${prob}% chance)`,
+          text: `Sua bot lane conquistou o abate no 2v2 (+300g), destruiu barricadas da T1 e garantiu prioridade total para o próximo Dragão Elemental!`
+        };
+      } else {
+        this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 15);
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ A dupla adversária ativou feitiços defensivos e recuou sob a torre.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "DESENGAJE DA BOT LANE RIVAL",
+          subtitle: `Feitiços Gastos (${prob}% chance)`,
+          text: `Os adversários gastaram Flash e Curar para escapar da armadilha e mantiveram a torre segura.`
+        };
+      }
+    }
+  }
+
+  _resolveLaneMacroMidgameDecision(choiceId, isSuccess, roll, prob) {
+    const bTop = this.blueRosterState.top;
+    const bMid = this.blueRosterState.mid;
+    const bAdc = this.blueRosterState.adc;
+    const rTop = this.redRosterState.top;
+    const rMid = this.redRosterState.mid;
+    const rAdc = this.redRosterState.adc;
+
+    if (choiceId === "macro_split_top") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 45);
+        this.lanePressure = Math.min(100, this.lanePressure + 16);
+        this._damageNextStructure("blue", this.redStructures, 32, false, 1.9, "top");
+        this._awardTeamGold("blue", 500);
+        this.onEvent({
+          type: "split_push",
+          side: "blue",
+          text: `🏔️ SPLIT PUSH DEVASTADOR NO TOPO! ${bTop?.name || 'Seu Top Laner'} empurrou a rota até a base adversária e forçou múltiplos recalls! (+500g)`,
+          time: this._formatTime()
+        });
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "SPLIT PUSH 1-3-1 IMPECÁVEL!",
+          subtitle: `Pressão Lateral Extrema (${prob}% chance)`,
+          text: `Seu Top Laner avançou sozinho, demoliu as defesas da rota superior (+500g) e obrigou o CBLOL a deslocar 2 jogadores para o topo, abrindo o mapa para o seu time!`
+        };
+      } else {
+        if (bTop && rTop) {
+          this._recordKill("red", "blue", "top", "top", "Colapso no Top", `🔴 COLAPSO NO TOPO! O CBLOL reuniu dois jogadores e abateu ${bTop.name} na rota avançada!`);
+        }
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 25);
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "COLAPSO DO CBLOL NO TOPO",
+          subtitle: `Emboscada 2v1 (${prob}% chance)`,
+          text: `O adversário leu o avanço isolado, colapsou na rota superior e conseguiu um abate antes do seu Top recuar.`
+        };
+      }
+    } else if (choiceId === "macro_group_mid") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        if (bMid && rMid) {
+          this._recordKill("blue", "red", "mid", "mid", "Teamfight Central", `⚡ VITÓRIA NO CERCO CENTRAL! ${bMid.name} eliminou ${rMid.name} na investida pelo meio!`);
+        }
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 45);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        this._damageNextStructure("blue", this.redStructures, 35, false, 2.0, "mid");
+        this._awardTeamGold("blue", 550);
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "CERCO 5v5 VITORIOSO NO MEIO!",
+          subtitle: `Quebra da Defesa Central (${prob}% chance)`,
+          text: `Sua equipe derrubou a torre central (+550g), eliminou defensores e abriu caminho direto para ambas as selvas rivais!`
+        };
+      } else {
+        this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 20);
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ O CBLOL agrupou com magias de área sob a torre e conteve o cerco central.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "CERCO DO MEIO CONTIDO",
+          subtitle: `Defesa de Área (${prob}% chance)`,
+          text: `O adversário posicionou magias de controle sob a torre e forçou sua equipe a recuar sem sofrer baixas.`
+        };
+      }
+    } else {
+      // macro_siege_bot
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        if (bAdc && rAdc) {
+          this._recordKill("blue", "red", "adc", "adc", "Marcha no Bot", `🏹 AVANÇO INFERIOR IMPLACÁVEL! ${bAdc.name} atropelou a defesa e eliminou ${rAdc.name}!`);
+        }
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 45);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        this._damageNextStructure("blue", this.redStructures, 35, false, 2.0, "bot");
+        this._awardTeamGold("blue", 550);
+        this._applyTeamBuff("blue", {
+          id: "soul_point",
+          name: "Ponto de Alma",
+          icon: "🐲",
+          bonusCombat: 12,
+          duration: 200
+        });
+        return {
+          success: true,
+          roll,
+          probability: prob,
+          title: "MARCHA ESMAGADORA NA BOT LANE!",
+          subtitle: `Rota Inferior Quebrada (${prob}% chance)`,
+          text: `A rota inferior adversária foi arrebentada (+550g), as tropas azuis chegaram à base e o covil do Dragão está sob domínio absoluto!`
+        };
+      } else {
+        this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ A defesa do CBLOL na bot lane segurou a investida e repeliu as tropas.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false,
+          roll,
+          probability: prob,
+          title: "DEFESA INFERIOR CONTEVE O AVANÇO",
+          subtitle: `Repelência de Tropas (${prob}% chance)`,
+          text: `O time rival concentrou recursos na rota inferior e conseguiu segurar a estrutura externa.`
+        };
+      }
+    }
+  }
+
   _resolveHeraldDecision(choiceId, isSuccess, roll, prob) {
     const blueAliveRoles = Object.keys(this.blueRosterState).filter(r => this.blueRosterState[r].alive);
     const redAliveRoles = Object.keys(this.redRosterState).filter(r => this.redRosterState[r].alive);
@@ -3830,7 +4267,12 @@ export class MatchSimulator {
 
   _triggerLaneSkirmish() {
     const lanes = ["top", "mid", "bot"];
-    const lane = lanes[Math.floor(Math.random() * lanes.length)];
+    let lane;
+    if (this.focusedLane && Math.random() < 0.65) {
+      lane = this.focusedLane;
+    } else {
+      lane = lanes[Math.floor(Math.random() * lanes.length)];
+    }
 
     const bTop = this.blueRosterState.top;
     const rTop = this.redRosterState.top;
@@ -4027,7 +4469,9 @@ export class MatchSimulator {
     // O time com vantagem numérica golpeia a estrutura na rota com maior pressão
     const enemyStructures = winnerSide === "blue" ? this.redStructures : this.blueStructures;
     let chosenLane = "mid";
-    if (this.lanePressures) {
+    if (winnerSide === "blue" && this.focusedLane) {
+      chosenLane = this.focusedLane;
+    } else if (this.lanePressures) {
       const lanes = ["mid", "top", "bot"];
       if (winnerSide === "blue") {
         lanes.sort((a, b) => (this.lanePressures[b] || 0) - (this.lanePressures[a] || 0));
@@ -4544,6 +4988,7 @@ export class MatchSimulator {
         mid: Math.round(this.lanePressures ? this.lanePressures.mid : 0),
         bot: Math.round(this.lanePressures ? this.lanePressures.bot : 0)
       },
+      focusedLane: this.focusedLane,
       playerTactics: this.playerTactics,
       tacticsLabel: this.tacticsLabel || "⚖️ Controle de Rotas",
       counterAttackCooldown: this.counterAttackCooldown,
