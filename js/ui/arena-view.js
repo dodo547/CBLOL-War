@@ -88,9 +88,6 @@ export class ArenaView {
           </div>
 
           <div class="speed-buttons-group">
-            <button class="speed-btn shop-modal-btn" id="open-shop-modal-btn" title="Abrir Loja Hextech e Árvore de Receitas do LoL" style="background: linear-gradient(135deg, rgba(200, 170, 110, 0.25), rgba(10, 200, 185, 0.25)); border-color: var(--lol-gold-1); color: #f0e6d2; font-weight: 800;">
-              🛒 Loja & Receitas
-            </button>
             <button class="speed-btn ${this.sim.speed === 1 ? 'active' : ''}" data-speed="1">1x</button>
             <button class="speed-btn ${this.sim.speed === 2 ? 'active' : ''}" data-speed="2">2x</button>
             <button class="speed-btn ${this.sim.speed === 4 ? 'active' : ''}" data-speed="4">4x</button>
@@ -2172,13 +2169,6 @@ export class ArenaView {
     this._activeShopCategory = "all";
     this._activeShopSearch = "";
     this._selectedShopItemId = 3031; // Default: Gume do Infinito
-
-    const openBtn = this.containerEl.querySelector("#open-shop-modal-btn");
-    if (openBtn) {
-      openBtn.addEventListener("click", () => {
-        this._openItemShopModal();
-      });
-    }
 
     const closeBtn = this.containerEl.querySelector("#shop-modal-close-btn");
     if (closeBtn) {
