@@ -5362,6 +5362,58 @@ class SoundEngine {
       osc.stop(t + idx * 0.07 + 0.3);
     });
   }
+
+  // Som de Sequência de Abates (Killing Spree / Rampage / Legendary)
+  playKillingSpree() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [220, 277.18, 329.63, 440].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, t + idx * 0.1);
+      gain.gain.setValueAtTime(0.32, t + idx * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.1 + 0.38);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t + idx * 0.1);
+      osc.stop(t + idx * 0.1 + 0.4);
+    });
+  }
+
+  // Som de Shutdown (Finalizado! Quebra de sequência de abates com recompensa)
+  playShutdown() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bass = this.ctx.createOscillator();
+    const bg = this.ctx.createGain();
+    bass.type = "sine";
+    bass.frequency.setValueAtTime(160, t);
+    bass.frequency.exponentialRampToValueAtTime(50, t + 0.6);
+    bg.gain.setValueAtTime(0.6, t);
+    bg.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+    bass.connect(bg);
+    bg.connect(this.masterGain);
+    bass.start(t);
+    bass.stop(t + 0.65);
+
+    [880, 1174.66, 1760].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t + 0.1 + idx * 0.08);
+      gain.gain.setValueAtTime(0.3, t + 0.1 + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1 + idx * 0.08 + 0.4);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t + 0.1 + idx * 0.08);
+      osc.stop(t + 0.1 + idx * 0.08 + 0.45);
+    });
+  }
 }
 
 const sound = new SoundEngine();
@@ -6312,6 +6364,13 @@ class MatchSimulator {
         xpForNextLevel: 280,
         ultimateUnlocked: false,
         ultimateRank: 0,
+        killStreak: 0,
+        largestKillStreak: 0,
+        doubleKills: 0,
+        tripleKills: 0,
+        quadraKills: 0,
+        pentaKills: 0,
+        largestMultiKill: 0,
         spells: {
           d: spellD,
           f: spellF
@@ -9981,8 +10040,11 @@ class MatchSimulator {
       killer.goldEarned = (killer.goldEarned || 500) + bounty;
       killer.goldCurrent = (killer.goldCurrent || 0) + bounty;
       victim.streak = 0;
+      victim.killStreak = 0;
     }
     killer.streak = (killer.streak || 0) + 1;
+    killer.killStreak = killer.streak;
+    killer.largestKillStreak = Math.max(killer.largestKillStreak || 0, killer.killStreak);
 
     this._updateIndividualLeadsAndMvp();
     this._syncTeamGold();
@@ -9995,8 +10057,10 @@ class MatchSimulator {
       killer.multiKillCount = 1;
     }
     killer.lastKillSec = this.gameSeconds;
+    killer.largestMultiKill = Math.max(killer.largestMultiKill || 0, killer.multiKillCount);
 
     if (killer.multiKillCount === 2) {
+      killer.doubleKills = (killer.doubleKills || 0) + 1;
       this.onMultikill({
         type: "double",
         count: 2,
@@ -10008,11 +10072,14 @@ class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "double",
         side: killerSide,
+        icon: "⚡",
         text: `⚡ DOUBLE KILL! ${killer.name} eliminou 2 adversários!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount === 3) {
+      killer.tripleKills = (killer.tripleKills || 0) + 1;
       this.onMultikill({
         type: "triple",
         count: 3,
@@ -10024,11 +10091,14 @@ class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "triple",
         side: killerSide,
+        icon: "🔥",
         text: `🔥 TRIPLE KILL! ${killer.name} garantiu 3 abates consecutivos!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount === 4) {
+      killer.quadraKills = (killer.quadraKills || 0) + 1;
       this.onMultikill({
         type: "quadra",
         count: 4,
@@ -10040,11 +10110,14 @@ class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "quadra",
         side: killerSide,
+        icon: "💥",
         text: `💥 QUADRA KILL! ${killer.name} aniquilou 4 adversários!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount >= 5) {
+      killer.pentaKills = (killer.pentaKills || 0) + 1;
       this.onMultikill({
         type: "penta",
         count: 5,
@@ -10056,10 +10129,123 @@ class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "penta",
         side: killerSide,
+        icon: "👑",
         text: `👑 PENTAKILL LENDÁRIO! ${killer.name} aniquilou todos os 5 campeões adversários!`,
         time: this._formatTime()
       });
+    } else if (killer.multiKillCount === 1) {
+      // Anúncios de Sequência de Abates sem morrer (Spree System)
+      if (killer.killStreak === 3) {
+        this.onMultikill({
+          type: "spree",
+          count: 3,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "KILLING SPREE!",
+          subtitle: `🔥 ${killer.name} está IMPLACÁVEL (3 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "spree",
+          side: killerSide,
+          icon: "🔥",
+          text: `🔥 IMPLACÁVEL! ${killer.name} alcançou uma sequência de 3 abates seguidos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 4) {
+        this.onMultikill({
+          type: "rampage",
+          count: 4,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "RAMPAGE!",
+          subtitle: `🔥 ${killer.name} está DOMINANDO (4 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "rampage",
+          side: killerSide,
+          icon: "⚡",
+          text: `⚡ DOMINANDO! ${killer.name} chegou a 4 abates consecutivos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 5) {
+        this.onMultikill({
+          type: "unstoppable",
+          count: 5,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "UNSTOPPABLE!",
+          subtitle: `💥 ${killer.name} está INCONTROLÁVEL (5 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "unstoppable",
+          side: killerSide,
+          icon: "💥",
+          text: `💥 INCONTROLÁVEL! ${killer.name} está imparável com 5 abates sem cair!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 6) {
+        this.onMultikill({
+          type: "dominating",
+          count: 6,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "AVASSALADOR!",
+          subtitle: `⚡ ${killer.name} segue AVASSALADOR (6 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "dominating",
+          side: killerSide,
+          icon: "⚡",
+          text: `⚡ AVASSALADOR! ${killer.name} já soma 6 abates consecutivos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 7) {
+        this.onMultikill({
+          type: "godlike",
+          count: 7,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "GODLIKE!",
+          subtitle: `✨ ${killer.name} é DIVINO (7 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "godlike",
+          side: killerSide,
+          icon: "✨",
+          text: `✨ DIVINO! ${killer.name} alcançou o status de Godlike (7 abates seguidos)!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak >= 8) {
+        this.onMultikill({
+          type: "legendary",
+          count: killer.killStreak,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "LENDÁRIO!",
+          subtitle: `👑 ${killer.name} É LENDÁRIO (${killer.killStreak} ABATES)! ALGUÉM PARE ESSA FERA!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "legendary",
+          side: killerSide,
+          icon: "👑",
+          text: `👑 LENDÁRIO! ${killer.name} atingiu ${killer.killStreak} abates seguidos! Alguém pare essa fera!`,
+          time: this._formatTime()
+        });
+      }
     }
 
     const champData = getChampionById(killer.id);
@@ -10115,17 +10301,23 @@ class MatchSimulator {
     // 3. Checagem de ACE (Extermínio: todos os 5 do time adversário mortos ao mesmo tempo)
     const remainingVictims = Object.values(victimRoster).filter(c => c.alive).length;
     if (remainingVictims === 0) {
+      if (killerSide === "blue") {
+        this.lanePressure = Math.min(100, this.lanePressure + 25);
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 25);
+      }
       this.onAce({
         aceSide: killerSide,
         wipedSide: victimSide,
         killerName: killer.name,
-        title: "ACE! (EXTERMÍNIO!)",
-        subtitle: `${killerSide === "blue" ? "Seu Time" : "CBLOL"} eliminou todos os adversários!`
+        title: "EXTERMÍNIO! (ACE)",
+        subtitle: `${killerSide === "blue" ? "Seu Time" : "CBLOL"} eliminou todos os 5 adversários!`
       });
       this.onEvent({
         type: "ace",
         side: killerSide,
-        text: `💀 ACE! Todos os 5 campeões de ${victimSide === "blue" ? this.blueTeam.name : this.redTeam.name} foram eliminados!`,
+        icon: "💀👑",
+        text: `💀👑 EXTERMÍNIO (ACE)! Todos os 5 campeões de ${victimSide === "blue" ? this.blueTeam.name : this.redTeam.name} foram eliminados! Campo livre para avançar!`,
         time: this._formatTime()
       });
     }
@@ -18355,7 +18547,11 @@ class ArenaView {
 
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
       if (kdaEl) {
-        kdaEl.textContent = `${m.kills} / ${m.deaths} / ${m.assists}`;
+        let streakBadge = "";
+        if (m.killStreak >= 8) streakBadge = ` <span class="streak-mini-badge legendary" title="LENDÁRIO! (${m.killStreak} abates sem morrer)">👑 ${m.killStreak}</span>`;
+        else if (m.killStreak >= 5) streakBadge = ` <span class="streak-mini-badge unstoppable" title="INCONTROLÁVEL! (${m.killStreak} abates sem morrer)">💥 ${m.killStreak}</span>`;
+        else if (m.killStreak >= 3) streakBadge = ` <span class="streak-mini-badge spree" title="IMPLACÁVEL! (${m.killStreak} abates seguidos)">🔥 ${m.killStreak}</span>`;
+        kdaEl.innerHTML = `${m.kills} / <span class="death-num">${m.deaths}</span> / ${m.assists}${streakBadge}`;
       }
       const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
       if (farmEl) {
@@ -18409,7 +18605,19 @@ class ArenaView {
     if (data.type === "double") sound.playDoubleKill();
     else if (data.type === "triple") sound.playTripleKill();
     else if (data.type === "quadra") sound.playQuadraKill();
-    else if (data.type === "penta") sound.playPentakill();
+    else if (data.type === "penta") {
+      sound.playPentakill();
+      if (typeof confetti !== "undefined") confetti.startChampionConfetti(4500);
+      if (this.containerEl) {
+        this.containerEl.classList.add("screen-shake");
+        setTimeout(() => {
+          if (this.containerEl) this.containerEl.classList.remove("screen-shake");
+        }, 800);
+      }
+    } else if (["spree", "rampage", "unstoppable", "dominating", "godlike", "legendary"].includes(data.type)) {
+      if (sound.playKillingSpree) sound.playKillingSpree();
+      else sound.playDoubleKill();
+    }
 
     const tag = banner.querySelector("#announcer-tag");
     const killer = banner.querySelector("#announcer-killer");
@@ -18418,10 +18626,11 @@ class ArenaView {
 
     banner.className = `multikill-announcer-banner active ${data.killerSide}-side type-${data.type}`;
 
+    const duration = data.type === "penta" ? 4500 : (data.type === "quadra" ? 3600 : (data.type === "triple" ? 3200 : 2800));
     if (this._multikillTimer) clearTimeout(this._multikillTimer);
     this._multikillTimer = setTimeout(() => {
       banner.classList.remove("active");
-    }, 3000);
+    }, duration);
   }
 
   handleAce(data) {
@@ -18545,11 +18754,13 @@ class ArenaView {
       `;
     }
 
-    // 2. MULTIKILLS & ACES
-    if (evt.type === "multikill" || evt.type === "ace") {
-      const icon = evt.type === "ace" ? "💀" : "⚡";
+    // 2. MULTIKILLS, ACES & SEQUÊNCIAS (STREAKS)
+    if (evt.type === "multikill" || evt.type === "ace" || evt.type === "streak") {
+      const isPenta = evt.type === "multikill" && evt.text && evt.text.includes("PENTAKILL");
+      const icon = evt.icon || (evt.type === "ace" ? "💀👑" : (isPenta ? "👑" : (evt.type === "streak" ? "🔥" : "⚡")));
+      const cardTypeClass = isPenta ? "type-penta" : evt.type;
       return `
-        <div class="kfeed-card kfeed-highlight ${side}-side ${evt.type}">
+        <div class="kfeed-card kfeed-highlight ${side}-side ${cardTypeClass}">
           <span class="kfeed-time">${evt.time || ''}</span>
           <div class="kfeed-highlight-content">
             <span class="kfeed-icon">${icon}</span>
@@ -18619,6 +18830,11 @@ class ArenaView {
           setTimeout(() => targetEl.classList.remove("herald-impact"), 800);
         }
       }
+    }
+
+    // Som de shutdown crítico ao encerrar streak adversária
+    if (evt.type === "shutdown" || (evt.type === "kill" && evt.isShutdown)) {
+      if (sound.playShutdown) sound.playShutdown();
     }
 
     // Deduplicação defensiva: impede que o mesmo abate apareça 2x no feed no mesmo segundo
@@ -18908,6 +19124,13 @@ class ArenaView {
             return `<div class="stats-item-slot empty"></div>`;
           }).join('');
 
+          let medalsHtml = "";
+          if (c.pentaKills > 0) medalsHtml += `<span class="stat-medal penta" title="PENTAKILL Lendário!">👑 PENTA (${c.pentaKills})</span>`;
+          if (c.quadraKills > 0) medalsHtml += `<span class="stat-medal quadra" title="Quadra Kill!">💥 QUADRA (${c.quadraKills})</span>`;
+          if (c.tripleKills > 0) medalsHtml += `<span class="stat-medal triple" title="Triple Kill!">🔥 TRIPLE (${c.tripleKills})</span>`;
+          if (c.doubleKills > 0) medalsHtml += `<span class="stat-medal double" title="Double Kill!">⚡ DOUBLE (${c.doubleKills})</span>`;
+          if (c.largestKillStreak >= 3) medalsHtml += `<span class="stat-medal streak" title="Maior sequência sem morrer: ${c.largestKillStreak} abates">🔥 ${c.largestKillStreak}x Streak</span>`;
+
           return `
             <div class="stats-champ-card ${side}-card">
               <div class="stats-champ-left">
@@ -18921,8 +19144,11 @@ class ArenaView {
                 </div>
               </div>
               <div class="stats-champ-center">
-                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
-                <span class="stats-pill gold-pill">💰 ${goldStr}</span>
+                <div class="stats-pills-row">
+                  <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
+                  <span class="stats-pill gold-pill">💰 ${goldStr}</span>
+                </div>
+                ${medalsHtml ? `<div class="stats-medals-row">${medalsHtml}</div>` : ''}
               </div>
               <div class="stats-champ-items">
                 ${itemsHtml}

@@ -3723,6 +3723,143 @@
   100% { transform: scale(1.05); }
 }
 
+/* Sequências de Abates (Killing Spree / Rampage / Unstoppable / Legendary) */
+.multikill-announcer-banner.type-spree .announcer-inner,
+.multikill-announcer-banner.type-rampage .announcer-inner {
+  border-color: #f59e0b;
+  background: radial-gradient(circle, rgba(40, 25, 10, 0.98) 0%, rgba(15, 8, 3, 0.99) 100%);
+  box-shadow: 0 0 45px rgba(245, 158, 11, 0.8), inset 0 0 20px rgba(245, 158, 11, 0.4);
+}
+.multikill-announcer-banner.type-spree .announcer-tag,
+.multikill-announcer-banner.type-rampage .announcer-tag {
+  color: #fbbf24;
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.9);
+}
+
+.multikill-announcer-banner.type-unstoppable .announcer-inner,
+.multikill-announcer-banner.type-dominating .announcer-inner {
+  border-color: #ef4444;
+  background: radial-gradient(circle, rgba(50, 10, 15, 0.98) 0%, rgba(20, 3, 5, 0.99) 100%);
+  box-shadow: 0 0 50px rgba(239, 68, 68, 0.85), inset 0 0 25px rgba(239, 68, 68, 0.45);
+}
+.multikill-announcer-banner.type-unstoppable .announcer-tag,
+.multikill-announcer-banner.type-dominating .announcer-tag {
+  color: #f87171;
+  text-shadow: 0 0 22px rgba(239, 68, 68, 0.95);
+}
+
+.multikill-announcer-banner.type-godlike .announcer-inner,
+.multikill-announcer-banner.type-legendary .announcer-inner {
+  border-color: #ffd700;
+  background: radial-gradient(circle, rgba(65, 45, 10, 0.98) 0%, rgba(25, 15, 2, 0.99) 100%);
+  box-shadow: 0 0 65px rgba(255, 215, 0, 0.9), inset 0 0 30px rgba(255, 215, 0, 0.5);
+  animation: pentaPulse 0.6s infinite alternate;
+}
+.multikill-announcer-banner.type-godlike .announcer-tag,
+.multikill-announcer-banner.type-legendary .announcer-tag {
+  font-size: 38px;
+  color: #ffd700;
+  text-shadow: 0 0 25px rgba(255, 215, 0, 1), 0 0 45px rgba(245, 158, 11, 0.85);
+}
+
+/* Mini Badge de Streak na linha de Campeão em tempo real */
+.streak-mini-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  animation: streakPulse 1.8s infinite alternate;
+}
+
+.streak-mini-badge.spree {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid #f59e0b;
+  color: #fbbf24;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+.streak-mini-badge.unstoppable {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.streak-mini-badge.legendary {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(239, 68, 68, 0.35));
+  border: 1px solid #ffd700;
+  color: #fef08a;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  animation: streakPulse 0.9s infinite alternate;
+}
+
+@keyframes streakPulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  100% { transform: scale(1.08); filter: brightness(1.2); }
+}
+
+/* Medalhas de Multikill e Streak no Resumo Pós-Jogo */
+.stats-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-medals-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.stat-medal {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.stat-medal.double {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid #3b82f6;
+  color: #93c5fd;
+}
+
+.stat-medal.triple {
+  background: rgba(245, 158, 11, 0.22);
+  border: 1px solid #f59e0b;
+  color: #fef08a;
+}
+
+.stat-medal.quadra {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+}
+
+.stat-medal.penta {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(245, 158, 11, 0.5));
+  border: 1px solid #ffd700;
+  color: #fffbeb;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+  animation: streakPulse 1.2s infinite alternate;
+}
+
+.stat-medal.streak {
+  background: rgba(217, 119, 6, 0.2);
+  border: 1px solid #d97706;
+  color: #fde68a;
+}
+
 /* =========================================================
    TELA OFICIAL DE PÓS-JOGO E ESTATÍSTICAS (MATCH STATS MODAL)
    ========================================================= */

@@ -944,6 +944,13 @@ export class MatchSimulator {
         xpForNextLevel: 280,
         ultimateUnlocked: false,
         ultimateRank: 0,
+        killStreak: 0,
+        largestKillStreak: 0,
+        doubleKills: 0,
+        tripleKills: 0,
+        quadraKills: 0,
+        pentaKills: 0,
+        largestMultiKill: 0,
         spells: {
           d: spellD,
           f: spellF
@@ -4613,8 +4620,11 @@ export class MatchSimulator {
       killer.goldEarned = (killer.goldEarned || 500) + bounty;
       killer.goldCurrent = (killer.goldCurrent || 0) + bounty;
       victim.streak = 0;
+      victim.killStreak = 0;
     }
     killer.streak = (killer.streak || 0) + 1;
+    killer.killStreak = killer.streak;
+    killer.largestKillStreak = Math.max(killer.largestKillStreak || 0, killer.killStreak);
 
     this._updateIndividualLeadsAndMvp();
     this._syncTeamGold();
@@ -4627,8 +4637,10 @@ export class MatchSimulator {
       killer.multiKillCount = 1;
     }
     killer.lastKillSec = this.gameSeconds;
+    killer.largestMultiKill = Math.max(killer.largestMultiKill || 0, killer.multiKillCount);
 
     if (killer.multiKillCount === 2) {
+      killer.doubleKills = (killer.doubleKills || 0) + 1;
       this.onMultikill({
         type: "double",
         count: 2,
@@ -4640,11 +4652,14 @@ export class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "double",
         side: killerSide,
+        icon: "⚡",
         text: `⚡ DOUBLE KILL! ${killer.name} eliminou 2 adversários!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount === 3) {
+      killer.tripleKills = (killer.tripleKills || 0) + 1;
       this.onMultikill({
         type: "triple",
         count: 3,
@@ -4656,11 +4671,14 @@ export class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "triple",
         side: killerSide,
+        icon: "🔥",
         text: `🔥 TRIPLE KILL! ${killer.name} garantiu 3 abates consecutivos!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount === 4) {
+      killer.quadraKills = (killer.quadraKills || 0) + 1;
       this.onMultikill({
         type: "quadra",
         count: 4,
@@ -4672,11 +4690,14 @@ export class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "quadra",
         side: killerSide,
+        icon: "💥",
         text: `💥 QUADRA KILL! ${killer.name} aniquilou 4 adversários!`,
         time: this._formatTime()
       });
     } else if (killer.multiKillCount >= 5) {
+      killer.pentaKills = (killer.pentaKills || 0) + 1;
       this.onMultikill({
         type: "penta",
         count: 5,
@@ -4688,10 +4709,123 @@ export class MatchSimulator {
       });
       this.onEvent({
         type: "multikill",
+        multikillType: "penta",
         side: killerSide,
+        icon: "👑",
         text: `👑 PENTAKILL LENDÁRIO! ${killer.name} aniquilou todos os 5 campeões adversários!`,
         time: this._formatTime()
       });
+    } else if (killer.multiKillCount === 1) {
+      // Anúncios de Sequência de Abates sem morrer (Spree System)
+      if (killer.killStreak === 3) {
+        this.onMultikill({
+          type: "spree",
+          count: 3,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "KILLING SPREE!",
+          subtitle: `🔥 ${killer.name} está IMPLACÁVEL (3 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "spree",
+          side: killerSide,
+          icon: "🔥",
+          text: `🔥 IMPLACÁVEL! ${killer.name} alcançou uma sequência de 3 abates seguidos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 4) {
+        this.onMultikill({
+          type: "rampage",
+          count: 4,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "RAMPAGE!",
+          subtitle: `🔥 ${killer.name} está DOMINANDO (4 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "rampage",
+          side: killerSide,
+          icon: "⚡",
+          text: `⚡ DOMINANDO! ${killer.name} chegou a 4 abates consecutivos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 5) {
+        this.onMultikill({
+          type: "unstoppable",
+          count: 5,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "UNSTOPPABLE!",
+          subtitle: `💥 ${killer.name} está INCONTROLÁVEL (5 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "unstoppable",
+          side: killerSide,
+          icon: "💥",
+          text: `💥 INCONTROLÁVEL! ${killer.name} está imparável com 5 abates sem cair!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 6) {
+        this.onMultikill({
+          type: "dominating",
+          count: 6,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "AVASSALADOR!",
+          subtitle: `⚡ ${killer.name} segue AVASSALADOR (6 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "dominating",
+          side: killerSide,
+          icon: "⚡",
+          text: `⚡ AVASSALADOR! ${killer.name} já soma 6 abates consecutivos!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak === 7) {
+        this.onMultikill({
+          type: "godlike",
+          count: 7,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "GODLIKE!",
+          subtitle: `✨ ${killer.name} é DIVINO (7 abates seguidos)!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "godlike",
+          side: killerSide,
+          icon: "✨",
+          text: `✨ DIVINO! ${killer.name} alcançou o status de Godlike (7 abates seguidos)!`,
+          time: this._formatTime()
+        });
+      } else if (killer.killStreak >= 8) {
+        this.onMultikill({
+          type: "legendary",
+          count: killer.killStreak,
+          killerSide,
+          killerName: killer.name,
+          killerId: killer.id,
+          title: "LENDÁRIO!",
+          subtitle: `👑 ${killer.name} É LENDÁRIO (${killer.killStreak} ABATES)! ALGUÉM PARE ESSA FERA!`
+        });
+        this.onEvent({
+          type: "streak",
+          streakType: "legendary",
+          side: killerSide,
+          icon: "👑",
+          text: `👑 LENDÁRIO! ${killer.name} atingiu ${killer.killStreak} abates seguidos! Alguém pare essa fera!`,
+          time: this._formatTime()
+        });
+      }
     }
 
     const champData = getChampionById(killer.id);
@@ -4747,17 +4881,23 @@ export class MatchSimulator {
     // 3. Checagem de ACE (Extermínio: todos os 5 do time adversário mortos ao mesmo tempo)
     const remainingVictims = Object.values(victimRoster).filter(c => c.alive).length;
     if (remainingVictims === 0) {
+      if (killerSide === "blue") {
+        this.lanePressure = Math.min(100, this.lanePressure + 25);
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 25);
+      }
       this.onAce({
         aceSide: killerSide,
         wipedSide: victimSide,
         killerName: killer.name,
-        title: "ACE! (EXTERMÍNIO!)",
-        subtitle: `${killerSide === "blue" ? "Seu Time" : "CBLOL"} eliminou todos os adversários!`
+        title: "EXTERMÍNIO! (ACE)",
+        subtitle: `${killerSide === "blue" ? "Seu Time" : "CBLOL"} eliminou todos os 5 adversários!`
       });
       this.onEvent({
         type: "ace",
         side: killerSide,
-        text: `💀 ACE! Todos os 5 campeões de ${victimSide === "blue" ? this.blueTeam.name : this.redTeam.name} foram eliminados!`,
+        icon: "💀👑",
+        text: `💀👑 EXTERMÍNIO (ACE)! Todos os 5 campeões de ${victimSide === "blue" ? this.blueTeam.name : this.redTeam.name} foram eliminados! Campo livre para avançar!`,
         time: this._formatTime()
       });
     }

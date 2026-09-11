@@ -617,6 +617,58 @@ class SoundEngine {
       osc.stop(t + idx * 0.07 + 0.3);
     });
   }
+
+  // Som de Sequência de Abates (Killing Spree / Rampage / Legendary)
+  playKillingSpree() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    [220, 277.18, 329.63, 440].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freq, t + idx * 0.1);
+      gain.gain.setValueAtTime(0.32, t + idx * 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.1 + 0.38);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t + idx * 0.1);
+      osc.stop(t + idx * 0.1 + 0.4);
+    });
+  }
+
+  // Som de Shutdown (Finalizado! Quebra de sequência de abates com recompensa)
+  playShutdown() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bass = this.ctx.createOscillator();
+    const bg = this.ctx.createGain();
+    bass.type = "sine";
+    bass.frequency.setValueAtTime(160, t);
+    bass.frequency.exponentialRampToValueAtTime(50, t + 0.6);
+    bg.gain.setValueAtTime(0.6, t);
+    bg.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+    bass.connect(bg);
+    bg.connect(this.masterGain);
+    bass.start(t);
+    bass.stop(t + 0.65);
+
+    [880, 1174.66, 1760].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, t + 0.1 + idx * 0.08);
+      gain.gain.setValueAtTime(0.3, t + 0.1 + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1 + idx * 0.08 + 0.4);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t + 0.1 + idx * 0.08);
+      osc.stop(t + 0.1 + idx * 0.08 + 0.45);
+    });
+  }
 }
 
 export const sound = new SoundEngine();

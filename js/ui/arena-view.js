@@ -1433,7 +1433,11 @@ export class ArenaView {
 
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
       if (kdaEl) {
-        kdaEl.textContent = `${m.kills} / ${m.deaths} / ${m.assists}`;
+        let streakBadge = "";
+        if (m.killStreak >= 8) streakBadge = ` <span class="streak-mini-badge legendary" title="LENDÁRIO! (${m.killStreak} abates sem morrer)">👑 ${m.killStreak}</span>`;
+        else if (m.killStreak >= 5) streakBadge = ` <span class="streak-mini-badge unstoppable" title="INCONTROLÁVEL! (${m.killStreak} abates sem morrer)">💥 ${m.killStreak}</span>`;
+        else if (m.killStreak >= 3) streakBadge = ` <span class="streak-mini-badge spree" title="IMPLACÁVEL! (${m.killStreak} abates seguidos)">🔥 ${m.killStreak}</span>`;
+        kdaEl.innerHTML = `${m.kills} / <span class="death-num">${m.deaths}</span> / ${m.assists}${streakBadge}`;
       }
       const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
       if (farmEl) {
@@ -1487,7 +1491,19 @@ export class ArenaView {
     if (data.type === "double") sound.playDoubleKill();
     else if (data.type === "triple") sound.playTripleKill();
     else if (data.type === "quadra") sound.playQuadraKill();
-    else if (data.type === "penta") sound.playPentakill();
+    else if (data.type === "penta") {
+      sound.playPentakill();
+      if (typeof confetti !== "undefined") confetti.startChampionConfetti(4500);
+      if (this.containerEl) {
+        this.containerEl.classList.add("screen-shake");
+        setTimeout(() => {
+          if (this.containerEl) this.containerEl.classList.remove("screen-shake");
+        }, 800);
+      }
+    } else if (["spree", "rampage", "unstoppable", "dominating", "godlike", "legendary"].includes(data.type)) {
+      if (sound.playKillingSpree) sound.playKillingSpree();
+      else sound.playDoubleKill();
+    }
 
     const tag = banner.querySelector("#announcer-tag");
     const killer = banner.querySelector("#announcer-killer");
@@ -1496,10 +1512,11 @@ export class ArenaView {
 
     banner.className = `multikill-announcer-banner active ${data.killerSide}-side type-${data.type}`;
 
+    const duration = data.type === "penta" ? 4500 : (data.type === "quadra" ? 3600 : (data.type === "triple" ? 3200 : 2800));
     if (this._multikillTimer) clearTimeout(this._multikillTimer);
     this._multikillTimer = setTimeout(() => {
       banner.classList.remove("active");
-    }, 3000);
+    }, duration);
   }
 
   handleAce(data) {
@@ -1623,11 +1640,13 @@ export class ArenaView {
       `;
     }
 
-    // 2. MULTIKILLS & ACES
-    if (evt.type === "multikill" || evt.type === "ace") {
-      const icon = evt.type === "ace" ? "💀" : "⚡";
+    // 2. MULTIKILLS, ACES & SEQUÊNCIAS (STREAKS)
+    if (evt.type === "multikill" || evt.type === "ace" || evt.type === "streak") {
+      const isPenta = evt.type === "multikill" && evt.text && evt.text.includes("PENTAKILL");
+      const icon = evt.icon || (evt.type === "ace" ? "💀👑" : (isPenta ? "👑" : (evt.type === "streak" ? "🔥" : "⚡")));
+      const cardTypeClass = isPenta ? "type-penta" : evt.type;
       return `
-        <div class="kfeed-card kfeed-highlight ${side}-side ${evt.type}">
+        <div class="kfeed-card kfeed-highlight ${side}-side ${cardTypeClass}">
           <span class="kfeed-time">${evt.time || ''}</span>
           <div class="kfeed-highlight-content">
             <span class="kfeed-icon">${icon}</span>
@@ -1697,6 +1716,11 @@ export class ArenaView {
           setTimeout(() => targetEl.classList.remove("herald-impact"), 800);
         }
       }
+    }
+
+    // Som de shutdown crítico ao encerrar streak adversária
+    if (evt.type === "shutdown" || (evt.type === "kill" && evt.isShutdown)) {
+      if (sound.playShutdown) sound.playShutdown();
     }
 
     // Deduplicação defensiva: impede que o mesmo abate apareça 2x no feed no mesmo segundo
@@ -1986,6 +2010,13 @@ export class ArenaView {
             return `<div class="stats-item-slot empty"></div>`;
           }).join('');
 
+          let medalsHtml = "";
+          if (c.pentaKills > 0) medalsHtml += `<span class="stat-medal penta" title="PENTAKILL Lendário!">👑 PENTA (${c.pentaKills})</span>`;
+          if (c.quadraKills > 0) medalsHtml += `<span class="stat-medal quadra" title="Quadra Kill!">💥 QUADRA (${c.quadraKills})</span>`;
+          if (c.tripleKills > 0) medalsHtml += `<span class="stat-medal triple" title="Triple Kill!">🔥 TRIPLE (${c.tripleKills})</span>`;
+          if (c.doubleKills > 0) medalsHtml += `<span class="stat-medal double" title="Double Kill!">⚡ DOUBLE (${c.doubleKills})</span>`;
+          if (c.largestKillStreak >= 3) medalsHtml += `<span class="stat-medal streak" title="Maior sequência sem morrer: ${c.largestKillStreak} abates">🔥 ${c.largestKillStreak}x Streak</span>`;
+
           return `
             <div class="stats-champ-card ${side}-card">
               <div class="stats-champ-left">
@@ -1999,8 +2030,11 @@ export class ArenaView {
                 </div>
               </div>
               <div class="stats-champ-center">
-                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
-                <span class="stats-pill gold-pill">💰 ${goldStr}</span>
+                <div class="stats-pills-row">
+                  <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
+                  <span class="stats-pill gold-pill">💰 ${goldStr}</span>
+                </div>
+                ${medalsHtml ? `<div class="stats-medals-row">${medalsHtml}</div>` : ''}
               </div>
               <div class="stats-champ-items">
                 ${itemsHtml}
