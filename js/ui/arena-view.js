@@ -1557,8 +1557,9 @@ export class ArenaView {
       container.innerHTML = decisionData.options.map(opt => `
         <div class="decision-choice-card complexity-${opt.complexity || 'tactical'}" data-choice-id="${opt.id}">
           <div class="choice-card-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span class="choice-card-icon">${opt.icon || '⚔️'}</span>
+              ${opt.zoneLabel ? `<span class="zone-badge zone-${opt.zone || 'map'}">${opt.zoneLabel}</span>` : ''}
               <span class="complexity-badge ${opt.complexity || 'tactical'}">${opt.complexityLabel || opt.risk}</span>
             </div>
             <span class="probability-badge ${opt.probability >= 70 ? 'prob-high' : (opt.probability >= 45 ? 'prob-med' : 'prob-low')}">

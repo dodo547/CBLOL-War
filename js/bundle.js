@@ -4292,6 +4292,10 @@ class MatchSimulator {
     this.elderTaken = false;
     this.nextElderAt = 1680; // 28:00 (Elder Dragon)
 
+    // Sistema de Decisões Táticas de Rotas Individuais e Momentos Dinâmicos
+    this.nextDynamicIncidentAt = 210; // Primeiro incidente dinâmico aos 03:30 (após level 1)
+    this.incidentHistory = []; // Registro dos últimos tipos para garantir variedade contínua
+
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
     this.objectiveBountiesActive = false;
 
@@ -5029,11 +5033,11 @@ class MatchSimulator {
     });
 
     // 2. Decide se ocorre um Confronto Decisivo / Abate ou Troca de Rota
-    const isLaningPhase = this.gameSeconds < 840;
     const canFight = this.combatCooldown <= 0;
 
-    // Na fase de rotas, ocorrem duelos e ganks específicos de rotas (Top, Mid, Bot)
-    if (isLaningPhase && canFight && Math.random() < 0.20) {
+    // Escaramuças autênticas por rota e selva durante toda a partida (duelos, invades, ganks e 2v2)
+    const skirmishChance = this.gameSeconds < 840 ? 0.32 : 0.20;
+    if (canFight && Math.random() < skirmishChance) {
       const skirmishHappened = this._triggerLaneSkirmish();
       if (skirmishHappened) return;
     }
@@ -5335,142 +5339,8 @@ class MatchSimulator {
     const isAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
     const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
 
-    // 0.5. Decisão de Foco e Prioridade de Rota de Early Game (aos 03:30 = 210s)
-    if (!this.laneFocusTaken && this.gameSeconds >= 210 && this.gameSeconds < 280) {
-      this.laneFocusTaken = true;
-
-      const bTopName = this.blueRosterState.top ? this.blueRosterState.top.name : "Top";
-      const bMidName = this.blueRosterState.mid ? this.blueRosterState.mid.name : "Mid";
-      const bAdcName = this.blueRosterState.adc ? this.blueRosterState.adc.name : "Atirador";
-      const bJgName = this.blueRosterState.jungle ? this.blueRosterState.jungle.name : "Caçador";
-
-      const topProb = this._calculateSuccessProbability(72, "tactical", "combat");
-      const midProb = this._calculateSuccessProbability(76, "simple", "damage");
-      const botProb = this._calculateSuccessProbability(65, "complex", "damage");
-
-      const decisionData = {
-        id: "lane_focus_early",
-        meta: {},
-        badge: "ROTAS • EARLY GAME (03:30)",
-        title: "🗺️ ESCOLHA DE ROTA PRIORITÁRIA (INÍCIO DE PARTIDA)",
-        subtitle: "Os caçadores completaram o primeiro percurso da selva. Qual rota sua equipe vai priorizar para acelerar a partida?",
-        scouting: {
-          intelTag: "📡 RADAR DE ROTAS • NÍVEL 3",
-          enemyAction: "Top: disputa acirrada de troca 1v1 • Mid: pressão de magos no centro • Bot: duo adversário avançado na Rota Inferior."
-        },
-        options: [
-          {
-            id: "focus_top_lane",
-            icon: "🏔️",
-            name: `Foco no Top: Cobertura a ${bTopName} & Dano de Barricadas`,
-            complexity: "tactical",
-            complexityLabel: "🟡 Rota Superior (Top)",
-            probability: topProb,
-            risk: "Médio Risco",
-            riskClass: "medium",
-            reward: "Solo Kill no Top (+300g) + Pressão Top (+30%) + Barricada Atingida",
-            failureConsequence: "Top rival recua seguro sob a torre e congela a onda",
-            desc: `Enviar ${bJgName} para dar cobertura na rota superior, permitindo que ${bTopName} jogue agressivo, congele a onda ou arranque placas da T1 rival.`
-          },
-          {
-            id: "focus_mid_lane",
-            icon: "⚡",
-            name: `Foco no Meio: Shove Rápido com ${bMidName} & Domínio do Rio`,
-            complexity: "simple",
-            complexityLabel: "🟢 Rota do Meio (Mid)",
-            probability: midProb,
-            risk: "Risco Mínimo",
-            riskClass: "low",
-            reward: "Abate no Mid (+300g) + Pressão Mid (+30%) + Visão Total do Rio",
-            failureConsequence: "Mago adversário limpa onda à distância sem perdas",
-            desc: `Acelerar a limpeza de tropas no meio com ${bMidName} para ganhar prioridade de rio, abrindo rotações de gank para ambos os lados.`
-          },
-          {
-            id: "focus_bot_lane",
-            icon: "🏹",
-            name: `Foco no Bot: All-In com ${bAdcName} & Prio para o Dragão`,
-            complexity: "complex",
-            complexityLabel: "🔴 Rota Inferior (Bot)",
-            probability: botProb,
-            risk: "Alto Risco / Alto Retorno",
-            riskClass: "high",
-            reward: "Abate Duplo no Bot (+450g) + Pressão Bot (+35%) + Bônus para o Dragão",
-            failureConsequence: "Duo rival queima feitiços defensivos e recua em segurança",
-            desc: `Acumular onda de minions na rota inferior para forçar dive ou troca letal 2v2, garantindo o controle total do primeiro Dragão Elemental.`
-          }
-        ]
-      };
-
-      this._triggerTacticalDecision(decisionData);
-      return true;
-    }
-
-    // 0.8. Decisão de Macro de Transição e Cerco de Rota (aos 13:30 = 810s)
-    if (!this.laneMacroTaken && this.gameSeconds >= 810 && this.gameSeconds < 900) {
-      this.laneMacroTaken = true;
-
-      const bTopName = this.blueRosterState.top ? this.blueRosterState.top.name : "Top";
-      const bMidName = this.blueRosterState.mid ? this.blueRosterState.mid.name : "Mid";
-      const bAdcName = this.blueRosterState.adc ? this.blueRosterState.adc.name : "Atirador";
-
-      const splitProb = this._calculateSuccessProbability(68, "tactical", "push");
-      const midProb = this._calculateSuccessProbability(75, "simple", "combat");
-      const botProb = this._calculateSuccessProbability(62, "complex", "damage");
-
-      const decisionData = {
-        id: "lane_macro_midgame",
-        meta: {},
-        badge: "MACRO • TRANSIÇÃO (13:30)",
-        title: "⚔️ MACRO DE TRANSIÇÃO: CERCO E FOCO DE ROTA",
-        subtitle: "As barricadas caíram e a partida entra na fase de transição de mapa. Em qual rota a equipe vai concentrar o avanço ofensivo?",
-        scouting: {
-          intelTag: "📡 TELEMETRIA DE MACRO • MAPA ABERTO",
-          enemyAction: "CBLOL tentando defender suas torres T2 externas e proteger as entradas da selva."
-        },
-        options: [
-          {
-            id: "macro_split_top",
-            icon: "🏔️",
-            name: `Split Push Top 1-3-1: ${bTopName} Isolado em Avanço Contínuo`,
-            complexity: "tactical",
-            complexityLabel: "🟡 Rota Superior (Top)",
-            probability: splitProb,
-            risk: "Médio Risco",
-            riskClass: "medium",
-            reward: "T2 do Topo Destruída (+550g) + Tropas até a Base + Pressão Lateral",
-            failureConsequence: "CBLOL colapsa em 2 no Topo e intercepta o avanço",
-            desc: `Colocar ${bTopName} para pressionar a rota superior sozinho, obrigando múltiplos adversários a responderem enquanto o time controla o mapa.`
-          },
-          {
-            id: "macro_group_mid",
-            icon: "⚡",
-            name: `Agrupamento 5v5 no Mid: Cerco & Quebra da T2 Central`,
-            complexity: "simple",
-            complexityLabel: "🟢 Rota do Meio (Mid)",
-            probability: midProb,
-            risk: "Risco Mínimo",
-            riskClass: "low",
-            reward: "T2 Central Derrubada (+600g) + Acesso Total a Ambas as Selvas Rivais",
-            failureConsequence: "Adversário limpa a onda de minions sob a torre com feitiços de área",
-            desc: `Reunir os 5 campeões na rota do meio para derrubar a torre central, abrir a visão de ambas as selvas e sufocar a economia rival.`
-          },
-          {
-            id: "macro_siege_bot",
-            icon: "🏹",
-            name: `Marcha Inferior no Bot: Cerco com ${bAdcName} & Controle de Alma`,
-            complexity: "complex",
-            complexityLabel: "🔴 Rota Inferior (Bot)",
-            probability: botProb,
-            risk: "Alto Retorno",
-            riskClass: "high",
-            reward: "T2 do Bot Devastada (+600g) + Eliminação no ADC Inimigo + Domínio do Covil",
-            failureConsequence: "Torre defensiva pune o avanço com recuo forçado",
-            desc: `Descer em força máxima pela rota inferior com ${bAdcName} para quebrar a T2, empurrar as tropas e consolidar a rota para a Alma do Dragão.`
-          }
-        ]
-      };
-
-      this._triggerTacticalDecision(decisionData);
+    // 0.5. Incidentes Situacionais Dinâmicos & Escolhas por Rotas Individuais (Top, Jungle, Mid, Bot & Momentos de Jogo)
+    if (this._checkDynamicIncidents()) {
       return true;
     }
 
@@ -6105,6 +5975,526 @@ class MatchSimulator {
     return false;
   }
 
+  _checkDynamicIncidents() {
+    if (this.gameSeconds < 180) return false;
+    if (this.isFinished || this.activeDecision) return false;
+    if (this.gameSeconds < this.nextDynamicIncidentAt) return false;
+
+    // Evita sobreposição com objetivos neutros iminentes (janela de 45 segundos)
+    const isDragonNear = (this.nextDragonAt - this.gameSeconds > 0 && this.nextDragonAt - this.gameSeconds < 45);
+    const isBaronNear = (this.nextBaronAt - this.gameSeconds > 0 && this.nextBaronAt - this.gameSeconds < 45);
+    const isHeraldNear = (!this.heraldTaken && this.gameSeconds >= 450 && this.gameSeconds < 510);
+    const isElderNear = (this.nextElderAt - this.gameSeconds > 0 && this.nextElderAt - this.gameSeconds < 45);
+
+    if (isDragonNear || isBaronNear || isHeraldNear || isElderNear) {
+      this.nextDynamicIncidentAt = this.gameSeconds + 60;
+      return false;
+    }
+
+    // Agenda o próximo incidente dinâmico (a cada 210 a 330 segundos simulados)
+    this.nextDynamicIncidentAt = this.gameSeconds + 210 + Math.floor(Math.random() * 90);
+
+    const goldDiff = this.blueScore.gold - this.redScore.gold;
+    const isAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
+    const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
+    const phase = this.gameSeconds < 720 ? "early" : (this.gameSeconds < 1500 ? "mid" : "late");
+
+    // Pool de tipos candidatos
+    const candidateTypes = ["top_lane", "jungle_river", "mid_lane", "bot_lane"];
+    if (isAhead) candidateTypes.push("situational_snowball");
+    if (isBehind) candidateTypes.push("situational_comeback");
+    if (phase !== "early" && !isAhead && !isBehind) candidateTypes.push("situational_clash");
+
+    // Filtra para garantir variedade (evita o mesmo tipo nos últimos 2 incidentes)
+    const recentHistory = this.incidentHistory.slice(-2);
+    let eligiblePool = candidateTypes.filter(t => !recentHistory.includes(t));
+    if (eligiblePool.length === 0) eligiblePool = candidateTypes;
+
+    const chosenType = eligiblePool[Math.floor(Math.random() * eligiblePool.length)];
+    this.incidentHistory.push(chosenType);
+    if (this.incidentHistory.length > 12) this.incidentHistory.shift();
+
+    const decisionData = this._buildDynamicIncidentData(chosenType, phase, isAhead, isBehind);
+    if (decisionData) {
+      this._triggerTacticalDecision(decisionData);
+      return true;
+    }
+    return false;
+  }
+
+  _buildDynamicIncidentData(type, phase, isAhead, isBehind) {
+    const bTop = this.blueRosterState.top?.name || "Top";
+    const bJg = this.blueRosterState.jungle?.name || "Caçador";
+    const bMid = this.blueRosterState.mid?.name || "Mid";
+    const bAdc = this.blueRosterState.adc?.name || "Atirador";
+    const bSupp = this.blueRosterState.support?.name || "Suporte";
+
+    const rTop = this.redRosterState.top?.name || "Top Rival";
+    const rJg = this.redRosterState.jungle?.name || "Caçador Rival";
+    const rMid = this.redRosterState.mid?.name || "Mid Rival";
+    const rAdc = this.redRosterState.adc?.name || "ADC Rival";
+    const rSupp = this.redRosterState.support?.name || "Suporte Rival";
+
+    const timeStr = this._formatTime();
+
+    if (type === "top_lane") {
+      const isEarly = phase === "early";
+      const probFreeze = this._calculateSuccessProbability(78, "simple", "combat");
+      const probCrash = this._calculateSuccessProbability(68, "tactical", "push");
+      const probDive = this._calculateSuccessProbability(58, "complex", "damage");
+
+      return {
+        id: `dynamic_top_${this.gameSeconds}`,
+        meta: { targetLane: "top" },
+        badge: `ROTA SUPERIOR • ${timeStr}`,
+        title: isEarly ? "🏔️ ROTA SUPERIOR: GESTÃO DE ONDA & DUELO 1v1" : "🏔️ ROTA SUPERIOR: SPLIT PUSH & PRESSÃO LATERAL",
+        subtitle: isEarly
+          ? `A onda de tropas colidiu na rota superior. Qual postura estratégica ${bTop} deve adotar contra ${rTop}?`
+          : `${bTop} está isolado empurrando a rota lateral. Qual será o objetivo estratégico no Topo?`,
+        scouting: {
+          intelTag: "📡 RADAR DA ROTA SUPERIOR (TOP)",
+          enemyAction: `${rTop} jogando em volta da onda de minions • ${rJg} observado no quadrante superior do mapa.`
+        },
+        options: [
+          {
+            id: "top_freeze_control",
+            icon: "❄️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Congelar a Onda & Negar Farm a ${rTop}`,
+            complexity: "simple",
+            complexityLabel: "🟢 Controle de Rota",
+            probability: probFreeze,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "Controle Seguro da Rota + Vantagem Econômica de CS (+250g)",
+            failureConsequence: `${rTop} quebra o congelamento com magias de área`,
+            desc: `Manter as tropas recuadas perto da torre aliada, forçando ${rTop} a se expor perigosamente ou perder ouro e experiência.`
+          },
+          {
+            id: "top_crash_plates",
+            icon: "🏰",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Crash sob a Torre & Destruição de Barricadas`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Agressão a Estruturas",
+            probability: probCrash,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Dano Pesado na T1 do Topo + Coleta de Placas de Ouro (+400g)",
+            failureConsequence: `${rTop} defende sob a torre sem ceder placas`,
+            desc: `Empurrar uma grande onda de tropas até a torre inimiga para permitir que ${bTop} golpeie a estrutura e arranque ouro de placas.`
+          },
+          {
+            id: "top_dive_lethal",
+            icon: "⚡",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `All-In / Dive Letal sob a Torre com ${bTop} & ${bJg}`,
+            complexity: "complex",
+            complexityLabel: "🔴 Jogada Ousada",
+            probability: probDive,
+            risk: "Alto Risco / Alto Retorno",
+            riskClass: "high",
+            reward: `Eliminação de ${rTop} (+400g) + Pressão Máxima no Topo (+35%)`,
+            failureConsequence: `${rTop} esquiva sob a torre e garante contra-kill`,
+            desc: `Coordenar um mergulho fulminante sob a torre adversária com ${bTop} e ${bJg} para desintegrar ${rTop} e escancarar a rota.`
+          }
+        ]
+      };
+    }
+
+    if (type === "jungle_river") {
+      const probScuttle = this._calculateSuccessProbability(75, "simple", "combat");
+      const probInvade = this._calculateSuccessProbability(68, "tactical", "utility");
+      const probGank = this._calculateSuccessProbability(62, "complex", "damage");
+
+      return {
+        id: `dynamic_jungle_${this.gameSeconds}`,
+        meta: { targetLane: "jungle" },
+        badge: `SELVA & RIO • ${timeStr}`,
+        title: "🌲 SELVA & RIO: DISPUTA DE ARONGUEJO & INVASÃO",
+        subtitle: `${bJg} detectou o caçador rival ${rJg} disputando o controle do rio e dos acampamentos neutros.`,
+        scouting: {
+          intelTag: "📡 TELEMETRIA DA SELVA & RIO",
+          enemyAction: `${rJg} patrulhando a entrada do rio • Disputa tensa pelo controle de sentinelas e visão de covil.`
+        },
+        options: [
+          {
+            id: "jg_scuttle_contest",
+            icon: "🦀",
+            zone: "jungle",
+            zoneLabel: "🌲 SELVA & RIO",
+            name: `Batalha pelo Aronguejo com Cobertura de ${bMid}`,
+            complexity: "simple",
+            complexityLabel: "🟢 Domínio de Rio",
+            probability: probScuttle,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "Aronguejo Abatido + Visão e Velocidade no Rio (+Buff de Rio)",
+            failureConsequence: `${rJg} rouba no Golpear à distância`,
+            desc: `Contestar o monstro do rio com auxílio direto de ${bMid}, garantindo visão da rotação e velocidade de movimento no rio.`
+          },
+          {
+            id: "jg_cross_invade",
+            icon: "⚔️",
+            zone: "jungle",
+            zoneLabel: "🌲 SELVA & RIO",
+            name: `Invasão Cruzada: Roubar Buffs da Selva Rival`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Saque de Recursos",
+            probability: probInvade,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: `Buff Inimigo Roubado (+350g) + Atraso Severo no Farm de ${rJg}`,
+            failureConsequence: `CBLOL colapsa na selva com suporte`,
+            desc: `Ignorar o rio para invadir o quadrante oposto da selva do CBLOL, roubando monstros de alto valor e enfraquecendo o caçador inimigo.`
+          },
+          {
+            id: "jg_lane_gank",
+            icon: "🎯",
+            zone: "jungle",
+            zoneLabel: "🌲 SELVA & RIO",
+            name: `Emboscada Relâmpago de ${bJg} na Rota Avançada`,
+            complexity: "complex",
+            complexityLabel: "🔴 Gank Mortal",
+            probability: probGank,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: "Gank Perfeito com Abate (+350g) + Avanço de Torre na Rota",
+            failureConsequence: "Alvo rival escapa com Flash sob a torre",
+            desc: `Surpreender as linhas adversárias com um gank fulminante pelas costas, convertendo a emboscada em abates e pressão de torre.`
+          }
+        ]
+      };
+    }
+
+    if (type === "mid_lane") {
+      const probRoam = this._calculateSuccessProbability(68, "tactical", "damage");
+      const probSiege = this._calculateSuccessProbability(76, "simple", "push");
+      const probBurst = this._calculateSuccessProbability(60, "complex", "combat");
+
+      return {
+        id: `dynamic_mid_${this.gameSeconds}`,
+        meta: { targetLane: "mid" },
+        badge: `ROTA DO MEIO • ${timeStr}`,
+        title: "⚡ ROTA DO MEIO: PRIORIDADE CENTRAL & ROAMING",
+        subtitle: `${bMid} limpou as tropas no centro do mapa e abriu janela decisiva para ditar o ritmo contra ${rMid}.`,
+        scouting: {
+          intelTag: "📡 RADAR CENTRAL (MID)",
+          enemyAction: `${rMid} sob a torre limpando tropas • Rotas laterais vulneráveis a rotações rápidas pelo rio.`
+        },
+        options: [
+          {
+            id: "mid_roam_bot",
+            icon: "🏹",
+            zone: "mid",
+            zoneLabel: "⚡ ROTA DO MEIO",
+            name: `Roaming Rápido de ${bMid} para a Rota Inferior`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Rotação Ofensiva",
+            probability: probRoam,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Abate no Bot (+450g) + Caminho Aberto para o Dragão",
+            failureConsequence: "Bot rival percebe a descida e recua a tempo",
+            desc: `Descer pelo rio em velocidade máxima para transformar a disputa da rota inferior em uma investida 3v2 fulminante.`
+          },
+          {
+            id: "mid_siege_t1",
+            icon: "⚡",
+            zone: "mid",
+            zoneLabel: "⚡ ROTA DO MEIO",
+            name: `Pressão Direta na Torre Central com ${bMid}`,
+            complexity: "simple",
+            complexityLabel: "🟢 Cerco Central",
+            probability: probSiege,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "Dano Massivo na Torre Central + Domínio do Meio (+350g)",
+            failureConsequence: `${rMid} limpa onda de longe e segura a estrutura`,
+            desc: `Castigar a torre central inimiga com dano de habilidades e tropas, sufocando ${rMid} e abrindo o centro do mapa.`
+          },
+          {
+            id: "mid_burst_duel",
+            icon: "💥",
+            zone: "mid",
+            zoneLabel: "⚡ ROTA DO MEIO",
+            name: `Duelo de Magos: Combo All-In contra ${rMid}`,
+            complexity: "complex",
+            complexityLabel: "🔴 Outplay Mecânico",
+            probability: probBurst,
+            risk: "Alto Risco / Alto Retorno",
+            riskClass: "high",
+            reward: `Solo Kill no Mid (+350g) + Buff Domínio do Rio (+8 Combate)`,
+            failureConsequence: `${rMid} esquiva do combo e revida com dano letal`,
+            desc: `Conectar a habilidade principal de controle de grupo e descarregar todo o arsenal mágico para desintegrar ${rMid} no centro.`
+          }
+        ]
+      };
+    }
+
+    if (type === "bot_lane") {
+      const probAllin = this._calculateSuccessProbability(64, "complex", "combat");
+      const probDragon = this._calculateSuccessProbability(75, "simple", "utility");
+      const probPlates = this._calculateSuccessProbability(70, "tactical", "push");
+
+      return {
+        id: `dynamic_bot_${this.gameSeconds}`,
+        meta: { targetLane: "bot" },
+        badge: `ROTA INFERIOR • ${timeStr}`,
+        title: "🏹 ROTA INFERIOR: COMBATE 2v2 & CONTROLE DO COVIL",
+        subtitle: `${bAdc} e ${bSupp} engajaram em trocas intensas na Rota Inferior contra ${rAdc} e ${rSupp}.`,
+        scouting: {
+          intelTag: "📡 RADAR DA ROTA INFERIOR (BOT)",
+          enemyAction: `${rAdc} e ${rSupp} trocando dano na linha de frente • Covil do Dragão desprotegido no rio inferior.`
+        },
+        options: [
+          {
+            id: "bot_allin_2v2",
+            icon: "🏹",
+            zone: "bot",
+            zoneLabel: "🏹 ROTA INFERIOR",
+            name: `All-In 2v2 com Engage de ${bSupp} & Críticos de ${bAdc}`,
+            complexity: "complex",
+            complexityLabel: "🔴 Confronto Direto",
+            probability: probAllin,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: `Abate Duplo no Bot (+400g) + Barricadas do Bot Destruídas`,
+            failureConsequence: "Duo rival ativa Exaustão e vira a luta sob a torre",
+            desc: `Forçar combate de vida ou morte no 2v2 com iniciação agressiva do suporte e finalização de ${bAdc}.`
+          },
+          {
+            id: "bot_sneak_dragon",
+            icon: "🐲",
+            zone: "bot",
+            zoneLabel: "🏹 ROTA INFERIOR",
+            name: `Empurrar Onda e Fazer Dragão Elemental em Segredo`,
+            complexity: "simple",
+            complexityLabel: "🟢 Objetivo Furtivo",
+            probability: probDragon,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "Dragão Elemental Adiantado + Buff de Bênção (+300g)",
+            failureConsequence: "Sentinela rival detecta o início e força recuo",
+            desc: `Aproveitar a pressão da rota para deslizar furtivamente até o covil do Dragão e abater o monstro sem contestação.`
+          },
+          {
+            id: "bot_zone_plates",
+            icon: "🛡️",
+            zone: "bot",
+            zoneLabel: "🏹 ROTA INFERIOR",
+            name: `Zoneamento de Tropas & Demolição da Torre do Bot`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Sufocamento de CS",
+            probability: probPlates,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Torre do Bot Castigada (+400g) + Supressão de CS do ADC Rival",
+            failureConsequence: "CBLOL defende as tropas sem ceder placas",
+            desc: `Prender o duo rival sob a torre, negando farm de tropas e arrancando ouro valioso das placas de estrutura.`
+          }
+        ]
+      };
+    }
+
+    if (type === "situational_snowball") {
+      const probMultiDive = this._calculateSuccessProbability(72, "complex", "damage");
+      const probInvadeCamps = this._calculateSuccessProbability(82, "simple", "utility");
+      const probBait = this._calculateSuccessProbability(74, "tactical", "combat");
+
+      return {
+        id: `dynamic_snowball_${this.gameSeconds}`,
+        meta: { targetLane: "all" },
+        badge: `MOMENTO DE JOGO • DOMÍNIO & SNOWBALL`,
+        title: "👑 MAPA ABERTO: DIVE COORDENADO & SUFOCAMENTO",
+        subtitle: `Sua equipe acumula vantagem substancial de ouro e itens. Como transformar essa liderança em vitória no Rift?`,
+        scouting: {
+          intelTag: "📡 TELEMETRIA DE LIDERANÇA",
+          enemyAction: "CBLOL acuado na defensiva tentando defender suas torres externas e proteger suas entradas de base."
+        },
+        options: [
+          {
+            id: "snowball_multi_dive",
+            icon: "⚡",
+            zone: "map",
+            zoneLabel: "⚔️ MAPA GLOBAL",
+            name: `Dive Coordenado na Rota mais Frágil do Inimigo`,
+            complexity: "complex",
+            complexityLabel: "🔴 Aceleração Mortal",
+            probability: probMultiDive,
+            risk: "Alto Retorno",
+            riskClass: "high",
+            reward: "Torre Destruída (+550g) + Múltiplos Abates + Base Aberta",
+            failureConsequence: "CBLOL gasta recursos e impede a queda da torre",
+            desc: `Marchar em grupo para mergulhar sob a torre do adversário, aniquilar defensores e aproximar a partida do Nexus.`
+          },
+          {
+            id: "snowball_invade_camps",
+            icon: "🌲",
+            zone: "jungle",
+            zoneLabel: "🌲 SELVA & RIO",
+            name: `Invasão Total da Selva Inimiga & Roubo de Recursos`,
+            complexity: "simple",
+            complexityLabel: "🟢 Sufocamento Econômico",
+            probability: probInvadeCamps,
+            risk: "Risco Mínimo",
+            riskClass: "low",
+            reward: "Sufocamento Econômico (+500g) + Visão da Base Inimiga",
+            failureConsequence: "CBLOL agrupa na entrada da base e bloqueia a invasão",
+            desc: `Saquear completamente os acampamentos do CBLOL, privando o adversário de qualquer recurso ou experiência.`
+          },
+          {
+            id: "snowball_baron_bait",
+            icon: "👑",
+            zone: "map",
+            zoneLabel: "⚔️ MAPA GLOBAL",
+            name: `Isca no Covil do Barão / Armadilha na Moita no Escuro`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Emboscada Coordenada",
+            probability: probBait,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Emboscada com Eliminações (+600g) + Vitória Próxima",
+            failureConsequence: "CBLOL desconfia da isca e prefere não contestar",
+            desc: `Simular o início do monstro épico para obrigar o CBLOL a avançar às cegas no rio e pegá-los em uma emboscada fatal.`
+          }
+        ]
+      };
+    }
+
+    if (type === "situational_comeback") {
+      const probDef = this._calculateSuccessProbability(65, "tactical", "combat");
+      const probCross = this._calculateSuccessProbability(76, "simple", "push");
+      const probSmite = this._calculateSuccessProbability(52, "complex", "utility");
+
+      return {
+        id: `dynamic_comeback_${this.gameSeconds}`,
+        meta: { targetLane: "all" },
+        badge: `MOMENTO DE JOGO • DEFESA HEROICA & VIRADA`,
+        title: "🛡️ PRESSÃO RIVAL: DEFESA SOB A TORRE & VIRADA",
+        subtitle: "O CBLOL está avançando com vantagem econômica. Sua equipe precisa de uma resposta tática precisa para virar a partida!",
+        scouting: {
+          intelTag: "📡 RADAR DE ALERTA DEFENSIVO",
+          enemyAction: "CBLOL agrupando na tentativa de forçar cerco nas defesas da sua equipe."
+        },
+        options: [
+          {
+            id: "comeback_tower_defense",
+            icon: "🛡️",
+            zone: "map",
+            zoneLabel: "⚔️ MAPA GLOBAL",
+            name: `Contra-Ataque sob o Fogo da Torre Aliada`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Virada Defensiva",
+            probability: probDef,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Super Shutdown Coletado (+700g Bônus!) + Virada de Pressão",
+            failureConsequence: "Dano rival quebra a linha defensiva da torre",
+            desc: `Atrair a investida inimiga para o alcance da torre aliada e usar todo o controle de grupo para abater os carregadores adversários.`
+          },
+          {
+            id: "comeback_cross_trade",
+            icon: "🏔️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA SUPERIOR",
+            name: `Jogada Cruzada: Ceder Objetivo e Levar Torres Opostas`,
+            complexity: "simple",
+            complexityLabel: "🟢 Macro de Troca",
+            probability: probCross,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "2 Torres Opostas Derrubadas (+650g de Ouro Global de Virada)",
+            failureConsequence: "Onda de tropas não chega a tempo de levar a estrutura",
+            desc: `Enquanto o CBLOL gasta tempo no objetivo, marchar veloz no lado oposto do mapa para faturar ouro maciço de torres.`
+          },
+          {
+            id: "comeback_smite_steal",
+            icon: "⚡",
+            zone: "jungle",
+            zoneLabel: "🌲 SELVA & RIO",
+            name: `Investida Kamikaze de ${bJg} para Roubo com Golpear`,
+            complexity: "complex",
+            complexityLabel: "🔴 Roubo Heroico",
+            probability: probSmite,
+            risk: "Alto Risco / Lendário Retorno",
+            riskClass: "high",
+            reward: "ROUBO MILAGROSO DE SMITE (+Buff de Alma) + Moral Restaurado!",
+            failureConsequence: `${bJg} cai no ninho na tentativa de roubo`,
+            desc: `Enviar ${bJg} sozinho em jogada suicida para flashar dentro do covil e roubar o monstro neutro no milissegundo final.`
+          }
+        ]
+      };
+    }
+
+    // situational_clash (balanced / late game)
+    const probTP = this._calculateSuccessProbability(65, "complex", "combat");
+    const probF2B = this._calculateSuccessProbability(75, "simple", "combat");
+    const probPoke = this._calculateSuccessProbability(70, "tactical", "damage");
+
+    return {
+      id: `dynamic_clash_${this.gameSeconds}`,
+      meta: { targetLane: "all" },
+      badge: `MOMENTO DE JOGO • CLASH DECISIVO`,
+      title: "⚔️ CONFRONTO DECISIVO: POSICIONAMENTO DE TEAMFIGHT",
+      subtitle: "Jogo parelho no Summoner's Rift! As equipes se encaram no rio. Quem errar o passo perde a partida!",
+      scouting: {
+        intelTag: "📡 TELEMETRIA DE CONFRONTO 5v5",
+        enemyAction: "Times posicionados em volta do rio em tensão máxima aguardando o primeiro engage."
+      },
+      options: [
+        {
+          id: "clash_tp_flank",
+          icon: "🏔️",
+          zone: "top",
+          zoneLabel: "🏔️ ROTA SUPERIOR",
+          name: `Flanco de Teleporte de ${bTop} nas Costas do CBLOL`,
+          complexity: "complex",
+          complexityLabel: "🔴 Flanco Surpresa",
+          probability: probTP,
+          risk: "Alto Retorno",
+          riskClass: "high",
+          reward: "Linha de Trás Inimiga Destruída (+550g) + Vitória no Confronto",
+          failureConsequence: "Flanco é focado e eliminado na chegada",
+          desc: `Surpreender o adversário pelas costas com ${bTop} surgindo em sentinela avançada para explodir os atiradores rivais.`
+        },
+        {
+          id: "clash_front_to_back",
+          icon: "🛡️",
+          zone: "mid",
+          zoneLabel: "⚡ ROTA DO MEIO",
+          name: `Luta Front-to-Back com Proteção Total a ${bAdc}`,
+          complexity: "simple",
+          complexityLabel: "🟢 Formação Fechada",
+          probability: probF2B,
+          risk: "Baixo Risco",
+          riskClass: "low",
+          reward: "Vitória Disciplinada na Luta (+500g) + Avanço Central",
+          failureConsequence: "Assassino adversário encontra brecha na linha de trás",
+          desc: `Manter a equipe unida, absorver o dano inimigo com os tanques e permitir que ${bAdc} cause dano constante e seguro.`
+        },
+        {
+          id: "clash_poke_kite",
+          icon: "🏹",
+          zone: "bot",
+          zoneLabel: "🏹 ROTA INFERIOR",
+          name: `Desgaste à Distância (Poke & Kite) com ${bMid}`,
+          complexity: "tactical",
+          complexityLabel: "🟡 Desgaste de Cerco",
+          probability: probPoke,
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "CBLOL Forçado a Recuar com Pouca Vida + Estruturas Livres (+450g)",
+          failureConsequence: "Engage rápido do adversário impede o desgaste",
+          desc: `Usar magias de longo alcance para esvaziar as barras de vida inimigas antes do choque corporal, forçando o rival a ceder espaço.`
+        }
+      ]
+    };
+  }
+
   _triggerTacticalDecision(decisionData) {
     if (this.speed >= 50) {
       this._autoResolveTacticalDecision(decisionData);
@@ -6156,6 +6546,8 @@ class MatchSimulator {
         result = this._resolveHeraldDecision(opt.id, isSuccess, roll, opt.probability);
       } else if (dec.id === "elder") {
         result = this._resolveElderDecision(opt.id, isSuccess, roll, opt.probability);
+      } else if (dec.id && dec.id.startsWith("dynamic_")) {
+        result = this._resolveDynamicIncidentDecision(opt.id, dec, isSuccess, roll, opt.probability);
       }
     } catch (err) {
       console.error("Erro ao resolver decisão tática:", err);
@@ -7933,6 +8325,569 @@ class MatchSimulator {
     }
   }
 
+  _resolveDynamicIncidentDecision(choiceId, dec, isSuccess, roll, prob) {
+    const bTop = this.blueRosterState.top;
+    const bJg = this.blueRosterState.jungle;
+    const bMid = this.blueRosterState.mid;
+    const bAdc = this.blueRosterState.adc;
+    const bSupp = this.blueRosterState.support;
+
+    const rTop = this.redRosterState.top;
+    const rJg = this.redRosterState.jungle;
+    const rMid = this.redRosterState.mid;
+    const rAdc = this.redRosterState.adc;
+    const rSupp = this.redRosterState.support;
+
+    // 1. Rota Superior (Top)
+    if (choiceId === "top_freeze_control") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 25);
+        this.lanePressure = Math.min(100, this.lanePressure + 8);
+        this._awardTeamGold("blue", 250);
+        return {
+          success: true, roll, probability: prob,
+          title: "CONGELAMENTO DE ONDA PERFEITO!",
+          subtitle: `Controle da Rota Superior (${prob}% chance)`,
+          text: `${bTop?.name || 'Seu Top Laner'} congelou as tropas com precisão na frente da torre aliada, sufocou ${rTop?.name || 'Top Rival'} e faturou +250g em vantagem de CS!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 10);
+        return {
+          success: false, roll, probability: prob,
+          title: "CONGELAMENTO QUEBRADO",
+          subtitle: `Resposta de ${rTop?.name || 'Top Rival'} (${prob}% chance)`,
+          text: `${rTop?.name || 'O rival'} usou magias de longo alcance para resetar a onda de tropas e evitou a perda de farm.`
+        };
+      }
+    }
+
+    if (choiceId === "top_crash_plates") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 22, false, 1.4, "top");
+        this._awardTeamGold("blue", 400);
+        return {
+          success: true, roll, probability: prob,
+          title: "BARRICADAS DO TOPO DESTRUÍDAS!",
+          subtitle: `Demolição Lateral (${prob}% chance)`,
+          text: `${bTop?.name || 'Seu Top Laner'} empurrou uma onda gigante contra a T1 inimiga, arrancou barricadas e garantiu +400g em ouro de estruturas!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 15);
+        return {
+          success: false, roll, probability: prob,
+          title: "DEFESA SOB A TORRE DO TOPO",
+          subtitle: `Resistência Rival (${prob}% chance)`,
+          text: `${rTop?.name || 'O adversário'} limpou os minions antes que causassem dano direto às placas da torre.`
+        };
+      }
+    }
+
+    if (choiceId === "top_dive_lethal") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        if (bTop && rTop) {
+          this._recordKill("blue", "red", "top", "top", "Dive Letal no Top", `⚡ DIVE EXECUTADO NO TOPO! ${bTop.name} e ${bJg?.name || 'Caçador'} colapsaram sob a torre e executaram ${rTop.name}!`);
+        }
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 40);
+        this.lanePressure = Math.min(100, this.lanePressure + 15);
+        this._damageNextStructure("blue", this.redStructures, 28, false, 1.6, "top");
+        this._awardTeamGold("blue", 400);
+        return {
+          success: true, roll, probability: prob,
+          title: "DIVE MORTAL NO TOPO!",
+          subtitle: `Mergulho sob a Torre (${prob}% chance)`,
+          text: `Jogada agressiva espetacular! Sua equipe eliminou o Top Laner rival sob a torre, levou barricadas e conquistou o domínio total da rota superior!`
+        };
+      } else {
+        if (bTop && rTop) {
+          this._recordKill("red", "blue", "top", "top", "Outplay sob a Torre", `🔴 OUTPLAY SOB A TORRE! ${rTop.name} esquivou do dive e abateu ${bTop.name} com o auxílio da torre!`);
+        }
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "DIVE PUNIDO SOB A TORRE",
+          subtitle: `Reação Defensiva (${prob}% chance)`,
+          text: `O rival usou feitiços defensivos no momento exato e os disparos da torre puniram o avanço agressivo.`
+        };
+      }
+    }
+
+    // 2. Selva & Rio (Jungle)
+    if (choiceId === "jg_scuttle_contest") {
+      if (isSuccess) {
+        if (bJg && rJg) {
+          this._recordKill("blue", "red", "jungle", "jungle", "Disputa no Rio", `🌲 DISPUTA NO RIO! ${bJg.name} com cobertura de ${bMid?.name || 'Mid'} venceu o duelo no rio e eliminou ${rJg.name}!`);
+        }
+        this._applyTeamBuff("blue", { id: "river_vision", name: "Visão do Rio", icon: "👁️", bonusCombat: 6, duration: 150 });
+        this._awardTeamGold("blue", 220);
+        return {
+          success: true, roll, probability: prob,
+          title: "DOMÍNIO DO ARONGUEJO & VISÃO!",
+          subtitle: `Controle do Rio (${prob}% chance)`,
+          text: `${bJg?.name || 'Seu Caçador'} assegurou o Aronguejo no Golpear, garantiu visão no rio e concedeu bônus de velocidade e combate para a equipe!`
+        };
+      } else {
+        this.onEvent({ type: "skirmish", side: "red", text: `⚠️ ${rJg?.name || 'Caçador rival'} garantiu o Aronguejo no Golpear e recuou em segurança.`, time: this._formatTime() });
+        return {
+          success: false, roll, probability: prob,
+          title: "ARONGUEJO ROUBADO",
+          subtitle: `Golpear Adversário (${prob}% chance)`,
+          text: `O caçador rival calculou o dano final com precisão e levou o monstro do rio.`
+        };
+      }
+    }
+
+    if (choiceId === "jg_cross_invade") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 350);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._applyTeamBuff("blue", { id: "invade_buff", name: "Buff Roubado", icon: "🔥", bonusCombat: 8, duration: 160 });
+        return {
+          success: true, roll, probability: prob,
+          title: "INVASÃO DE SELVA IMPECÁVEL!",
+          subtitle: `Roubo de Buffs (+350g) (${prob}% chance)`,
+          text: `${bJg?.name || 'Seu Caçador'} limpou os campos da selva inimiga, roubou o monstro principal e deixou o caçador do CBLOL para trás em ouro e nível!`
+        };
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        return {
+          success: false, roll, probability: prob,
+          title: "INVASÃO PERCEBIDA",
+          subtitle: `Sentinela Adversária (${prob}% chance)`,
+          text: `Uma sentinela profunda revelou a investida e o CBLOL colapsou, obrigando a um recuo defensivo.`
+        };
+      }
+    }
+
+    if (choiceId === "jg_lane_gank") {
+      if (isSuccess) {
+        const targetRole = Math.random() < 0.5 ? "mid" : "bot";
+        const bKiller = bJg || this.blueRosterState[targetRole];
+        const rVictim = this.redRosterState[targetRole];
+        if (bKiller && rVictim) {
+          this._recordKill("blue", "red", "jungle", targetRole, "Emboscada Relâmpago", `🎯 GANK RELÂMPAGO! ${bJg?.name || 'Caçador'} emboscou pelas costas e abateu ${rVictim.name}!`);
+        }
+        if (this.lanePressures) this.lanePressures[targetRole] = Math.min(100, (this.lanePressures[targetRole] || 0) + 30);
+        this._damageNextStructure("blue", this.redStructures, 20, false, 1.3, targetRole);
+        this._awardTeamGold("blue", 350);
+        return {
+          success: true, roll, probability: prob,
+          title: "EMBOSCADA MORTAL DE CAÇADOR!",
+          subtitle: `Gank Cirúrgico (${prob}% chance)`,
+          text: `Movimentação fantástica! Seu caçador surpreendeu a rota adversária, garantiu o abate (+350g) e abriu a torre para cerco!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "GANK DESVIADO",
+          subtitle: `Flash Defensivo (${prob}% chance)`,
+          text: `O alvo rival ativou o Flash imediatamente ao avistar a fumaça e buscou refúgio sob a torre.`
+        };
+      }
+    }
+
+    // 3. Rota do Meio (Mid)
+    if (choiceId === "mid_roam_bot") {
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        if (bMid && rAdc) {
+          this._recordKill("blue", "red", "mid", "adc", "Roam no Bot", `🏹 ROAMING DESTRUIDOR! ${bMid.name} desceu pelo rio e abateu ${rAdc.name} no mergulho 3v2!`);
+        }
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 22, false, 1.35, "bot");
+        this._applyTeamBuff("blue", { id: "dragon_prep", name: "Prioridade de Dragão", icon: "🐲", bonusCombat: 10, duration: 180 });
+        this._awardTeamGold("blue", 450);
+        return {
+          success: true, roll, probability: prob,
+          title: "ROAMING LETAL NA BOT LANE!",
+          subtitle: `Investida 3v2 no Bot (${prob}% chance)`,
+          text: `Seu Mid Laner desceu em velocidade máxima, eliminou o atirador adversário (+450g), demoliu defesas e garantiu o Dragão Elemental!`
+        };
+      } else {
+        this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 10);
+        return {
+          success: false, roll, probability: prob,
+          title: "BOT LANE RIVAL RECUOU",
+          subtitle: `Visão no Rio (${prob}% chance)`,
+          text: `A bot lane adversária detectou a descida pelo rio a tempo e recuou em segurança.`
+        };
+      }
+    }
+
+    if (choiceId === "mid_siege_t1") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 14);
+        this._damageNextStructure("blue", this.redStructures, 26, false, 1.5, "mid");
+        this._awardTeamGold("blue", 350);
+        return {
+          success: true, roll, probability: prob,
+          title: "PRESSÃO CENTRAL ESMAGADORA!",
+          subtitle: `Dano Direto na Torre (${prob}% chance)`,
+          text: `${bMid?.name || 'Seu Mid Laner'} manteve o centro sufocado, arrancou grande parte da vida da torre central e garantiu +350g!`
+        };
+      } else {
+        this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 10);
+        return {
+          success: false, roll, probability: prob,
+          title: "DEFESA CENTRAL FIRME",
+          subtitle: `Limpeza de Onda (${prob}% chance)`,
+          text: `${rMid?.name || 'O mago rival'} limpou as tropas com feitiços de área e protegeu a torre central.`
+        };
+      }
+    }
+
+    if (choiceId === "mid_burst_duel") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        if (bMid && rMid) {
+          this._recordKill("blue", "red", "mid", "mid", "Solo Kill no Mid", `💥 EXPLOSÃO CENTRAL! ${bMid.name} acertou todo o combo mágico e desintegrou ${rMid.name}!`);
+        }
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 14);
+        this._damageNextStructure("blue", this.redStructures, 20, false, 1.3, "mid");
+        this._applyTeamBuff("blue", { id: "river_dominance", name: "Domínio do Rio", icon: "⚡", bonusCombat: 8, duration: 160 });
+        this._awardTeamGold("blue", 350);
+        return {
+          success: true, roll, probability: prob,
+          title: "SOLO KILL ESPETACULAR NO MID!",
+          subtitle: `Outplay Mágico (${prob}% chance)`,
+          text: `Execução digna de final do CBLOL! Seu Mid Laner venceu o 1v1, abriu a rota central e garantiu o bônus de Domínio do Rio (+8 Combate)!`
+        };
+      } else {
+        if (bMid && rMid) {
+          this._recordKill("red", "blue", "mid", "mid", "Troca no Mid", `🔴 RESPOSTA NO MID! ${rMid.name} esquivou do combo e revidou com dano letal em ${bMid.name}!`);
+        }
+        this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "DUELO NO MID PERDIDO",
+          subtitle: `Desfecho Inverso (${prob}% chance)`,
+          text: `O rival esquivou da habilidade principal por milímetros e puniu a tentativa de all-in com dano fulminante.`
+        };
+      }
+    }
+
+    // 4. Rota Inferior (Bot)
+    if (choiceId === "bot_allin_2v2") {
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        if (bAdc && rAdc) {
+          this._recordKill("blue", "red", "adc", "adc", "All-In Letal no Bot", `🏹 DUELO 2v2 VENCIDO! ${bAdc.name} encaixou os acertos críticos e eliminou ${rAdc.name}!`);
+        }
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 14);
+        this._damageNextStructure("blue", this.redStructures, 22, false, 1.35, "bot");
+        this._awardTeamGold("blue", 400);
+        return {
+          success: true, roll, probability: prob,
+          title: "MASSACRE NO 2v2 DO BOT!",
+          subtitle: `All-In da Bot Lane (${prob}% chance)`,
+          text: `Sua dupla jogou com frieza absoluta, eliminou o atirador adversário (+400g) e castigou a torre da rota inferior!`
+        };
+      } else {
+        if (bAdc && rAdc) {
+          this._recordKill("red", "blue", "adc", "adc", "All-In Rival no Bot", `🔴 DERROTA NO 2v2! A dupla rival conectou o engage e abateu ${bAdc.name}!`);
+        }
+        this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "DESVANTAGEM NO 2v2",
+          subtitle: `Engage Adversário (${prob}% chance)`,
+          text: `A bot lane rival virou a troca no momento do all-in e forçou um recuo defensivo sob a torre.`
+        };
+      }
+    }
+
+    if (choiceId === "bot_sneak_dragon") {
+      if (isSuccess) {
+        this.blueScore.dragons = (this.blueScore.dragons || 0) + 1;
+        this.nextDragonAt = this.gameSeconds + 300;
+        this._applyTeamBuff("blue", { id: "sneak_dragon_buff", name: "Bênção Dracônica", icon: "🐲", bonusCombat: 8, duration: 200 });
+        this._awardTeamGold("blue", 300);
+        this.onEvent({
+          type: "dragon_killed",
+          side: "blue",
+          text: `🐲 DRAGÃO EM SEGREDO! Sua bot lane fez o Dragão Elemental furtivamente sem contestação rival!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "DRAGÃO ELEMENTAL FURTIVO!",
+          subtitle: `Macro Inteligente (${prob}% chance)`,
+          text: `Jogada genial! Sua equipe abateu o Dragão Elemental pelas costas do CBLOL sem que eles pudessem sequer contestar!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "DRAGÃO DETECTADO",
+          subtitle: `Sentinela Rival (${prob}% chance)`,
+          text: `O adversário posicionou uma sentinela no covil a tempo e obrigou sua equipe a abandonar o monstro.`
+        };
+      }
+    }
+
+    if (choiceId === "bot_zone_plates") {
+      this.setLaneFocus("bot");
+      if (isSuccess) {
+        this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 32);
+        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        this._damageNextStructure("blue", this.redStructures, 24, false, 1.4, "bot");
+        this._awardTeamGold("blue", 400);
+        return {
+          success: true, roll, probability: prob,
+          title: "TORRE DO BOT DEMOLIDA!",
+          subtitle: `Pressão e Coleta de Placas (${prob}% chance)`,
+          text: `Zoneamento impecável! Seu duo manteve o adversário acuado e garantiu +400g em placas e demolição da torre inferior!`
+        };
+      } else {
+        this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 10);
+        return {
+          success: false, roll, probability: prob,
+          title: "DEFESA DE TORRE DO BOT",
+          subtitle: `Resistência (${prob}% chance)`,
+          text: `O duo rival limpou as tropas embaixo da torre sem sofrer perda significativa de placas.`
+        };
+      }
+    }
+
+    // 5. Momentos Situacionais de Snowball (Liderança)
+    if (choiceId === "snowball_multi_dive") {
+      if (isSuccess) {
+        const victim = rTop?.alive ? rTop : (rAdc?.alive ? rAdc : Object.values(this.redRosterState)[0]);
+        if (victim) {
+          this._recordKill("blue", "red", "mid", victim.role || "top", "Dive Coordenado", `⚡ DIVE ESMAGADOR! Seu time invadiu a torre e eliminou ${victim.name}!`);
+        }
+        this._damageNextStructure("blue", this.redStructures, 38, false, 2.0);
+        this._awardTeamGold("blue", 550);
+        this.lanePressure = Math.min(100, this.lanePressure + 25);
+        return {
+          success: true, roll, probability: prob,
+          title: "DIVE MULTI-ROTAS DEVASTADOR!",
+          subtitle: `Pressão de Campeões (${prob}% chance)`,
+          text: `A liderança foi convertida em pura demolição! Sua equipe mergulhou sob a torre inimiga, eliminou defensores e demoliu a estrutura (+550g)!`
+        };
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        return {
+          success: false, roll, probability: prob,
+          title: "DIVE CONTIDO",
+          subtitle: `Defesa Agressiva (${prob}% chance)`,
+          text: `O CBLOL acumulou recursos defensivos e obrigou seu time a recuar sem levar a torre.`
+        };
+      }
+    }
+
+    if (choiceId === "snowball_invade_camps") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 500);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        this._applyTeamBuff("blue", { id: "jungle_strangle", name: "Sufocamento de Selva", icon: "🌲", bonusCombat: 10, duration: 180 });
+        return {
+          success: true, roll, probability: prob,
+          title: "SELVA RIVAL TOTALMENTE SAQUEADA!",
+          subtitle: `Sufocamento Econômico (+500g) (${prob}% chance)`,
+          text: `Seu time varreu os quadrantes da selva adversária, roubou todos os monstros e privou o CBLOL de qualquer oportunidade de retorno!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "INVASÃO DISSIPADA",
+          subtitle: `CBLOL Agrupado (${prob}% chance)`,
+          text: `O time adversário se posicionou em conjunto e impediu o avanço profundo na selva.`
+        };
+      }
+    }
+
+    if (choiceId === "snowball_baron_bait") {
+      if (isSuccess) {
+        const victim = rJg?.alive ? rJg : Object.values(this.redRosterState)[0];
+        if (victim) {
+          this._recordKill("blue", "red", "adc", victim.role || "jungle", "Emboscada no Barão", `👑 ISCA MORTAL! O CBLOL checou o Barão e ${bAdc?.name || 'ADC'} eliminou ${victim.name}!`);
+        }
+        this._awardTeamGold("blue", 600);
+        this.lanePressure = Math.min(100, this.lanePressure + 24);
+        return {
+          success: true, roll, probability: prob,
+          title: "ISCA NO BARÃO PERFEITA!",
+          subtitle: `Aniquilação na Moita (+600g) (${prob}% chance)`,
+          text: `O adversário caiu na armadilha no escuro! Sua equipe emboscou os rivais na entrada do rio, conquistou abates decisivos e escancarou o caminho para a base!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "ISCA NÃO FUNCIONOU",
+          subtitle: `Cautela Rival (${prob}% chance)`,
+          text: `O CBLOL preferiu não se aproximar do rio no escuro e permaneceu defendendo suas torres.`
+        };
+      }
+    }
+
+    // 6. Momentos Situacionais de Comeback (Virada)
+    if (choiceId === "comeback_tower_defense") {
+      if (isSuccess) {
+        const victim = rAdc?.alive ? rAdc : (rMid?.alive ? rMid : Object.values(this.redRosterState)[0]);
+        if (victim) {
+          this._recordKill("blue", "red", "mid", victim.role || "adc", "Defesa Heroica", `🛡️ VIRADA SOB A TORRE! Seu time atraiu ${victim.name} para o alcance da torre e garantiu o Super Shutdown!`);
+        }
+        this._awardTeamGold("blue", 700);
+        this.lanePressure = Math.min(100, this.lanePressure + 30);
+        return {
+          success: true, roll, probability: prob,
+          title: "DEFESA HEROICA SOB A TORRE!",
+          subtitle: `Super Shutdown (+700g Bônus!) (${prob}% chance)`,
+          text: `Reviravolta épica! Sua equipe absorveu o ataque sob a proteção das torres, puniu o avanço rival, eliminou o carregador adversário e recuperou o fôlego na partida!`
+        };
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 20);
+        this._damageNextStructure("red", this.blueStructures, 20, false, 1.2);
+        return {
+          success: false, roll, probability: prob,
+          title: "DEFESA QUEBRADA",
+          subtitle: `Pressão Excessiva (${prob}% chance)`,
+          text: `O dano acumulado do CBLOL rompeu as linhas defensivas sob a torre.`
+        };
+      }
+    }
+
+    if (choiceId === "comeback_cross_trade") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 650);
+        this._damageNextStructure("blue", this.redStructures, 30, false, 1.8, "top");
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 40);
+        return {
+          success: true, roll, probability: prob,
+          title: "JOGADA CRUZADA DE MESTRE!",
+          subtitle: `Troca de Torres Opostas (+650g) (${prob}% chance)`,
+          text: `Enquanto o CBLOL gastava recursos em um lado, seu time marchou veloz pelo lado oposto, demoliu torres externas e recuperou grande fatia econômica!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "TROCA PARCIAL",
+          subtitle: `Retorno Rival (${prob}% chance)`,
+          text: `O adversário retornou com Teleporte a tempo de impedir a queda da torre.`
+        };
+      }
+    }
+
+    if (choiceId === "comeback_smite_steal") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 500);
+        this.blueScore.dragons = (this.blueScore.dragons || 0) + 1;
+        this._applyTeamBuff("blue", { id: "smite_miracle", name: "Milagre do Smite", icon: "⚡", bonusCombat: 12, duration: 240 });
+        this.onEvent({
+          type: "smite_steal",
+          side: "blue",
+          text: `⚡ ROUBO MILAGROSO DE SMITE! ${bJg?.name || 'Caçador'} flashou no covil e roubou o monstro neutro com o Golpear perfeito!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "ROUBO MILAGROSO COM SMITE!",
+          subtitle: `Golpear Épico no Covil (${prob}% chance)`,
+          text: `Histórico! Seu caçador invadiu o ninho no último instante, roubou o monstro neutro das mãos do CBLOL e incendiou a partida!`
+        };
+      } else {
+        if (bJg) {
+          this._recordKill("red", "blue", "jungle", "jungle", "Tentativa de Roubo", `🔴 ROUBO FALHOU! ${bJg.name} caiu no ninho do monstro sob o foco de 5 adversários!`);
+        }
+        return {
+          success: false, roll, probability: prob,
+          title: "ROUBO FRUSTRADO",
+          subtitle: `Golpear Falhou (${prob}% chance)`,
+          text: `O caçador inimigo segurou o Golpear com precisão e abateu seu caçador na tentativa de invasão.`
+        };
+      }
+    }
+
+    // 7. Momentos de Clash Equilibrado / Late Game
+    if (choiceId === "clash_tp_flank") {
+      if (isSuccess) {
+        if (bTop && rAdc) {
+          this._recordKill("blue", "red", "top", "adc", "Flanco de Teleporte", `🏔️ FLANCO DESTRUIDOR! ${bTop.name} apareceu pelas costas com TP e explodiu ${rAdc.name}!`);
+        }
+        this._damageNextStructure("blue", this.redStructures, 32, false, 1.8);
+        this._awardTeamGold("blue", 550);
+        this.lanePressure = Math.min(100, this.lanePressure + 22);
+        return {
+          success: true, roll, probability: prob,
+          title: "FLANCO DE TELEPORTE PERFEITO!",
+          subtitle: `Outplay Estratégico (${prob}% chance)`,
+          text: `Seu Top Laner surgiu de surpresa nas costas do CBLOL, eliminou os atiradores rivais e liderou a equipe rumo à base inimiga (+550g)!`
+        };
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        return {
+          success: false, roll, probability: prob,
+          title: "FLANCO COLAPSADO",
+          subtitle: `Foco Imediato (${prob}% chance)`,
+          text: `O CBLOL aguardava a chegada do Teleporte e cancelou a iniciação com controles de grupo imediatos.`
+        };
+      }
+    }
+
+    if (choiceId === "clash_front_to_back") {
+      if (isSuccess) {
+        if (bAdc && rTop) {
+          this._recordKill("blue", "red", "adc", "top", "Luta Front-to-Back", `🏹 LINHA DE FRENTE DERRETIDA! ${bAdc.name} bateu com proteção total e abateu ${rTop.name}!`);
+        }
+        this._damageNextStructure("blue", this.redStructures, 30, false, 1.7);
+        this._awardTeamGold("blue", 500);
+        this.lanePressure = Math.min(100, this.lanePressure + 20);
+        return {
+          success: true, roll, probability: prob,
+          title: "LUTA FRONT-TO-BACK IMPECÁVEL!",
+          subtitle: `Formação Fechada (${prob}% chance)`,
+          text: `Disciplina absoluta! Sua equipe protegeu os carregadores, triturou a linha de frente inimiga (+500g) e conquistou o avanço no rio!`
+        };
+      } else {
+        this.lanePressure = Math.max(-100, this.lanePressure - 15);
+        return {
+          success: false, roll, probability: prob,
+          title: "LINHA ROMPIDA",
+          subtitle: `Flanco Inimigo (${prob}% chance)`,
+          text: `O adversário encontrou um ângulo pelas laterais e alcançou a linha de trás antes da proteção se firmar.`
+        };
+      }
+    }
+
+    if (choiceId === "clash_poke_kite") {
+      if (isSuccess) {
+        this._damageNextStructure("blue", this.redStructures, 28, false, 1.6);
+        this._awardTeamGold("blue", 450);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        return {
+          success: true, roll, probability: prob,
+          title: "DESGASTE À DISTÂNCIA VITORIOSO!",
+          subtitle: `Poke & Cerco (${prob}% chance)`,
+          text: `Habilidades de longo alcance minaram completamente a vida do CBLOL, forçando múltiplos recalls sem que sua equipe tomasse dano (+450g)!`
+        };
+      } else {
+        return {
+          success: false, roll, probability: prob,
+          title: "ENGAGE RIVAL",
+          subtitle: `Iniciação Súbita (${prob}% chance)`,
+          text: `O rival não esperou o desgaste e puxou uma iniciação relâmpago, forçando sua equipe a gastar feitiços defensivos.`
+        };
+      }
+    }
+
+    // Padrão fallback
+    return {
+      success: isSuccess, roll, probability: prob,
+      title: isSuccess ? "JOGADA BEM-SUCEDIDA!" : "JOGADA DEFENDIDA",
+      subtitle: `${prob}% chance`,
+      text: isSuccess ? "Sua equipe executou o plano tático com sucesso e colheu vantagens no Rift!" : "O adversário conseguiu responder à investida e conteve os danos."
+    };
+  }
+
   _resolveLaneFocusEarlyDecision(choiceId, isSuccess, roll, prob) {
     const bTop = this.blueRosterState.top;
     const bMid = this.blueRosterState.mid;
@@ -8465,12 +9420,12 @@ class MatchSimulator {
   }
 
   _triggerLaneSkirmish() {
-    const lanes = ["top", "mid", "bot"];
+    const zones = ["top", "mid", "bot", "jungle"];
     let lane;
-    if (this.focusedLane && Math.random() < 0.65) {
+    if (this.focusedLane && Math.random() < 0.60) {
       lane = this.focusedLane;
     } else {
-      lane = lanes[Math.floor(Math.random() * lanes.length)];
+      lane = zones[Math.floor(Math.random() * zones.length)];
     }
 
     const bTop = this.blueRosterState.top;
@@ -8486,7 +9441,39 @@ class MatchSimulator {
 
     const tacticBonus = (this.playerTactics === "aggressive") ? 5 : ((this.playerTactics === "defense") ? -4 : 0);
 
-    if (lane === "top") {
+    if (lane === "jungle") {
+      if (!bJg || !bJg.alive || !rJg || !rJg.alive) return false;
+      const bMidAlive = bMid && bMid.alive;
+      const rMidAlive = rMid && rMid.alive;
+      const bPower = (bJg.stats?.combat || 75) + (bMidAlive ? 8 : 0) + (bJg.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
+      const rPower = (rJg.stats?.combat || 75) + (rMidAlive ? 8 : 0) + (rJg.items?.length || 0) * 8 + (Math.random() * 20);
+      if (bPower > rPower + 8.5) {
+        this._recordKill("blue", "red", "jungle", "jungle", "Disputa na Selva", `🌲 DISPUTA NO RIO! ${bJg.name} garantiu o Golpear no Aronguejo e abateu ${rJg.name} na disputa por visão!`);
+        this._applyTeamBuff("blue", {
+          id: "river_vision",
+          name: "Controle do Rio",
+          icon: "👁️",
+          bonusCombat: 5,
+          duration: 120
+        });
+        this._awardTeamGold("blue", 180);
+        this.combatCooldown = 55;
+        return true;
+      } else if (rPower > bPower + 8.5) {
+        this._recordKill("red", "blue", "jungle", "jungle", "Invasão de Selva", `🔴 INVASÃO RIVAL! O caçador adversário emboscou ${bJg.name} no rio e garantiu a eliminação!`);
+        this.combatCooldown = 55;
+        return true;
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `🌲 Disputa equilibrada pelo Aronguejo no rio! Ambos os caçadores recuaram após trocarem feitiços.`,
+          time: this._formatTime()
+        });
+        this.combatCooldown = 30;
+        return true;
+      }
+    } else if (lane === "top") {
       if (!bTop || !bTop.alive || !rTop || !rTop.alive) return false;
       const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
       const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 20);
@@ -12282,8 +13269,9 @@ class ArenaView {
       container.innerHTML = decisionData.options.map(opt => `
         <div class="decision-choice-card complexity-${opt.complexity || 'tactical'}" data-choice-id="${opt.id}">
           <div class="choice-card-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span class="choice-card-icon">${opt.icon || '⚔️'}</span>
+              ${opt.zoneLabel ? `<span class="zone-badge zone-${opt.zone || 'map'}">${opt.zoneLabel}</span>` : ''}
               <span class="complexity-badge ${opt.complexity || 'tactical'}">${opt.complexityLabel || opt.risk}</span>
             </div>
             <span class="probability-badge ${opt.probability >= 70 ? 'prob-high' : (opt.probability >= 45 ? 'prob-med' : 'prob-low')}">
