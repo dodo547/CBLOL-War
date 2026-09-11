@@ -161,7 +161,9 @@ export class ArenaView {
             <div class="lineup-title blue">
               <span>🔵 Escalação ${state.blue.name}</span>
               <div class="lineup-stat-headers">
+                <span class="lineup-items-header" title="Itens Concluídos">ITENS</span>
                 <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-gold-header" title="Ouro total e vantagem de rota">💰 OURO</span>
                 <span class="lineup-kda-header">K / D / A</span>
               </div>
             </div>
@@ -178,7 +180,7 @@ export class ArenaView {
                 <span class="live-text">AO VIVO</span>
               </div>
               <div class="broadcast-feed-title">⚔️ ABATES & JOGADAS</div>
-              <div class="broadcast-feed-count" id="broadcast-feed-count">0 abates</div>
+              <div class="broadcast-feed-count" id="broadcast-feed-count">0 eventos</div>
             </div>
             <div class="killfeed-box" id="killfeed-container">
               <div class="killfeed-entry-wrapper">
@@ -195,7 +197,9 @@ export class ArenaView {
             <div class="lineup-title red">
               <span>🔴 Escalação ${state.red.name}</span>
               <div class="lineup-stat-headers">
+                <span class="lineup-items-header" title="Itens Concluídos">ITENS</span>
                 <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-gold-header" title="Ouro total e vantagem de rota">💰 OURO</span>
                 <span class="lineup-kda-header">K / D / A</span>
               </div>
             </div>
@@ -593,19 +597,21 @@ export class ArenaView {
               </div>
             </div>
           </div>
-          ${this._renderChampItems(m.items)}
-          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 21).toLocaleString()}g em tropas (~${((m.cs || 0) / 15).toFixed(1)} abates em ouro seguro!)">
-            <span class="cs-icon">🌾</span>
-            <span class="cs-count">${m.cs || 0}</span>
-            <span class="cs-rate">(${m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : '0.0'})</span>
-          </div>
-          <div class="champ-gold-stats" id="gold-${side}-${role}" title="Carteira: ${(m.goldCurrent || 500).toLocaleString()}g | Total Acumulado: ${(m.goldEarned || 500).toLocaleString()}g">
-            <span class="gold-icon">💰</span>
-            <span class="gold-val">${this._formatGold(m.goldEarned || 500)}</span>
-            <span class="gold-diff-pill even" id="gold-diff-${side}-${role}">±0g</span>
-          </div>
-          <div class="champ-kda" id="kda-${side}-${role}">
-            ${m.kills} / ${m.deaths} / ${m.assists}
+          <div class="champ-data-right">
+            ${this._renderChampItems(m.items)}
+            <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 21).toLocaleString()}g em tropas (~${((m.cs || 0) / 15).toFixed(1)} abates em ouro seguro!)">
+              <span class="cs-icon">🌾</span>
+              <span class="cs-count">${m.cs || 0}</span>
+              <span class="cs-rate">(${m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : '0.0'})</span>
+            </div>
+            <div class="champ-gold-stats" id="gold-${side}-${role}" title="Carteira: ${(m.goldCurrent || 500).toLocaleString()}g | Total Acumulado: ${(m.goldEarned || 500).toLocaleString()}g">
+              <span class="gold-icon">💰</span>
+              <span class="gold-val">${this._formatGold(m.goldEarned || 500)}</span>
+              <span class="gold-diff-pill even" id="gold-diff-${side}-${role}">±0g</span>
+            </div>
+            <div class="champ-kda" id="kda-${side}-${role}">
+              ${m.kills} / ${m.deaths} / ${m.assists}
+            </div>
           </div>
         </div>
       `;

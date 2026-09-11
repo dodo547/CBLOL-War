@@ -1253,18 +1253,22 @@
    ========================================================= */
 .arena-broadcast-center {
   display: grid;
-  grid-template-columns: 1fr 1.35fr 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.95fr) minmax(0, 1.35fr);
+  gap: 14px;
   align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1360px) {
   .arena-broadcast-center {
     grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
   .broadcast-killfeed-panel {
     grid-column: 1 / -1;
-    order: -1; /* Coloca o feed de abates no topo para visibilidade total em telas médias */
+    order: 2; /* Fica abaixo das escalações em telas médias/laptops para que as escalações fiquem visíveis e espaçosas */
   }
 }
 
@@ -1349,9 +1353,36 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .arena-broadcast-center {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .broadcast-killfeed-panel {
+    grid-column: auto;
+    order: 3;
+  }
+}
+
+@media (max-width: 600px) {
+  .lineup-stat-headers {
+    display: none;
+  }
+  .champion-status-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 6px;
+  }
+  .champ-meta-left {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .champ-data-right {
+    width: 100%;
+    justify-content: space-between;
+    padding-top: 5px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    margin-left: 0;
   }
 }
 
@@ -1404,9 +1435,12 @@
   background: var(--lol-bg-card);
   border: 1px solid var(--lol-gold-3);
   border-radius: 6px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .lineup-box.blue-side-panel {
@@ -1420,16 +1454,17 @@
 }
 
 .lineup-title {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .lineup-title.blue { color: var(--lol-blue-glow); }
@@ -1438,20 +1473,44 @@
 .lineup-stat-headers {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.lineup-items-header {
+  font-size: 9px;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+  min-width: 90px;
+  text-align: center;
 }
 
 .lineup-farm-header {
-  font-size: 10px;
+  font-size: 9px;
   color: #fbbf24;
   letter-spacing: 0.8px;
   font-weight: 700;
+  min-width: 54px;
+  text-align: center;
+}
+
+.lineup-gold-header {
+  font-size: 9px;
+  color: #f59e0b;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+  min-width: 66px;
+  text-align: center;
 }
 
 .lineup-kda-header {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--lol-gold-2);
   letter-spacing: 1px;
+  font-weight: 700;
+  min-width: 48px;
+  text-align: right;
 }
 
 /* Banner Educativo de Valor do Farm */
@@ -1501,10 +1560,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 8px;
+  padding: 4px 6px;
   border-radius: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   transition: background 0.2s;
+  min-width: 0;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .champion-status-row:hover {
   background: rgba(255, 255, 255, 0.04);
@@ -1517,7 +1580,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 105px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.champ-data-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .champ-ingame-avatar {
@@ -1558,8 +1630,8 @@
 
 /* Foto Real do Pro Player na Escalação In-Game */
 .player-roster-avatar-wrap {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   position: relative;
   border: 2px solid var(--lol-gold-2);
@@ -1589,10 +1661,10 @@
 
 .champ-roster-badge {
   position: absolute;
-  bottom: -3px;
-  right: -3px;
-  width: 17px;
-  height: 17px;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1.5px solid var(--lol-gold-1);
   overflow: hidden;
@@ -1613,43 +1685,56 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-}
-
-.player-nick-highlight {
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-}
-
-.champ-sub-name {
-  font-size: 11px;
-  color: var(--lol-blue-glow);
-  margin-left: 4px;
-  font-weight: 600;
-  opacity: 0.9;
-}
-
-.sig-star {
-  color: #fbbf24;
-  font-size: 12px;
-  margin-right: 2px;
+  flex: 1 1 auto;
 }
 
 .champ-ingame-name {
   font-size: 12px;
   font-weight: 700;
   color: #f0e6d2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 125px;
+  max-width: none;
+  overflow: visible;
+}
+
+.player-nick-highlight {
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.champ-sub-name {
+  font-size: 10.5px;
+  color: #94a3b8;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.sig-star {
+  color: #fbbf24;
+  font-size: 11px;
+  margin-right: 1px;
+  flex-shrink: 0;
 }
 
 .champ-role-tag {
-  font-size: 9px;
-  color: #889bb0;
+  font-size: 8.5px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  padding: 1px 3px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .champ-meta-tags {
@@ -1803,18 +1888,22 @@
 .champ-farm-stats {
   display: flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10.5px;
+  gap: 2px;
+  font-size: 9.5px;
   font-weight: 700;
   color: #fef08a;
   background: rgba(234, 179, 8, 0.12);
   border: 1px solid rgba(234, 179, 8, 0.28);
-  border-radius: 4px;
-  padding: 2px 5px;
+  border-radius: 3px;
+  padding: 2px 4px;
   white-space: nowrap;
   font-family: monospace;
   cursor: help;
   transition: all 0.2s;
+  min-width: 54px;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .champ-farm-stats:hover {
@@ -1824,7 +1913,7 @@
 }
 
 .champ-farm-stats .cs-icon {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .champ-farm-stats .cs-count {
@@ -1833,7 +1922,7 @@
 }
 
 .champ-farm-stats .cs-rate {
-  font-size: 9px;
+  font-size: 8.5px;
   color: #cbd5e1;
 }
 
@@ -1843,23 +1932,30 @@
   color: var(--lol-gold-1);
   font-family: monospace;
   white-space: nowrap;
+  min-width: 48px;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .champ-gold-stats {
   display: flex;
   align-items: center;
-  gap: 3px;
-  font-size: 10.5px;
+  gap: 2px;
+  font-size: 9.5px;
   font-weight: 700;
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.10);
   border: 1px solid rgba(251, 191, 36, 0.28);
-  border-radius: 4px;
-  padding: 2px 5px;
+  border-radius: 3px;
+  padding: 2px 4px;
   white-space: nowrap;
   font-family: monospace;
   cursor: help;
   transition: all 0.2s;
+  min-width: 66px;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .champ-gold-stats:hover {
@@ -1869,10 +1965,10 @@
 }
 
 .gold-diff-pill {
-  font-size: 8.5px;
+  font-size: 8px;
   font-weight: 800;
   padding: 1px 3px;
-  border-radius: 3px;
+  border-radius: 2px;
   white-space: nowrap;
   font-family: monospace;
 }
@@ -1926,9 +2022,12 @@
   background: linear-gradient(180deg, rgba(8, 18, 34, 0.96) 0%, rgba(3, 8, 16, 0.98) 100%);
   border: 1px solid var(--lol-gold-2);
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), inset 0 0 16px rgba(200, 170, 110, 0.08);
   position: relative;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .broadcast-feed-header {
@@ -1938,6 +2037,8 @@
   padding-bottom: 8px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(200, 170, 110, 0.25);
+  gap: 8px;
+  min-width: 0;
 }
 
 .broadcast-live-indicator {
@@ -1948,6 +2049,7 @@
   border: 1px solid rgba(232, 64, 87, 0.5);
   padding: 2px 8px;
   border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .live-dot-pulse {
@@ -1977,6 +2079,9 @@
   color: var(--lol-gold-1);
   letter-spacing: 1px;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .broadcast-feed-count {
@@ -1984,20 +2089,33 @@
   font-weight: 700;
   color: #889bb0;
   font-family: monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .killfeed-box {
   background: rgba(1, 10, 19, 0.75);
   border: 1px solid rgba(200, 170, 110, 0.25);
   border-radius: 6px;
-  padding: 8px;
-  height: 245px;
-  max-height: 245px;
+  padding: 6px 8px;
+  height: 290px;
+  max-height: 290px;
+  min-height: 240px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.6);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1360px) {
+  .killfeed-box {
+    height: 180px;
+    max-height: 180px;
+    min-height: 140px;
+  }
 }
 
 .killfeed-box::-webkit-scrollbar {
@@ -2013,6 +2131,7 @@
 
 .killfeed-entry-wrapper {
   animation: feedSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  min-width: 0;
 }
 
 @keyframes feedSlideIn {
@@ -2025,13 +2144,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 5px 10px;
   border-radius: 6px;
   background: rgba(10, 20, 35, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 12px;
-  min-height: 34px;
+  font-size: 11.5px;
+  min-height: 32px;
+  min-width: 0;
+  box-sizing: border-box;
   transition: all 0.2s ease;
 }
 
@@ -2055,8 +2176,9 @@
 .kfeed-actors {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -2093,12 +2215,15 @@
 .kfeed-player {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 2px 6px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kfeed-player.blue {
@@ -2234,7 +2359,9 @@
 
 .kfeed-msg {
   color: #e2e8f0;
-  font-size: 12px;
+  font-size: 11.5px;
+  word-break: break-word;
+  min-width: 0;
 }
 
 /* Modal de Decisão Tática Interativa (Dragão / Barão / Arauto) */
@@ -2957,23 +3084,25 @@
 .champ-items-tray {
   display: flex;
   align-items: center;
-  gap: 3px;
-  margin: 0 4px;
+  gap: 2px;
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
 .item-slot-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
   border: 1px solid rgba(200, 170, 110, 0.25);
   background: rgba(1, 10, 19, 0.85);
-  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   position: relative;
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.2s;
+  flex-shrink: 0;
 }
 
 .item-slot-icon.empty {

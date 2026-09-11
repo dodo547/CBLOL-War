@@ -141,10 +141,25 @@ body {
    CONTAINER PRINCIPAL E VIEWS
    ========================================================= */
 .main-container {
-  max-width: 1380px;
+  max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px;
   min-height: calc(100vh - 64px);
+  box-sizing: border-box;
+}
+
+@media (min-width: 1440px) {
+  .main-container {
+    max-width: 1540px;
+    padding: 24px 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-container {
+    padding: 12px 10px;
+  }
 }
 
 .view-section {
