@@ -547,7 +547,374 @@
   50% { opacity: 1; transform: scale(1.01); box-shadow: 0 0 25px rgba(240, 182, 34, 0.7); }
 }
 
-/* Rota Principal: Base Azul -> Torres Azuis -> Rio -> Torres Vermelhas -> Base Vermelha */
+/* =========================================================
+   MAPA INTERATIVO DE SUMMONER'S RIFT (3 ROTAS & ESTRUTURAS)
+   ========================================================= */
+.rift-map-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.rift-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(8, 20, 36, 0.95) 0%, rgba(4, 10, 20, 0.95) 100%);
+  border: 1px solid var(--lol-gold-3);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.lane-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(2, 8, 16, 0.7);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  font-size: 11px;
+  font-weight: 800;
+  color: #c8aa6e;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+}
+
+.lane-status-badge.blue-push {
+  border-color: #0ac8b9;
+  background: rgba(10, 200, 185, 0.12);
+  color: #0ac8b9;
+  box-shadow: 0 0 12px rgba(10, 200, 185, 0.35);
+}
+
+.lane-status-badge.red-push {
+  border-color: #e84057;
+  background: rgba(232, 64, 87, 0.12);
+  color: #e84057;
+  box-shadow: 0 0 12px rgba(232, 64, 87, 0.35);
+}
+
+.lane-icon {
+  font-size: 13px;
+}
+
+.lane-name {
+  font-weight: 800;
+}
+
+.lane-pressure-val {
+  font-size: 10px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.rift-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lol-gold-2);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.legend-dot.blue-dot {
+  background: #0ac8b9;
+  box-shadow: 0 0 8px #0ac8b9;
+}
+
+.legend-dot.red-dot {
+  background: #e84057;
+  box-shadow: 0 0 8px #e84057;
+}
+
+/* Container do SVG do Rift */
+.rift-svg-container {
+  position: relative;
+  width: 100%;
+  max-width: 660px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #06110d;
+  border-radius: 10px;
+  border: 2px solid var(--lol-gold-3);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.85), inset 0 0 45px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+  user-select: none;
+}
+
+.summoners-rift-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Nós de Estrutura no SVG */
+.map-structure-node {
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.3s ease;
+}
+
+.map-structure-node:hover {
+  transform: scale(1.12);
+}
+
+.struct-halo {
+  fill: none;
+  stroke: rgba(240, 182, 34, 0);
+  stroke-width: 2.5;
+  transition: all 0.2s ease;
+}
+
+.map-structure-node:hover .struct-halo {
+  stroke: rgba(240, 182, 34, 0.85);
+  stroke-dasharray: 4 3;
+}
+
+.struct-halo.ping-pulse {
+  animation: structPing 0.9s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes structPing {
+  0% { stroke: #f0b622; stroke-width: 4; r: 18; opacity: 1; }
+  100% { stroke: #f0b622; stroke-width: 1; r: 42; opacity: 0; }
+}
+
+.struct-hp-bg {
+  fill: #03080d;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 3.5;
+}
+
+.struct-hp-ring {
+  fill: none;
+  stroke: #0ac8b9;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.3s ease;
+}
+
+.red-side .struct-hp-ring {
+  stroke: #e84057;
+}
+
+.struct-hp-ring.damaged {
+  stroke: #f0b622 !important;
+}
+
+.struct-hp-ring.critical {
+  stroke: #ff3344 !important;
+  animation: criticalRingPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes criticalRingPulse {
+  0%, 100% { stroke-opacity: 1; stroke-width: 4; }
+  50% { stroke-opacity: 0.4; stroke-width: 2.5; }
+}
+
+.struct-core {
+  fill: #071728;
+  stroke: #0ac8b9;
+  stroke-width: 1.5;
+}
+
+.red-side .struct-core {
+  fill: #22080f;
+  stroke: #e84057;
+}
+
+.struct-icon {
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Estado de Estrutura Destruída */
+.map-structure-node.destroyed {
+  opacity: 0.32;
+  filter: grayscale(85%);
+  cursor: not-allowed;
+}
+
+.map-structure-node.destroyed:hover {
+  transform: none;
+}
+
+.map-structure-node.destroyed .struct-hp-ring {
+  opacity: 0;
+}
+
+.map-structure-node.destroyed .struct-plates-badge {
+  display: none !important;
+}
+
+/* Choque de Tropas (Minion Clash Waves) */
+.minion-clash-wave {
+  pointer-events: none;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.clash-wave-pulse {
+  animation: clashWavePulse 2s infinite ease-in-out;
+}
+
+@keyframes clashWavePulse {
+  0%, 100% { r: 14; opacity: 0.3; }
+  50% { r: 22; opacity: 0.65; }
+}
+
+/* Covis de Barão e Dragão */
+.pit-marker {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.pit-marker:hover {
+  transform: scale(1.08);
+}
+
+.camp-marker {
+  opacity: 0.85;
+}
+
+/* Tooltip Flutuante do Mapa de Summoner's Rift */
+.rift-structure-tooltip {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 17, 34, 0.97) 0%, rgba(2, 8, 18, 0.97) 100%);
+  border: 1.5px solid var(--lol-gold-2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 210px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.9), 0 0 15px rgba(200, 170, 110, 0.2);
+  font-size: 12px;
+  color: #f0e6d2;
+  backdrop-filter: blur(6px);
+  transform: translate(0, 0);
+  transition: opacity 0.15s ease;
+}
+
+.rift-structure-tooltip .tip-header {
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.2);
+  padding-bottom: 6px;
+}
+
+.rift-structure-tooltip .tip-team {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.rift-structure-tooltip .tip-team.blue {
+  color: #0ac8b9;
+}
+
+.rift-structure-tooltip .tip-team.red {
+  color: #e84057;
+}
+
+.rift-structure-tooltip .tip-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.rift-structure-tooltip .tip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rift-structure-tooltip .tip-hp-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.rift-structure-tooltip .tip-hp-val {
+  font-weight: 900;
+  color: #fff;
+}
+
+.rift-structure-tooltip .tip-hp-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rift-structure-tooltip .tip-hp-fill {
+  height: 100%;
+  background: #0ac8b9;
+  transition: width 0.3s ease;
+}
+
+.rift-structure-tooltip .tip-hp-fill.damaged {
+  background: #f0b622;
+}
+
+.rift-structure-tooltip .tip-hp-fill.critical {
+  background: #ff3344;
+}
+
+.rift-structure-tooltip .tip-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--lol-gold-2);
+}
+
+.rift-structure-tooltip .tip-detail-row.plates strong {
+  color: #f0b622;
+}
+
+.rift-structure-tooltip .tip-detail-row.bounty strong {
+  color: var(--lol-gold-1);
+}
+
+.rift-structure-tooltip .tip-status.intact {
+  color: #0ac8b9;
+  font-weight: 800;
+}
+
+.rift-structure-tooltip .tip-status.critical {
+  color: #ff3344;
+  font-weight: 800;
+}
+
+.rift-structure-tooltip .tip-status.destroyed {
+  color: #8a8a8a;
+  font-weight: 800;
+}
+
+/* Rota Principal (Fallback): Base Azul -> Torres Azuis -> Rio -> Torres Vermelhas -> Base Vermelha */
 .lanes-visualizer {
   display: grid;
   grid-template-columns: 1fr auto 1fr;

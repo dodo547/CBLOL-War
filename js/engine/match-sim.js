@@ -42,8 +42,13 @@ export class MatchSimulator {
     this.gameSeconds = 90;
     this.maxGameSeconds = 2400; // 40 minutos max
 
-    // Barra de Pressão de Rota / Momentum (-100 [Base Azul] até +100 [Base Vermelha], 0 = Rio)
-    this.lanePressure = 0;
+    // Barra de Pressão de Rotas (Momentum por Rota: -100 [Base Azul] até +100 [Base Vermelha])
+    this.lanePressures = {
+      top: 0,
+      mid: 0,
+      bot: 0
+    };
+    this.lanePressure = 0; // Média global de pressão
 
     // Postura Tática Orgânica e Automática da Equipe
     this.playerTactics = "balanced";
@@ -55,15 +60,17 @@ export class MatchSimulator {
     this.blueScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
     this.redScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
 
-    // Estruturas
+    // Estruturas Autênticas de Summoner's Rift (Top, Mid, Bot e Base)
     this.blueStructures = this._initStructures("blue");
     this.redStructures = this._initStructures("red");
 
-    // Super minions e inibidores
+    // Super minions e inibidores por rota
     this.blueSuperMinions = false;
     this.redSuperMinions = false;
-    this.blueInhibRespawnAt = null;
-    this.redInhibRespawnAt = null;
+    this.blueSuperMinionsByLane = { top: false, mid: false, bot: false };
+    this.redSuperMinionsByLane = { top: false, mid: false, bot: false };
+    this.blueInhibRespawnAt = { top: null, mid: null, bot: null };
+    this.redInhibRespawnAt = { top: null, mid: null, bot: null };
 
     // Buffs de Barão
     this.blueBaronUntil = 0;
@@ -177,15 +184,45 @@ export class MatchSimulator {
   }
 
   _initStructures(side) {
-    return [
-      { id: "t1", name: "Torre T1 Externa", maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
-      { id: "t2", name: "Torre T2 Interior", maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
-      { id: "t3", name: "Torre T3 da Base", maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
-      { id: "inhib", name: "Inibidor", maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus_t1", name: "Torre do Nexus 1", maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus_t2", name: "Torre do Nexus 2", maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus", name: "NEXUS", maxHp: 4600, currentHp: 4600, plates: 0, destroyed: false, goldValue: 100 }
+    const sidePrefix = side === "blue" ? "Azul" : "Vermelha";
+    const structures = [
+      // ROTA DO TOPO (TOP LANE)
+      { id: "top_t1", lane: "top", tier: 1, name: `Torre T1 Superior ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "top_t2", lane: "top", tier: 2, name: `Torre T2 Superior ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "top_t3", lane: "top", tier: 3, name: `Torre T3 Superior ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "top_inhib", lane: "top", tier: "inhib", name: `Inibidor Superior ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      // ROTA DO MEIO (MID LANE)
+      { id: "mid_t1", lane: "mid", tier: 1, name: `Torre T1 Meio ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "mid_t2", lane: "mid", tier: 2, name: `Torre T2 Meio ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "mid_t3", lane: "mid", tier: 3, name: `Torre T3 Meio ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "mid_inhib", lane: "mid", tier: "inhib", name: `Inibidor Meio ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      // ROTA INFERIOR (BOT LANE)
+      { id: "bot_t1", lane: "bot", tier: 1, name: `Torre T1 Inferior ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "bot_t2", lane: "bot", tier: 2, name: `Torre T2 Inferior ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "bot_t3", lane: "bot", tier: 3, name: `Torre T3 Inferior ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "bot_inhib", lane: "bot", tier: "inhib", name: `Inibidor Inferior ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      { id: "nexus_t1", lane: "base", tier: "nexus_t", name: `Torre do Nexus 1 ${sidePrefix}`, maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
+      { id: "nexus_t2", lane: "base", tier: "nexus_t", name: `Torre do Nexus 2 ${sidePrefix}`, maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
+      { id: "nexus", lane: "base", tier: "nexus", name: `NEXUS ${sidePrefix.toUpperCase()}`, maxHp: 4600, currentHp: 4600, plates: 0, destroyed: false, goldValue: 100 }
     ];
+
+    const origFind = structures.find.bind(structures);
+    structures.find = function(predicate) {
+      const res = origFind(predicate);
+      if (res) return res;
+      // Compatibilidade legada para buscas antigas: "t1" -> "mid_t1", "inhib" -> "mid_inhib", etc.
+      return origFind(s => {
+        try {
+          if (predicate({ ...s, id: s.id.replace(/^(top|mid|bot)_/, "") })) return true;
+        } catch (_) {}
+        return false;
+      });
+    };
+
+    return structures;
   }
 
   _initRosterState(roster, team = null) {
@@ -572,37 +609,47 @@ export class MatchSimulator {
   }
 
   _checkInhibitorRespawns() {
-    if (this.blueInhibRespawnAt && this.gameSeconds >= this.blueInhibRespawnAt) {
-      const inhib = this.blueStructures.find(s => s.id === "inhib");
-      if (inhib && inhib.destroyed) {
-        inhib.destroyed = false;
-        inhib.currentHp = inhib.maxHp;
-        this.redSuperMinions = false;
-        this.blueInhibRespawnAt = null;
-        this.onEvent({
-          type: "respawn",
-          side: "blue",
-          text: "🛡️ O Inibidor Azul renasceu! Tropas inimigas enfraquecidas.",
-          time: this._formatTime()
-        });
-      }
-    }
+    const lanes = ["top", "mid", "bot"];
+    const laneLabels = { top: "Superior", mid: "do Meio", bot: "Inferior" };
 
-    if (this.redInhibRespawnAt && this.gameSeconds >= this.redInhibRespawnAt) {
-      const inhib = this.redStructures.find(s => s.id === "inhib");
-      if (inhib && inhib.destroyed) {
-        inhib.destroyed = false;
-        inhib.currentHp = inhib.maxHp;
-        this.blueSuperMinions = false;
-        this.redInhibRespawnAt = null;
-        this.onEvent({
-          type: "respawn",
-          side: "red",
-          text: "🛡️ O Inibidor Vermelho renasceu!",
-          time: this._formatTime()
-        });
+    lanes.forEach(lane => {
+      // Inibidor Azul
+      if (this.blueInhibRespawnAt && this.blueInhibRespawnAt[lane] && this.gameSeconds >= this.blueInhibRespawnAt[lane]) {
+        const inhib = this.blueStructures.find(s => s.lane === lane && s.tier === "inhib");
+        if (inhib && inhib.destroyed) {
+          inhib.destroyed = false;
+          inhib.currentHp = inhib.maxHp;
+          if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = false;
+          this.blueInhibRespawnAt[lane] = null;
+          this.onEvent({
+            type: "respawn",
+            side: "blue",
+            text: `🛡️ O Inibidor Azul ${laneLabels[lane]} renasceu! Tropas inimigas enfraquecidas.`,
+            time: this._formatTime()
+          });
+        }
       }
-    }
+
+      // Inibidor Vermelho
+      if (this.redInhibRespawnAt && this.redInhibRespawnAt[lane] && this.gameSeconds >= this.redInhibRespawnAt[lane]) {
+        const inhib = this.redStructures.find(s => s.lane === lane && s.tier === "inhib");
+        if (inhib && inhib.destroyed) {
+          inhib.destroyed = false;
+          inhib.currentHp = inhib.maxHp;
+          if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = false;
+          this.redInhibRespawnAt[lane] = null;
+          this.onEvent({
+            type: "respawn",
+            side: "red",
+            text: `🛡️ O Inibidor Vermelho ${laneLabels[lane]} renasceu!`,
+            time: this._formatTime()
+          });
+        }
+      }
+    });
+
+    this.blueSuperMinions = this.blueSuperMinionsByLane ? Object.values(this.blueSuperMinionsByLane).some(Boolean) : false;
+    this.redSuperMinions = this.redSuperMinionsByLane ? Object.values(this.redSuperMinionsByLane).some(Boolean) : false;
   }
 
   _resolveCombatRound() {
@@ -705,18 +752,29 @@ export class MatchSimulator {
     const redRoll = redBasePower * (0.88 + Math.random() * 0.24);
     const diff = blueRoll - redRoll;
 
-    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum)
+    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum por Rota e Global)
     const pressureDelta = Math.min(10, Math.max(3, Math.floor(Math.abs(diff) * 1.0)));
+    const allLanes = ["top", "mid", "bot"];
     if (diff > 2.0) {
       // Avanço Azul
-      this.lanePressure = Math.min(100, this.lanePressure + pressureDelta);
+      allLanes.forEach(l => {
+        let lDelta = pressureDelta;
+        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(pressureDelta * 1.35);
+        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(pressureDelta * 0.7));
+        this.lanePressures[l] = Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1));
+      });
     } else if (diff < -2.0) {
       // Avanço Vermelho
-      this.lanePressure = Math.max(-100, this.lanePressure - pressureDelta);
+      allLanes.forEach(l => {
+        this.lanePressures[l] = Math.max(-100, (this.lanePressures[l] || 0) - pressureDelta + (Math.random() * 2 - 1));
+      });
     } else {
       // Flutuação natural na zona do rio
-      this.lanePressure += (Math.random() * 4 - 2);
+      allLanes.forEach(l => {
+        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + (Math.random() * 4 - 2)));
+      });
     }
+    this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
 
     // Dano contínuo de rota e escaramuças trocado entre os campeões vivos com impacto real
     const roles = ["top", "jungle", "mid", "adc", "support"];
@@ -3091,7 +3149,7 @@ export class MatchSimulator {
         while (true) {
           const target = this._getCurrentTargetStructure(this.redStructures);
           if (!target || target.id === "nexus_t1" || target.id === "nexus_t2" || target.id === "nexus") break;
-          const isTargetInhib = (target.id === "inhib");
+          const isTargetInhib = (target.tier === "inhib" || target.id.includes("inhib"));
           this._destroyCurrentStructure("blue", this.redStructures, isTargetInhib ? 500 : 150);
           if (isTargetInhib) {
             reachedInhib = true;
@@ -3794,12 +3852,16 @@ export class MatchSimulator {
       const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
-        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
+        this.lanePressure = Math.min(100, this.lanePressure + 8);
+        this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "top");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
         this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
-        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        if (this.lanePressures) this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 18);
+        this.lanePressure = Math.max(-100, this.lanePressure - 8);
+        this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "top");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -3823,7 +3885,9 @@ export class MatchSimulator {
           ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
           : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
         this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
-        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
+        this.lanePressure = Math.min(100, this.lanePressure + 8);
+        this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "mid");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
@@ -3833,7 +3897,9 @@ export class MatchSimulator {
           ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
           : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
         this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
-        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
+        this.lanePressure = Math.max(-100, this.lanePressure - 8);
+        this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "mid");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -3857,14 +3923,18 @@ export class MatchSimulator {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
         this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
-        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 20);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._damageNextStructure("blue", this.redStructures, 12, false, 0.9, "bot");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
         this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
-        this.lanePressure = Math.max(-100, this.lanePressure - 12);
+        if (this.lanePressures) this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        this._damageNextStructure("red", this.blueStructures, 12, false, 0.9, "bot");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -3934,9 +4004,19 @@ export class MatchSimulator {
       this._recordKill(loserSide, winnerSide, tradeKillerRole, tradeVictimRole, null, tTxt);
     }
 
-    // O time com vantagem numérica golpeia a estrutura
+    // O time com vantagem numérica golpeia a estrutura na rota com maior pressão
     const enemyStructures = winnerSide === "blue" ? this.redStructures : this.blueStructures;
-    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, 1.2);
+    let chosenLane = "mid";
+    if (this.lanePressures) {
+      const lanes = ["mid", "top", "bot"];
+      if (winnerSide === "blue") {
+        lanes.sort((a, b) => (this.lanePressures[b] || 0) - (this.lanePressures[a] || 0));
+      } else {
+        lanes.sort((a, b) => (this.lanePressures[a] || 0) - (this.lanePressures[b] || 0));
+      }
+      chosenLane = lanes[0];
+    }
+    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, 1.2, chosenLane);
   }
 
   _triggerSkirmishEqual() {
@@ -3985,14 +4065,17 @@ export class MatchSimulator {
       c.turrets = (c.turrets || 0) + 1;
     });
 
-    if (target.id === "inhib") {
+    if (target.tier === "inhib" || target.id.includes("inhib")) {
       attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
+      const lane = target.lane || "mid";
       if (attackerSide === "blue") {
         this.blueSuperMinions = true;
-        this.redInhibRespawnAt = this.gameSeconds + 240;
+        if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = true;
+        if (this.redInhibRespawnAt) this.redInhibRespawnAt[lane] = this.gameSeconds + 240;
       } else {
         this.redSuperMinions = true;
-        this.blueInhibRespawnAt = this.gameSeconds + 240;
+        if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = true;
+        if (this.blueInhibRespawnAt) this.blueInhibRespawnAt[lane] = this.gameSeconds + 240;
       }
       this.onEvent({
         type: "inhibitor_destroyed",
@@ -4009,7 +4092,7 @@ export class MatchSimulator {
       });
     } else {
       attackerScore.towers = (attackerScore.towers || 0) + 1;
-      const firstBrick = (target.id === "t1" && !this._firstBrickGiven);
+      const firstBrick = ((target.tier === 1 || target.id.includes("t1")) && !this._firstBrickGiven);
       if (firstBrick) {
         this._firstBrickGiven = true;
         attackerScore.gold += 250;
@@ -4040,8 +4123,8 @@ export class MatchSimulator {
     this._syncTeamGold();
   }
 
-  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0) {
-    const target = this._getCurrentTargetStructure(targetStructures);
+  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0, preferredLane = null) {
+    const target = this._getCurrentTargetStructure(targetStructures, preferredLane);
     if (!target) return;
 
     const isEarlyGame = this.gameSeconds < 840; // Antes de 14:00 (Placas ativas)
@@ -4082,7 +4165,7 @@ export class MatchSimulator {
     }
 
     // Barricadas antes de 14 min amortecem o impacto (redução de 20%)
-    if (isEarlyGame && target.id === "t1") {
+    if (isEarlyGame && target.tier === 1) {
       baseDamage *= 0.80;
     }
 
@@ -4105,7 +4188,7 @@ export class MatchSimulator {
     target.currentHp = Math.max(0, target.currentHp - finalDamage);
 
     // Sistema de Barricadas da T1
-    if (target.id === "t1" && target.plates > 0) {
+    if (target.tier === 1 && target.plates > 0) {
       const hpPerPlate = target.maxHp / 5;
       const expectedPlates = Math.max(0, Math.ceil(target.currentHp / hpPerPlate));
       if (expectedPlates < target.plates) {
@@ -4147,7 +4230,7 @@ export class MatchSimulator {
       const attackerScore = attackerSide === "blue" ? this.blueScore : this.redScore;
       attackerScore.gold += (target.goldValue + bountyBonus);
 
-      if (target.id === "inhib") {
+      if (target.tier === "inhib") {
         attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
       } else if (target.id !== "nexus") {
         attackerScore.towers = (attackerScore.towers || 0) + 1;
@@ -4168,25 +4251,37 @@ export class MatchSimulator {
 
       // A onda de tropas recua/reseta temporariamente após a queda de uma torre
       if (target.id !== "nexus") {
+        const lane = target.lane;
+        if (lane && this.lanePressures && this.lanePressures[lane] !== undefined) {
+          if (attackerSide === "blue") {
+            this.lanePressures[lane] = Math.max(15, this.lanePressures[lane] - 35);
+          } else {
+            this.lanePressures[lane] = Math.min(-15, this.lanePressures[lane] + 35);
+          }
+        }
         if (attackerSide === "blue") {
-          this.lanePressure = Math.max(15, this.lanePressure - 40);
+          this.lanePressure = Math.max(15, this.lanePressure - 25);
         } else {
-          this.lanePressure = Math.min(-15, this.lanePressure + 40);
+          this.lanePressure = Math.min(-15, this.lanePressure + 25);
         }
       }
 
-      if (target.id === "inhib") {
+      if (target.tier === "inhib") {
+        const lane = target.lane || "mid";
+        const laneLabel = { top: "Superior", mid: "do Meio", bot: "Inferior" }[lane] || "";
         if (attackerSide === "blue") {
           this.blueSuperMinions = true;
-          this.redInhibRespawnAt = this.gameSeconds + 240;
+          if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = true;
+          if (this.redInhibRespawnAt) this.redInhibRespawnAt[lane] = this.gameSeconds + 240;
         } else {
           this.redSuperMinions = true;
-          this.blueInhibRespawnAt = this.gameSeconds + 240;
+          if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = true;
+          if (this.blueInhibRespawnAt) this.blueInhibRespawnAt[lane] = this.gameSeconds + 240;
         }
         this.onEvent({
           type: "inhibitor_destroyed",
           side: attackerSide,
-          text: `💥 O Inibidor ${attackerSide === "blue" ? "Vermelho" : "Azul"} foi DESTRUÍDO! SUPER TROPAS NA BASE!`,
+          text: `💥 O Inibidor ${laneLabel} ${attackerSide === "blue" ? "Vermelho" : "Azul"} foi DESTRUÍDO! SUPER TROPAS NA ROTA!`,
           time: this._formatTime()
         });
       } else if (target.id === "nexus") {
@@ -4197,7 +4292,7 @@ export class MatchSimulator {
           time: this._formatTime()
         });
       } else {
-        const firstBrick = (target.id === "t1" && !this._firstBrickGiven);
+        const firstBrick = (target.tier === 1 && !this._firstBrickGiven);
         if (firstBrick) {
           this._firstBrickGiven = true;
           attackerScore.gold += 250;
@@ -4224,27 +4319,80 @@ export class MatchSimulator {
     }
   }
 
-  _getCurrentTargetStructure(structures) {
-    const t1 = structures.find(s => s.id === "t1");
-    if (!t1.destroyed) return t1;
+  _getCurrentTargetStructure(structures, preferredLane = null) {
+    const lanes = ["top", "mid", "bot"];
 
-    const t2 = structures.find(s => s.id === "t2");
-    if (!t2.destroyed) return t2;
+    // 1. Se uma rota específica foi solicitada (ex: duelo no Top, dive no Bot)
+    if (preferredLane && lanes.includes(preferredLane)) {
+      const t1 = structures.find(s => s.lane === preferredLane && s.tier === 1);
+      if (t1 && !t1.destroyed) return t1;
 
-    const t3 = structures.find(s => s.id === "t3");
-    if (!t3.destroyed) return t3;
+      const t2 = structures.find(s => s.lane === preferredLane && s.tier === 2);
+      if (t2 && !t2.destroyed) return t2;
 
-    const inhib = structures.find(s => s.id === "inhib");
-    if (!inhib.destroyed) return inhib;
+      const t3 = structures.find(s => s.lane === preferredLane && s.tier === 3);
+      if (t3 && !t3.destroyed) return t3;
 
-    const nt1 = structures.find(s => s.id === "nexus_t1");
-    if (!nt1.destroyed) return nt1;
+      const inhib = structures.find(s => s.lane === preferredLane && s.tier === "inhib");
+      if (inhib && !inhib.destroyed) return inhib;
 
-    const nt2 = structures.find(s => s.id === "nexus_t2");
-    if (!nt2.destroyed) return nt2;
+      // Se a rota preferida já teve seu inibidor destruído, avança direto para as Torres do Nexus e o Nexus!
+      const nt1 = structures.find(s => s.id === "nexus_t1");
+      if (nt1 && !nt1.destroyed) return nt1;
 
-    const nexus = structures.find(s => s.id === "nexus");
-    if (!nexus.destroyed) return nexus;
+      const nt2 = structures.find(s => s.id === "nexus_t2");
+      if (nt2 && !nt2.destroyed) return nt2;
+
+      const nexus = structures.find(s => s.id === "nexus");
+      if (nexus && !nexus.destroyed) return nexus;
+    }
+
+    // 2. Se não especificou rota ou a rota preferida já perdeu o inibidor:
+    // Pressiona as rotas em ordem de pressão do time atacante
+    const isTargetingRed = (structures === this.redStructures);
+    const p = this.lanePressures || { top: 0, mid: 0, bot: 0 };
+    const sortedLanes = [...lanes].sort((a, b) => {
+      const valA = isTargetingRed ? (p[a] || 0) : -(p[a] || 0);
+      const valB = isTargetingRed ? (p[b] || 0) : -(p[b] || 0);
+      return valB - valA;
+    });
+
+    // T1 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t1 = structures.find(s => s.lane === lane && s.tier === 1);
+      if (t1 && !t1.destroyed) return t1;
+    }
+
+    // T2 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t2 = structures.find(s => s.lane === lane && s.tier === 2);
+      if (t2 && !t2.destroyed) return t2;
+    }
+
+    // T3 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t3 = structures.find(s => s.lane === lane && s.tier === 3);
+      if (t3 && !t3.destroyed) return t3;
+    }
+
+    // Inibidor vivo na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const inhib = structures.find(s => s.lane === lane && s.tier === "inhib");
+      if (inhib && !inhib.destroyed) return inhib;
+    }
+
+    // 3. Se ao menos 1 inibidor estiver destruído, as Torres do Nexus estão vulneráveis
+    const hasAnyInhibDestroyed = structures.some(s => s.tier === "inhib" && s.destroyed);
+    if (hasAnyInhibDestroyed) {
+      const nt1 = structures.find(s => s.id === "nexus_t1");
+      if (nt1 && !nt1.destroyed) return nt1;
+
+      const nt2 = structures.find(s => s.id === "nexus_t2");
+      if (nt2 && !nt2.destroyed) return nt2;
+
+      const nexus = structures.find(s => s.id === "nexus");
+      if (nexus && !nexus.destroyed) return nexus;
+    }
 
     return null;
   }
@@ -4359,6 +4507,11 @@ export class MatchSimulator {
       roundIndex: this.roundIndex,
       difficultyMultiplier: this.difficultyMultiplier || 1.0,
       lanePressure: Math.round(this.lanePressure),
+      lanePressures: {
+        top: Math.round(this.lanePressures ? this.lanePressures.top : 0),
+        mid: Math.round(this.lanePressures ? this.lanePressures.mid : 0),
+        bot: Math.round(this.lanePressures ? this.lanePressures.bot : 0)
+      },
       playerTactics: this.playerTactics,
       tacticsLabel: this.tacticsLabel || "⚖️ Controle de Rotas",
       counterAttackCooldown: this.counterAttackCooldown,

@@ -4239,8 +4239,13 @@ class MatchSimulator {
     this.gameSeconds = 90;
     this.maxGameSeconds = 2400; // 40 minutos max
 
-    // Barra de Pressão de Rota / Momentum (-100 [Base Azul] até +100 [Base Vermelha], 0 = Rio)
-    this.lanePressure = 0;
+    // Barra de Pressão de Rotas (Momentum por Rota: -100 [Base Azul] até +100 [Base Vermelha])
+    this.lanePressures = {
+      top: 0,
+      mid: 0,
+      bot: 0
+    };
+    this.lanePressure = 0; // Média global de pressão
 
     // Postura Tática Orgânica e Automática da Equipe
     this.playerTactics = "balanced";
@@ -4252,15 +4257,17 @@ class MatchSimulator {
     this.blueScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
     this.redScore = { kills: 0, deaths: 0, assists: 0, gold: 2500, dragons: 0, barons: 0, heralds: 0, elders: 0, towers: 0, inhibitors: 0 };
 
-    // Estruturas
+    // Estruturas Autênticas de Summoner's Rift (Top, Mid, Bot e Base)
     this.blueStructures = this._initStructures("blue");
     this.redStructures = this._initStructures("red");
 
-    // Super minions e inibidores
+    // Super minions e inibidores por rota
     this.blueSuperMinions = false;
     this.redSuperMinions = false;
-    this.blueInhibRespawnAt = null;
-    this.redInhibRespawnAt = null;
+    this.blueSuperMinionsByLane = { top: false, mid: false, bot: false };
+    this.redSuperMinionsByLane = { top: false, mid: false, bot: false };
+    this.blueInhibRespawnAt = { top: null, mid: null, bot: null };
+    this.redInhibRespawnAt = { top: null, mid: null, bot: null };
 
     // Buffs de Barão
     this.blueBaronUntil = 0;
@@ -4374,15 +4381,45 @@ class MatchSimulator {
   }
 
   _initStructures(side) {
-    return [
-      { id: "t1", name: "Torre T1 Externa", maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
-      { id: "t2", name: "Torre T2 Interior", maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
-      { id: "t3", name: "Torre T3 da Base", maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
-      { id: "inhib", name: "Inibidor", maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus_t1", name: "Torre do Nexus 1", maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus_t2", name: "Torre do Nexus 2", maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
-      { id: "nexus", name: "NEXUS", maxHp: 4600, currentHp: 4600, plates: 0, destroyed: false, goldValue: 100 }
+    const sidePrefix = side === "blue" ? "Azul" : "Vermelha";
+    const structures = [
+      // ROTA DO TOPO (TOP LANE)
+      { id: "top_t1", lane: "top", tier: 1, name: `Torre T1 Superior ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "top_t2", lane: "top", tier: 2, name: `Torre T2 Superior ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "top_t3", lane: "top", tier: 3, name: `Torre T3 Superior ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "top_inhib", lane: "top", tier: "inhib", name: `Inibidor Superior ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      // ROTA DO MEIO (MID LANE)
+      { id: "mid_t1", lane: "mid", tier: 1, name: `Torre T1 Meio ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "mid_t2", lane: "mid", tier: 2, name: `Torre T2 Meio ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "mid_t3", lane: "mid", tier: 3, name: `Torre T3 Meio ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "mid_inhib", lane: "mid", tier: "inhib", name: `Inibidor Meio ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      // ROTA INFERIOR (BOT LANE)
+      { id: "bot_t1", lane: "bot", tier: 1, name: `Torre T1 Inferior ${sidePrefix}`, maxHp: 3200, currentHp: 3200, plates: 5, destroyed: false, goldValue: 250 },
+      { id: "bot_t2", lane: "bot", tier: 2, name: `Torre T2 Inferior ${sidePrefix}`, maxHp: 3600, currentHp: 3600, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "bot_t3", lane: "bot", tier: 3, name: `Torre T3 Inferior ${sidePrefix}`, maxHp: 4000, currentHp: 4000, plates: 0, destroyed: false, goldValue: 300 },
+      { id: "bot_inhib", lane: "bot", tier: "inhib", name: `Inibidor Inferior ${sidePrefix}`, maxHp: 3500, currentHp: 3500, plates: 0, destroyed: false, goldValue: 100 },
+
+      { id: "nexus_t1", lane: "base", tier: "nexus_t", name: `Torre do Nexus 1 ${sidePrefix}`, maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
+      { id: "nexus_t2", lane: "base", tier: "nexus_t", name: `Torre do Nexus 2 ${sidePrefix}`, maxHp: 2800, currentHp: 2800, plates: 0, destroyed: false, goldValue: 100 },
+      { id: "nexus", lane: "base", tier: "nexus", name: `NEXUS ${sidePrefix.toUpperCase()}`, maxHp: 4600, currentHp: 4600, plates: 0, destroyed: false, goldValue: 100 }
     ];
+
+    const origFind = structures.find.bind(structures);
+    structures.find = function(predicate) {
+      const res = origFind(predicate);
+      if (res) return res;
+      // Compatibilidade legada para buscas antigas: "t1" -> "mid_t1", "inhib" -> "mid_inhib", etc.
+      return origFind(s => {
+        try {
+          if (predicate({ ...s, id: s.id.replace(/^(top|mid|bot)_/, "") })) return true;
+        } catch (_) {}
+        return false;
+      });
+    };
+
+    return structures;
   }
 
   _initRosterState(roster, team = null) {
@@ -4769,37 +4806,47 @@ class MatchSimulator {
   }
 
   _checkInhibitorRespawns() {
-    if (this.blueInhibRespawnAt && this.gameSeconds >= this.blueInhibRespawnAt) {
-      const inhib = this.blueStructures.find(s => s.id === "inhib");
-      if (inhib && inhib.destroyed) {
-        inhib.destroyed = false;
-        inhib.currentHp = inhib.maxHp;
-        this.redSuperMinions = false;
-        this.blueInhibRespawnAt = null;
-        this.onEvent({
-          type: "respawn",
-          side: "blue",
-          text: "🛡️ O Inibidor Azul renasceu! Tropas inimigas enfraquecidas.",
-          time: this._formatTime()
-        });
-      }
-    }
+    const lanes = ["top", "mid", "bot"];
+    const laneLabels = { top: "Superior", mid: "do Meio", bot: "Inferior" };
 
-    if (this.redInhibRespawnAt && this.gameSeconds >= this.redInhibRespawnAt) {
-      const inhib = this.redStructures.find(s => s.id === "inhib");
-      if (inhib && inhib.destroyed) {
-        inhib.destroyed = false;
-        inhib.currentHp = inhib.maxHp;
-        this.blueSuperMinions = false;
-        this.redInhibRespawnAt = null;
-        this.onEvent({
-          type: "respawn",
-          side: "red",
-          text: "🛡️ O Inibidor Vermelho renasceu!",
-          time: this._formatTime()
-        });
+    lanes.forEach(lane => {
+      // Inibidor Azul
+      if (this.blueInhibRespawnAt && this.blueInhibRespawnAt[lane] && this.gameSeconds >= this.blueInhibRespawnAt[lane]) {
+        const inhib = this.blueStructures.find(s => s.lane === lane && s.tier === "inhib");
+        if (inhib && inhib.destroyed) {
+          inhib.destroyed = false;
+          inhib.currentHp = inhib.maxHp;
+          if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = false;
+          this.blueInhibRespawnAt[lane] = null;
+          this.onEvent({
+            type: "respawn",
+            side: "blue",
+            text: `🛡️ O Inibidor Azul ${laneLabels[lane]} renasceu! Tropas inimigas enfraquecidas.`,
+            time: this._formatTime()
+          });
+        }
       }
-    }
+
+      // Inibidor Vermelho
+      if (this.redInhibRespawnAt && this.redInhibRespawnAt[lane] && this.gameSeconds >= this.redInhibRespawnAt[lane]) {
+        const inhib = this.redStructures.find(s => s.lane === lane && s.tier === "inhib");
+        if (inhib && inhib.destroyed) {
+          inhib.destroyed = false;
+          inhib.currentHp = inhib.maxHp;
+          if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = false;
+          this.redInhibRespawnAt[lane] = null;
+          this.onEvent({
+            type: "respawn",
+            side: "red",
+            text: `🛡️ O Inibidor Vermelho ${laneLabels[lane]} renasceu!`,
+            time: this._formatTime()
+          });
+        }
+      }
+    });
+
+    this.blueSuperMinions = this.blueSuperMinionsByLane ? Object.values(this.blueSuperMinionsByLane).some(Boolean) : false;
+    this.redSuperMinions = this.redSuperMinionsByLane ? Object.values(this.redSuperMinionsByLane).some(Boolean) : false;
   }
 
   _resolveCombatRound() {
@@ -4902,18 +4949,29 @@ class MatchSimulator {
     const redRoll = redBasePower * (0.88 + Math.random() * 0.24);
     const diff = blueRoll - redRoll;
 
-    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum)
+    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum por Rota e Global)
     const pressureDelta = Math.min(10, Math.max(3, Math.floor(Math.abs(diff) * 1.0)));
+    const allLanes = ["top", "mid", "bot"];
     if (diff > 2.0) {
       // Avanço Azul
-      this.lanePressure = Math.min(100, this.lanePressure + pressureDelta);
+      allLanes.forEach(l => {
+        let lDelta = pressureDelta;
+        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(pressureDelta * 1.35);
+        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(pressureDelta * 0.7));
+        this.lanePressures[l] = Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1));
+      });
     } else if (diff < -2.0) {
       // Avanço Vermelho
-      this.lanePressure = Math.max(-100, this.lanePressure - pressureDelta);
+      allLanes.forEach(l => {
+        this.lanePressures[l] = Math.max(-100, (this.lanePressures[l] || 0) - pressureDelta + (Math.random() * 2 - 1));
+      });
     } else {
       // Flutuação natural na zona do rio
-      this.lanePressure += (Math.random() * 4 - 2);
+      allLanes.forEach(l => {
+        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + (Math.random() * 4 - 2)));
+      });
     }
+    this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
 
     // Dano contínuo de rota e escaramuças trocado entre os campeões vivos com impacto real
     const roles = ["top", "jungle", "mid", "adc", "support"];
@@ -7288,7 +7346,7 @@ class MatchSimulator {
         while (true) {
           const target = this._getCurrentTargetStructure(this.redStructures);
           if (!target || target.id === "nexus_t1" || target.id === "nexus_t2" || target.id === "nexus") break;
-          const isTargetInhib = (target.id === "inhib");
+          const isTargetInhib = (target.tier === "inhib" || target.id.includes("inhib"));
           this._destroyCurrentStructure("blue", this.redStructures, isTargetInhib ? 500 : 150);
           if (isTargetInhib) {
             reachedInhib = true;
@@ -7991,12 +8049,16 @@ class MatchSimulator {
       const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
-        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
+        this.lanePressure = Math.min(100, this.lanePressure + 8);
+        this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "top");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
         this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
-        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        if (this.lanePressures) this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 18);
+        this.lanePressure = Math.max(-100, this.lanePressure - 8);
+        this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "top");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -8020,7 +8082,9 @@ class MatchSimulator {
           ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
           : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
         this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
-        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
+        this.lanePressure = Math.min(100, this.lanePressure + 8);
+        this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "mid");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
@@ -8030,7 +8094,9 @@ class MatchSimulator {
           ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
           : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
         this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
-        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
+        this.lanePressure = Math.max(-100, this.lanePressure - 8);
+        this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "mid");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -8054,14 +8120,18 @@ class MatchSimulator {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
         this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
-        this.lanePressure = Math.min(100, this.lanePressure + 12);
+        if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 20);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._damageNextStructure("blue", this.redStructures, 12, false, 0.9, "bot");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
         this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
-        this.lanePressure = Math.max(-100, this.lanePressure - 12);
+        if (this.lanePressures) this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
+        this.lanePressure = Math.max(-100, this.lanePressure - 10);
+        this._damageNextStructure("red", this.blueStructures, 12, false, 0.9, "bot");
         this.combatCooldown = 60;
         return true;
       } else {
@@ -8131,9 +8201,19 @@ class MatchSimulator {
       this._recordKill(loserSide, winnerSide, tradeKillerRole, tradeVictimRole, null, tTxt);
     }
 
-    // O time com vantagem numérica golpeia a estrutura
+    // O time com vantagem numérica golpeia a estrutura na rota com maior pressão
     const enemyStructures = winnerSide === "blue" ? this.redStructures : this.blueStructures;
-    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, 1.2);
+    let chosenLane = "mid";
+    if (this.lanePressures) {
+      const lanes = ["mid", "top", "bot"];
+      if (winnerSide === "blue") {
+        lanes.sort((a, b) => (this.lanePressures[b] || 0) - (this.lanePressures[a] || 0));
+      } else {
+        lanes.sort((a, b) => (this.lanePressures[a] || 0) - (this.lanePressures[b] || 0));
+      }
+      chosenLane = lanes[0];
+    }
+    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, 1.2, chosenLane);
   }
 
   _triggerSkirmishEqual() {
@@ -8182,14 +8262,17 @@ class MatchSimulator {
       c.turrets = (c.turrets || 0) + 1;
     });
 
-    if (target.id === "inhib") {
+    if (target.tier === "inhib" || target.id.includes("inhib")) {
       attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
+      const lane = target.lane || "mid";
       if (attackerSide === "blue") {
         this.blueSuperMinions = true;
-        this.redInhibRespawnAt = this.gameSeconds + 240;
+        if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = true;
+        if (this.redInhibRespawnAt) this.redInhibRespawnAt[lane] = this.gameSeconds + 240;
       } else {
         this.redSuperMinions = true;
-        this.blueInhibRespawnAt = this.gameSeconds + 240;
+        if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = true;
+        if (this.blueInhibRespawnAt) this.blueInhibRespawnAt[lane] = this.gameSeconds + 240;
       }
       this.onEvent({
         type: "inhibitor_destroyed",
@@ -8206,7 +8289,7 @@ class MatchSimulator {
       });
     } else {
       attackerScore.towers = (attackerScore.towers || 0) + 1;
-      const firstBrick = (target.id === "t1" && !this._firstBrickGiven);
+      const firstBrick = ((target.tier === 1 || target.id.includes("t1")) && !this._firstBrickGiven);
       if (firstBrick) {
         this._firstBrickGiven = true;
         attackerScore.gold += 250;
@@ -8237,8 +8320,8 @@ class MatchSimulator {
     this._syncTeamGold();
   }
 
-  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0) {
-    const target = this._getCurrentTargetStructure(targetStructures);
+  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0, preferredLane = null) {
+    const target = this._getCurrentTargetStructure(targetStructures, preferredLane);
     if (!target) return;
 
     const isEarlyGame = this.gameSeconds < 840; // Antes de 14:00 (Placas ativas)
@@ -8279,7 +8362,7 @@ class MatchSimulator {
     }
 
     // Barricadas antes de 14 min amortecem o impacto (redução de 20%)
-    if (isEarlyGame && target.id === "t1") {
+    if (isEarlyGame && target.tier === 1) {
       baseDamage *= 0.80;
     }
 
@@ -8302,7 +8385,7 @@ class MatchSimulator {
     target.currentHp = Math.max(0, target.currentHp - finalDamage);
 
     // Sistema de Barricadas da T1
-    if (target.id === "t1" && target.plates > 0) {
+    if (target.tier === 1 && target.plates > 0) {
       const hpPerPlate = target.maxHp / 5;
       const expectedPlates = Math.max(0, Math.ceil(target.currentHp / hpPerPlate));
       if (expectedPlates < target.plates) {
@@ -8344,7 +8427,7 @@ class MatchSimulator {
       const attackerScore = attackerSide === "blue" ? this.blueScore : this.redScore;
       attackerScore.gold += (target.goldValue + bountyBonus);
 
-      if (target.id === "inhib") {
+      if (target.tier === "inhib") {
         attackerScore.inhibitors = (attackerScore.inhibitors || 0) + 1;
       } else if (target.id !== "nexus") {
         attackerScore.towers = (attackerScore.towers || 0) + 1;
@@ -8365,25 +8448,37 @@ class MatchSimulator {
 
       // A onda de tropas recua/reseta temporariamente após a queda de uma torre
       if (target.id !== "nexus") {
+        const lane = target.lane;
+        if (lane && this.lanePressures && this.lanePressures[lane] !== undefined) {
+          if (attackerSide === "blue") {
+            this.lanePressures[lane] = Math.max(15, this.lanePressures[lane] - 35);
+          } else {
+            this.lanePressures[lane] = Math.min(-15, this.lanePressures[lane] + 35);
+          }
+        }
         if (attackerSide === "blue") {
-          this.lanePressure = Math.max(15, this.lanePressure - 40);
+          this.lanePressure = Math.max(15, this.lanePressure - 25);
         } else {
-          this.lanePressure = Math.min(-15, this.lanePressure + 40);
+          this.lanePressure = Math.min(-15, this.lanePressure + 25);
         }
       }
 
-      if (target.id === "inhib") {
+      if (target.tier === "inhib") {
+        const lane = target.lane || "mid";
+        const laneLabel = { top: "Superior", mid: "do Meio", bot: "Inferior" }[lane] || "";
         if (attackerSide === "blue") {
           this.blueSuperMinions = true;
-          this.redInhibRespawnAt = this.gameSeconds + 240;
+          if (this.blueSuperMinionsByLane) this.blueSuperMinionsByLane[lane] = true;
+          if (this.redInhibRespawnAt) this.redInhibRespawnAt[lane] = this.gameSeconds + 240;
         } else {
           this.redSuperMinions = true;
-          this.blueInhibRespawnAt = this.gameSeconds + 240;
+          if (this.redSuperMinionsByLane) this.redSuperMinionsByLane[lane] = true;
+          if (this.blueInhibRespawnAt) this.blueInhibRespawnAt[lane] = this.gameSeconds + 240;
         }
         this.onEvent({
           type: "inhibitor_destroyed",
           side: attackerSide,
-          text: `💥 O Inibidor ${attackerSide === "blue" ? "Vermelho" : "Azul"} foi DESTRUÍDO! SUPER TROPAS NA BASE!`,
+          text: `💥 O Inibidor ${laneLabel} ${attackerSide === "blue" ? "Vermelho" : "Azul"} foi DESTRUÍDO! SUPER TROPAS NA ROTA!`,
           time: this._formatTime()
         });
       } else if (target.id === "nexus") {
@@ -8394,7 +8489,7 @@ class MatchSimulator {
           time: this._formatTime()
         });
       } else {
-        const firstBrick = (target.id === "t1" && !this._firstBrickGiven);
+        const firstBrick = (target.tier === 1 && !this._firstBrickGiven);
         if (firstBrick) {
           this._firstBrickGiven = true;
           attackerScore.gold += 250;
@@ -8421,27 +8516,80 @@ class MatchSimulator {
     }
   }
 
-  _getCurrentTargetStructure(structures) {
-    const t1 = structures.find(s => s.id === "t1");
-    if (!t1.destroyed) return t1;
+  _getCurrentTargetStructure(structures, preferredLane = null) {
+    const lanes = ["top", "mid", "bot"];
 
-    const t2 = structures.find(s => s.id === "t2");
-    if (!t2.destroyed) return t2;
+    // 1. Se uma rota específica foi solicitada (ex: duelo no Top, dive no Bot)
+    if (preferredLane && lanes.includes(preferredLane)) {
+      const t1 = structures.find(s => s.lane === preferredLane && s.tier === 1);
+      if (t1 && !t1.destroyed) return t1;
 
-    const t3 = structures.find(s => s.id === "t3");
-    if (!t3.destroyed) return t3;
+      const t2 = structures.find(s => s.lane === preferredLane && s.tier === 2);
+      if (t2 && !t2.destroyed) return t2;
 
-    const inhib = structures.find(s => s.id === "inhib");
-    if (!inhib.destroyed) return inhib;
+      const t3 = structures.find(s => s.lane === preferredLane && s.tier === 3);
+      if (t3 && !t3.destroyed) return t3;
 
-    const nt1 = structures.find(s => s.id === "nexus_t1");
-    if (!nt1.destroyed) return nt1;
+      const inhib = structures.find(s => s.lane === preferredLane && s.tier === "inhib");
+      if (inhib && !inhib.destroyed) return inhib;
 
-    const nt2 = structures.find(s => s.id === "nexus_t2");
-    if (!nt2.destroyed) return nt2;
+      // Se a rota preferida já teve seu inibidor destruído, avança direto para as Torres do Nexus e o Nexus!
+      const nt1 = structures.find(s => s.id === "nexus_t1");
+      if (nt1 && !nt1.destroyed) return nt1;
 
-    const nexus = structures.find(s => s.id === "nexus");
-    if (!nexus.destroyed) return nexus;
+      const nt2 = structures.find(s => s.id === "nexus_t2");
+      if (nt2 && !nt2.destroyed) return nt2;
+
+      const nexus = structures.find(s => s.id === "nexus");
+      if (nexus && !nexus.destroyed) return nexus;
+    }
+
+    // 2. Se não especificou rota ou a rota preferida já perdeu o inibidor:
+    // Pressiona as rotas em ordem de pressão do time atacante
+    const isTargetingRed = (structures === this.redStructures);
+    const p = this.lanePressures || { top: 0, mid: 0, bot: 0 };
+    const sortedLanes = [...lanes].sort((a, b) => {
+      const valA = isTargetingRed ? (p[a] || 0) : -(p[a] || 0);
+      const valB = isTargetingRed ? (p[b] || 0) : -(p[b] || 0);
+      return valB - valA;
+    });
+
+    // T1 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t1 = structures.find(s => s.lane === lane && s.tier === 1);
+      if (t1 && !t1.destroyed) return t1;
+    }
+
+    // T2 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t2 = structures.find(s => s.lane === lane && s.tier === 2);
+      if (t2 && !t2.destroyed) return t2;
+    }
+
+    // T3 viva na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const t3 = structures.find(s => s.lane === lane && s.tier === 3);
+      if (t3 && !t3.destroyed) return t3;
+    }
+
+    // Inibidor vivo na rota de maior pressão
+    for (const lane of sortedLanes) {
+      const inhib = structures.find(s => s.lane === lane && s.tier === "inhib");
+      if (inhib && !inhib.destroyed) return inhib;
+    }
+
+    // 3. Se ao menos 1 inibidor estiver destruído, as Torres do Nexus estão vulneráveis
+    const hasAnyInhibDestroyed = structures.some(s => s.tier === "inhib" && s.destroyed);
+    if (hasAnyInhibDestroyed) {
+      const nt1 = structures.find(s => s.id === "nexus_t1");
+      if (nt1 && !nt1.destroyed) return nt1;
+
+      const nt2 = structures.find(s => s.id === "nexus_t2");
+      if (nt2 && !nt2.destroyed) return nt2;
+
+      const nexus = structures.find(s => s.id === "nexus");
+      if (nexus && !nexus.destroyed) return nexus;
+    }
 
     return null;
   }
@@ -8556,6 +8704,11 @@ class MatchSimulator {
       roundIndex: this.roundIndex,
       difficultyMultiplier: this.difficultyMultiplier || 1.0,
       lanePressure: Math.round(this.lanePressure),
+      lanePressures: {
+        top: Math.round(this.lanePressures ? this.lanePressures.top : 0),
+        mid: Math.round(this.lanePressures ? this.lanePressures.mid : 0),
+        bot: Math.round(this.lanePressures ? this.lanePressures.bot : 0)
+      },
       playerTactics: this.playerTactics,
       tacticsLabel: this.tacticsLabel || "⚖️ Controle de Rotas",
       counterAttackCooldown: this.counterAttackCooldown,
@@ -10201,23 +10354,37 @@ class ArenaView {
           🎯 RECOMPENSAS DE OBJETIVO ATIVAS: +650g a +800g de Ouro Global de Virada ao Destruir Torres ou Monstros Épicos!
         </div>
 
-        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS (SUMMONER'S RIFT) -->
+        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS (SUMMONER'S RIFT INTERATIVO 3 ROTAS) -->
         <div class="battlefield-arena">
-          <div class="lanes-visualizer">
-            <!-- Lado Azul: Nexus -> Torres Nexus -> Inibidor -> T3 -> T2 -> T1 -->
-            <div class="team-lane-half blue-side" id="blue-lane-structures">
-              ${this._renderStructuresGroup(state.blue.structures, "blue")}
+          <div class="rift-map-wrapper">
+            <!-- Cabeçalho Tático do Mapa: Controle das 3 Rotas & Objetivos do Rio -->
+            <div class="rift-map-header">
+              <div class="lane-status-badge top-lane" id="badge-lane-top">
+                <span class="lane-icon">🛡️</span>
+                <span class="lane-name">TOPO</span>
+                <span class="lane-pressure-val" id="pressure-val-top">0% EQUILIBRADO</span>
+              </div>
+              <div class="lane-status-badge mid-lane" id="badge-lane-mid">
+                <span class="lane-icon">⚔️</span>
+                <span class="lane-name">MEIO</span>
+                <span class="lane-pressure-val" id="pressure-val-mid">0% EQUILIBRADO</span>
+              </div>
+              <div class="lane-status-badge bot-lane" id="badge-lane-bot">
+                <span class="lane-icon">🏹</span>
+                <span class="lane-name">INFERIOR</span>
+                <span class="lane-pressure-val" id="pressure-val-bot">0% EQUILIBRADO</span>
+              </div>
+              <div class="rift-map-legend">
+                <span class="legend-item blue"><span class="legend-dot blue-dot"></span> Azul</span>
+                <span class="legend-item red"><span class="legend-dot red-dot"></span> Vermelho</span>
+              </div>
             </div>
 
-            <!-- Rio Central -->
-            <div class="river-clash-zone">
-              <div class="river-separator"></div>
-              <div class="river-badge">RIO DO RIFT</div>
-            </div>
-
-            <!-- Lado Vermelho: T1 -> T2 -> T3 -> Inibidor -> Torres Nexus -> Nexus -->
-            <div class="team-lane-half red-side" id="red-lane-structures">
-              ${this._renderStructuresGroup(state.red.structures, "red")}
+            <!-- SVG Interativo de Summoner's Rift (1000 x 1000) -->
+            <div class="rift-svg-container" id="rift-svg-container">
+              ${this._renderSummonersRiftSvg(state)}
+              <!-- Tooltip Flutuante Interativo de Estruturas do Rift -->
+              <div class="rift-structure-tooltip" id="rift-structure-tooltip" style="display:none;"></div>
             </div>
           </div>
         </div>
@@ -10342,6 +10509,242 @@ class ArenaView {
     `;
 
     this._bindControls();
+  }
+
+  _renderSummonersRiftSvg(state) {
+    const MAP_COORDS = {
+      blue: {
+        top_inhib: { x: 120, y: 770 },
+        top_t3: { x: 120, y: 690 },
+        top_t2: { x: 120, y: 530 },
+        top_t1: { x: 120, y: 370 },
+        mid_inhib: { x: 210, y: 790 },
+        mid_t3: { x: 280, y: 720 },
+        mid_t2: { x: 355, y: 645 },
+        mid_t1: { x: 430, y: 570 },
+        bot_inhib: { x: 230, y: 880 },
+        bot_t3: { x: 310, y: 880 },
+        bot_t2: { x: 470, y: 880 },
+        bot_t1: { x: 630, y: 880 },
+        nexus_t1: { x: 150, y: 835 },
+        nexus_t2: { x: 135, y: 850 },
+        nexus: { x: 95, y: 905 }
+      },
+      red: {
+        top_t1: { x: 370, y: 120 },
+        top_t2: { x: 530, y: 120 },
+        top_t3: { x: 690, y: 120 },
+        top_inhib: { x: 770, y: 120 },
+        mid_t1: { x: 570, y: 430 },
+        mid_t2: { x: 645, y: 355 },
+        mid_t3: { x: 720, y: 280 },
+        mid_inhib: { x: 790, y: 210 },
+        bot_t1: { x: 880, y: 630 },
+        bot_t2: { x: 880, y: 470 },
+        bot_t3: { x: 880, y: 310 },
+        bot_inhib: { x: 880, y: 230 },
+        nexus_t1: { x: 850, y: 165 },
+        nexus_t2: { x: 865, y: 150 },
+        nexus: { x: 905, y: 95 }
+      }
+    };
+
+    const renderStructures = (structures, side) => {
+      if (!structures) return "";
+      const sideCoords = MAP_COORDS[side];
+      return structures.map(s => {
+        let coords = sideCoords[s.id];
+        if (!coords) {
+          if (s.id === "t1") coords = sideCoords.mid_t1;
+          else if (s.id === "t2") coords = sideCoords.mid_t2;
+          else if (s.id === "t3") coords = sideCoords.mid_t3;
+          else if (s.id === "inhib") coords = sideCoords.mid_inhib;
+          else if (s.id === "nexus") coords = sideCoords.nexus;
+        }
+        if (!coords) return "";
+        return this._renderMapStructureSvg(s, side, coords);
+      }).join('');
+    };
+
+    const blueStructuresSvg = renderStructures(state.blue?.structures, "blue");
+    const redStructuresSvg = renderStructures(state.red?.structures, "red");
+
+    return `
+      <svg class="summoners-rift-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="blue-base-grad" cx="15%" cy="85%" r="35%">
+            <stop offset="0%" stop-color="#0a2a4a" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#051220" stop-opacity="0.2" />
+          </radialGradient>
+          <radialGradient id="red-base-grad" cx="85%" cy="15%" r="35%">
+            <stop offset="0%" stop-color="#4a0f1d" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#180408" stop-opacity="0.2" />
+          </radialGradient>
+          <linearGradient id="river-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#082235" />
+            <stop offset="50%" stop-color="#0e3a54" />
+            <stop offset="100%" stop-color="#082030" />
+          </linearGradient>
+          <filter id="rift-glow-blue" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+          <filter id="rift-glow-red" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        <!-- Terreno Global do Mapa (Dark Rift Grass) -->
+        <rect width="1000" height="1000" fill="#08140f" rx="12" />
+
+        <!-- Selva Inferior Esquerda (Blue Jungle) -->
+        <path d="M 120 880 L 120 480 C 260 480, 360 580, 480 620 C 520 740, 520 840, 520 880 Z" fill="#0b1e17" stroke="#122d23" stroke-width="2" />
+        <path d="M 160 540 C 240 540, 300 600, 340 640 C 380 720, 440 780, 460 840" fill="none" stroke="#16382b" stroke-width="10" stroke-dasharray="10 8" />
+
+        <!-- Selva Superior Direita (Red Jungle) -->
+        <path d="M 880 120 L 880 520 C 740 520, 640 420, 520 380 C 480 260, 480 160, 480 120 Z" fill="#141a14" stroke="#1e2d21" stroke-width="2" />
+        <path d="M 840 460 C 760 460, 700 400, 660 360 C 620 280, 560 220, 540 160" fill="none" stroke="#223626" stroke-width="10" stroke-dasharray="10 8" />
+
+        <!-- Rio de Summoner's Rift -->
+        <path d="M 80 320 Q 250 360 440 480 T 650 680 Q 750 820 910 680 L 930 760 Q 730 890 560 720 T 360 520 Q 200 400 70 410 Z" fill="url(#river-grad)" stroke="#0ac8b9" stroke-opacity="0.35" stroke-width="3" />
+        <path d="M 100 360 Q 280 390 480 510 T 700 700 L 880 720" fill="none" stroke="#005a82" stroke-width="6" opacity="0.65" />
+
+        <!-- Covil do Barão Nashor (Top River) -->
+        <g class="pit-marker baron-pit" transform="translate(330, 330)">
+          <path d="M -30 -30 A 42 42 0 1 1 30 30 L 15 15 A 24 24 0 1 0 -15 -15 Z" fill="#200d2c" stroke="#9333ea" stroke-width="2.5" />
+          <circle r="22" fill="#3b0764" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="16">👾</text>
+          <text text-anchor="middle" y="44" fill="#d8b4fe" font-size="11" font-weight="900" letter-spacing="1">BARÃO</text>
+        </g>
+
+        <!-- Covil do Dragão Elemental (Bot River) -->
+        <g class="pit-marker dragon-pit" transform="translate(670, 670)">
+          <path d="M 30 30 A 42 42 0 1 1 -30 -30 L -15 -15 A 24 24 0 1 0 15 15 Z" fill="#301206" stroke="#ea580c" stroke-width="2.5" />
+          <circle r="22" fill="#7c2d12" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="16">🐲</text>
+          <text text-anchor="middle" y="44" fill="#fdba74" font-size="11" font-weight="900" letter-spacing="1">DRAGÃO</text>
+        </g>
+
+        <!-- Campos de Buff da Selva (Blue / Red Buffs) -->
+        <g class="camp-marker camp-blue-buff-blue" transform="translate(280, 630)">
+          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
+        </g>
+        <g class="camp-marker camp-red-buff-blue" transform="translate(480, 770)">
+          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
+        </g>
+        <g class="camp-marker camp-red-buff-red" transform="translate(520, 230)">
+          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
+        </g>
+        <g class="camp-marker camp-blue-buff-red" transform="translate(720, 370)">
+          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
+        </g>
+
+        <!-- Base Azul (Bottom-Left) -->
+        <polygon points="30,970 30,780 120,760 240,880 220,970" fill="url(#blue-base-grad)" stroke="#0ac8b9" stroke-width="2.5" />
+        <text x="50" y="945" fill="#0ac8b9" font-size="14" font-weight="900" letter-spacing="1.5">BASE AZUL</text>
+
+        <!-- Base Vermelha (Top-Right) -->
+        <polygon points="970,30 970,220 880,240 760,120 780,30" fill="url(#red-base-grad)" stroke="#e84057" stroke-width="2.5" />
+        <text x="810" y="65" fill="#e84057" font-size="14" font-weight="900" letter-spacing="1.5">BASE RED</text>
+
+        <!-- Trilhas das 3 Rotas Principais (Top, Mid, Bot) -->
+        <!-- Top Lane -->
+        <path id="top-lane-track" d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Mid Lane -->
+        <path id="mid-lane-track" d="M 150 850 L 850 150" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" />
+        <path d="M 150 850 L 850 150" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" />
+
+        <!-- Bot Lane -->
+        <path id="bot-lane-track" d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Marcadores de Choque de Minions (Minion Clash Waves) -->
+        <g id="clash-top" class="minion-clash-wave" transform="translate(140, 140)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+        <g id="clash-mid" class="minion-clash-wave" transform="translate(500, 500)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+        <g id="clash-bot" class="minion-clash-wave" transform="translate(860, 860)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+
+        <!-- ESTRUTURAS DO MAPA (30 Estruturas Autênticas) -->
+        <g class="structures-layer blue-structures">
+          ${blueStructuresSvg}
+        </g>
+        <g class="structures-layer red-structures">
+          ${redStructuresSvg}
+        </g>
+      </svg>
+    `;
+  }
+
+  _renderMapStructureSvg(struct, side, coords) {
+    if (!struct || !coords) return "";
+    const isNexus = struct.tier === "nexus" || struct.id === "nexus";
+    const isInhib = struct.tier === "inhib" || struct.id.includes("inhib");
+    const isT1 = struct.tier === 1 || struct.id.includes("t1");
+    const radius = isNexus ? 25 : (isInhib ? 18 : 16);
+    const pct = Math.max(0, Math.min(100, Math.round((struct.currentHp / struct.maxHp) * 100)));
+    const circumference = Math.round(2 * Math.PI * radius);
+    const strokeDash = Math.round((pct / 100) * circumference);
+
+    const iconSymbol = isNexus ? "⚛️" : (isInhib ? "💎" : "🏰");
+
+    return `
+      <g class="map-structure-node ${side}-side ${struct.destroyed ? 'destroyed' : ''} ${isNexus ? 'is-nexus' : ''}" 
+         id="struct-${side}-${struct.id}"
+         data-side="${side}"
+         data-id="${struct.id}"
+         data-name="${struct.name}"
+         data-hp="${struct.currentHp}"
+         data-max-hp="${struct.maxHp}"
+         data-plates="${struct.plates || 0}"
+         data-gold="${struct.goldValue || 0}"
+         data-tier="${struct.tier}"
+         transform="translate(${coords.x}, ${coords.y})">
+        <!-- Glow / Halo de hover e clique -->
+        <circle class="struct-halo" r="${radius + 6}" />
+        <!-- Fundo escuro do anel -->
+        <circle class="struct-hp-bg" r="${radius}" />
+        <!-- Anel de Vida Dinâmico (SVG Stroke Dash) -->
+        <circle class="struct-hp-ring ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" 
+                r="${radius}" 
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${circumference - strokeDash}"
+                transform="rotate(-90)" />
+        <!-- Núcleo interno colorido -->
+        <circle class="struct-core" r="${radius - 3}" />
+        <!-- Ícone representativo -->
+        <text class="struct-icon" text-anchor="middle" dominant-baseline="central" font-size="${isNexus ? 16 : (isInhib ? 13 : 11)}">${iconSymbol}</text>
+        <!-- Badge de Barricadas (Placas ativas da T1) -->
+        ${isT1 && !struct.destroyed && struct.plates > 0 ? `
+          <g class="struct-plates-badge" transform="translate(0, ${radius + 9})">
+            <rect x="-14" y="-7" width="28" height="14" rx="7" fill="#1c160a" stroke="#f0b622" stroke-width="1.5" />
+            <text text-anchor="middle" y="3" fill="#f0e6d2" font-size="8.5" font-weight="900">${struct.plates}P</text>
+          </g>
+        ` : ''}
+        <!-- Indicador de Ruína quando Destruído -->
+        <g class="struct-ruined-indicator" style="display: ${struct.destroyed ? 'block' : 'none'};">
+          <circle r="${radius + 1}" fill="#0a0f14" opacity="0.85" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="13">❌</text>
+        </g>
+      </g>
+    `;
   }
 
   _renderStructuresGroup(structures, side) {
@@ -10549,39 +10952,138 @@ class ArenaView {
       }
     }
 
-    // Sincronização em tempo real das estruturas do mapa (evita qualquer descompasso visual)
+    // Sincronização em tempo real das 30 estruturas do mapa Summoner's Rift
     const syncStructures = (structures, side) => {
       if (!structures) return;
       structures.forEach(struct => {
         const el = this.containerEl.querySelector(`#struct-${side}-${struct.id}`);
         if (!el) return;
+
+        el.dataset.hp = struct.currentHp;
+        el.dataset.maxHp = struct.maxHp;
+        el.dataset.plates = struct.plates || 0;
+
+        const isNexus = struct.tier === "nexus" || struct.id === "nexus";
+        const isInhib = struct.tier === "inhib" || struct.id.includes("inhib");
+        const radius = isNexus ? 25 : (isInhib ? 18 : 16);
+        const circumference = Math.round(2 * Math.PI * radius);
+        const pct = Math.max(0, Math.min(100, Math.round((struct.currentHp / struct.maxHp) * 100)));
+        const strokeDash = Math.round((pct / 100) * circumference);
+
+        const ring = el.querySelector(".struct-hp-ring");
+        if (ring) {
+          ring.style.strokeDashoffset = `${circumference - strokeDash}`;
+          if (pct < 30) {
+            ring.classList.add("critical");
+            ring.classList.remove("damaged");
+          } else if (pct < 60) {
+            ring.classList.add("damaged");
+            ring.classList.remove("critical");
+          } else {
+            ring.classList.remove("critical", "damaged");
+          }
+        }
+
+        const ruined = el.querySelector(".struct-ruined-indicator");
+        const plateBadge = el.querySelector(".struct-plates-badge");
+
+        // Suporte a componentes legados se existirem
+        const text = el.querySelector(".structure-hp-text");
+        if (text) text.textContent = struct.destroyed ? "DESTRUÍDO" : `${struct.currentHp}`;
+        const fill = el.querySelector(".structure-hp-fill");
+        if (fill) {
+          fill.style.width = struct.destroyed ? "0%" : `${pct}%`;
+          fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
+        }
+
         if (struct.destroyed) {
-          if (!el.classList.contains("destroyed")) {
-            el.classList.add("destroyed");
-          }
-          const text = el.querySelector(".structure-hp-text");
-          if (text && text.textContent !== "DESTRUÍDO") text.textContent = "DESTRUÍDO";
-          const fill = el.querySelector(".structure-hp-fill");
-          if (fill && fill.style.width !== "0%") fill.style.width = "0%";
-          const plateBadge = el.querySelector(".structure-plates-badge");
-          if (plateBadge) plateBadge.remove();
+          el.classList.add("destroyed");
+          if (ruined) ruined.style.display = "block";
+          if (plateBadge) plateBadge.style.display = "none";
         } else {
-          if (el.classList.contains("destroyed")) {
-            el.classList.remove("destroyed"); // caso o inibidor tenha renascido
+          el.classList.remove("destroyed");
+          if (ruined) ruined.style.display = "none";
+          if (plateBadge) {
+            if (struct.plates > 0) {
+              plateBadge.style.display = "block";
+              const pText = plateBadge.querySelector("text");
+              if (pText) pText.textContent = `${struct.plates}P`;
+            } else {
+              plateBadge.style.display = "none";
+            }
           }
-          const pct = Math.max(0, Math.round((struct.currentHp / struct.maxHp) * 100));
-          const fill = el.querySelector(".structure-hp-fill");
-          if (fill) {
-            fill.style.width = `${pct}%`;
-            fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
-          }
-          const text = el.querySelector(".structure-hp-text");
-          if (text) text.textContent = `${struct.currentHp}`;
         }
       });
     };
     if (state.blue && state.blue.structures) syncStructures(state.blue.structures, "blue");
     if (state.red && state.red.structures) syncStructures(state.red.structures, "red");
+
+    // Sincronização dinâmica das 3 Rotas (Top, Mid, Bot): Pressão e Pontos de Choque de Minions
+    const pressures = state.lanePressures || {
+      top: state.lanePressure || 0,
+      mid: state.lanePressure || 0,
+      bot: state.lanePressure || 0
+    };
+
+    const formatPressure = (val) => {
+      if (val > 5) return `+${val}% AZUL`;
+      if (val < -5) return `+${Math.abs(val)}% RED`;
+      return `0% EQUILIBRADO`;
+    };
+
+    const updatePressureBadge = (lane, val) => {
+      const el = this.containerEl.querySelector(`#pressure-val-${lane}`);
+      const badge = this.containerEl.querySelector(`#badge-lane-${lane}`);
+      if (el) el.textContent = formatPressure(val);
+      if (badge) {
+        badge.classList.toggle("blue-push", val > 8);
+        badge.classList.toggle("red-push", val < -8);
+      }
+    };
+
+    updatePressureBadge("top", pressures.top || 0);
+    updatePressureBadge("mid", pressures.mid || 0);
+    updatePressureBadge("bot", pressures.bot || 0);
+
+    // Movimentação dos pontos de colisão ao longo das rotas
+    // Top Lane: (120, 880) -> (120, 160) -> (140, 140) -> (160, 120) -> (880, 120)
+    const clashTop = this.containerEl.querySelector("#clash-top");
+    if (clashTop) {
+      const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
+      let x = 140, y = 140;
+      if (pTop >= 0) {
+        x = 160 + (pTop / 100) * 650;
+        y = 120;
+      } else {
+        x = 120;
+        y = 160 + (-pTop / 100) * 650;
+      }
+      clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
+
+    // Mid Lane: Diagonal (150, 850) -> (500, 500) -> (850, 150)
+    const clashMid = this.containerEl.querySelector("#clash-mid");
+    if (clashMid) {
+      const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
+      const x = 500 + (pMid / 100) * 310;
+      const y = 500 - (pMid / 100) * 310;
+      clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
+
+    // Bot Lane: (120, 880) -> (840, 880) -> (860, 860) -> (880, 840) -> (880, 120)
+    const clashBot = this.containerEl.querySelector("#clash-bot");
+    if (clashBot) {
+      const pBot = Math.max(-100, Math.min(100, pressures.bot || 0));
+      let x = 860, y = 860;
+      if (pBot >= 0) {
+        x = 880;
+        y = 840 - (pBot / 100) * 650;
+      } else {
+        x = 840 - (-pBot / 100) * 650;
+        y = 880;
+      }
+      clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
 
     // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
     const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
@@ -11529,6 +12031,85 @@ class ArenaView {
         this.sim.skipToEnd();
       });
     }
+
+    this._bindMapInteractions();
+  }
+
+  _bindMapInteractions() {
+    const tooltip = this.containerEl.querySelector("#rift-structure-tooltip");
+    const svgContainer = this.containerEl.querySelector("#rift-svg-container");
+    if (!tooltip || !svgContainer) return;
+
+    this.containerEl.querySelectorAll(".map-structure-node").forEach(node => {
+      node.addEventListener("mouseenter", (e) => {
+        const side = node.dataset.side;
+        const name = node.dataset.name || "Estrutura";
+        const hp = parseInt(node.dataset.hp, 10) || 0;
+        const maxHp = parseInt(node.dataset.maxHp, 10) || 3000;
+        const plates = parseInt(node.dataset.plates, 10) || 0;
+        const gold = node.dataset.gold || 250;
+        const isDestroyed = node.classList.contains("destroyed");
+        const pct = Math.max(0, Math.round((hp / maxHp) * 100));
+
+        const sideBadge = side === "blue" ? `<span class="tip-team blue">🔵 LADO AZUL</span>` : `<span class="tip-team red">🔴 LADO VERMELHO</span>`;
+        const statusText = isDestroyed
+          ? `<span class="tip-status destroyed">💥 DESTRUÍDA</span>`
+          : (pct < 40 ? `<span class="tip-status critical">⚠️ CRÍTICA (${pct}%)</span>` : `<span class="tip-status intact">🛡️ ATIVA (${pct}%)</span>`);
+
+        tooltip.innerHTML = `
+          <div class="tip-header">
+            ${sideBadge}
+            <div class="tip-name">${name}</div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-hp-row">
+              <span class="tip-label">Integridade:</span>
+              <span class="tip-hp-val">${isDestroyed ? '0 / ' + maxHp : hp + ' / ' + maxHp} HP</span>
+            </div>
+            <div class="tip-hp-bar">
+              <div class="tip-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" style="width: ${isDestroyed ? 0 : pct}%;"></div>
+            </div>
+            ${plates > 0 && !isDestroyed ? `
+              <div class="tip-detail-row plates">
+                <span>🛡️ Barricadas:</span>
+                <strong>${plates} Placas (+${plates * 125}g disponíveis)</strong>
+              </div>
+            ` : ''}
+            <div class="tip-detail-row">
+              <span>Status:</span>
+              ${statusText}
+            </div>
+            <div class="tip-detail-row bounty">
+              <span>Recompensa Global:</span>
+              <strong>+${gold} Ouro</strong>
+            </div>
+          </div>
+        `;
+        tooltip.style.display = "block";
+      });
+
+      node.addEventListener("mousemove", (e) => {
+        const rect = svgContainer.getBoundingClientRect();
+        const x = Math.min(rect.width - 200, Math.max(10, e.clientX - rect.left + 16));
+        const y = Math.min(rect.height - 140, Math.max(10, e.clientY - rect.top + 16));
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+      });
+
+      node.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      node.addEventListener("click", () => {
+        sound.playClick();
+        const halo = node.querySelector(".struct-halo");
+        if (halo) {
+          halo.classList.remove("ping-pulse");
+          void halo.offsetWidth;
+          halo.classList.add("ping-pulse");
+        }
+      });
+    });
   }
 
   // Exibe a legenda flutuante com a fala oficial do campeão escolhido

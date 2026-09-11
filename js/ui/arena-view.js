@@ -108,23 +108,37 @@ export class ArenaView {
           🎯 RECOMPENSAS DE OBJETIVO ATIVAS: +650g a +800g de Ouro Global de Virada ao Destruir Torres ou Monstros Épicos!
         </div>
 
-        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS (SUMMONER'S RIFT) -->
+        <!-- CAMPO DE BATALHA COM AS ESTRUTURAS (SUMMONER'S RIFT INTERATIVO 3 ROTAS) -->
         <div class="battlefield-arena">
-          <div class="lanes-visualizer">
-            <!-- Lado Azul: Nexus -> Torres Nexus -> Inibidor -> T3 -> T2 -> T1 -->
-            <div class="team-lane-half blue-side" id="blue-lane-structures">
-              ${this._renderStructuresGroup(state.blue.structures, "blue")}
+          <div class="rift-map-wrapper">
+            <!-- Cabeçalho Tático do Mapa: Controle das 3 Rotas & Objetivos do Rio -->
+            <div class="rift-map-header">
+              <div class="lane-status-badge top-lane" id="badge-lane-top">
+                <span class="lane-icon">🛡️</span>
+                <span class="lane-name">TOPO</span>
+                <span class="lane-pressure-val" id="pressure-val-top">0% EQUILIBRADO</span>
+              </div>
+              <div class="lane-status-badge mid-lane" id="badge-lane-mid">
+                <span class="lane-icon">⚔️</span>
+                <span class="lane-name">MEIO</span>
+                <span class="lane-pressure-val" id="pressure-val-mid">0% EQUILIBRADO</span>
+              </div>
+              <div class="lane-status-badge bot-lane" id="badge-lane-bot">
+                <span class="lane-icon">🏹</span>
+                <span class="lane-name">INFERIOR</span>
+                <span class="lane-pressure-val" id="pressure-val-bot">0% EQUILIBRADO</span>
+              </div>
+              <div class="rift-map-legend">
+                <span class="legend-item blue"><span class="legend-dot blue-dot"></span> Azul</span>
+                <span class="legend-item red"><span class="legend-dot red-dot"></span> Vermelho</span>
+              </div>
             </div>
 
-            <!-- Rio Central -->
-            <div class="river-clash-zone">
-              <div class="river-separator"></div>
-              <div class="river-badge">RIO DO RIFT</div>
-            </div>
-
-            <!-- Lado Vermelho: T1 -> T2 -> T3 -> Inibidor -> Torres Nexus -> Nexus -->
-            <div class="team-lane-half red-side" id="red-lane-structures">
-              ${this._renderStructuresGroup(state.red.structures, "red")}
+            <!-- SVG Interativo de Summoner's Rift (1000 x 1000) -->
+            <div class="rift-svg-container" id="rift-svg-container">
+              ${this._renderSummonersRiftSvg(state)}
+              <!-- Tooltip Flutuante Interativo de Estruturas do Rift -->
+              <div class="rift-structure-tooltip" id="rift-structure-tooltip" style="display:none;"></div>
             </div>
           </div>
         </div>
@@ -249,6 +263,242 @@ export class ArenaView {
     `;
 
     this._bindControls();
+  }
+
+  _renderSummonersRiftSvg(state) {
+    const MAP_COORDS = {
+      blue: {
+        top_inhib: { x: 120, y: 770 },
+        top_t3: { x: 120, y: 690 },
+        top_t2: { x: 120, y: 530 },
+        top_t1: { x: 120, y: 370 },
+        mid_inhib: { x: 210, y: 790 },
+        mid_t3: { x: 280, y: 720 },
+        mid_t2: { x: 355, y: 645 },
+        mid_t1: { x: 430, y: 570 },
+        bot_inhib: { x: 230, y: 880 },
+        bot_t3: { x: 310, y: 880 },
+        bot_t2: { x: 470, y: 880 },
+        bot_t1: { x: 630, y: 880 },
+        nexus_t1: { x: 150, y: 835 },
+        nexus_t2: { x: 135, y: 850 },
+        nexus: { x: 95, y: 905 }
+      },
+      red: {
+        top_t1: { x: 370, y: 120 },
+        top_t2: { x: 530, y: 120 },
+        top_t3: { x: 690, y: 120 },
+        top_inhib: { x: 770, y: 120 },
+        mid_t1: { x: 570, y: 430 },
+        mid_t2: { x: 645, y: 355 },
+        mid_t3: { x: 720, y: 280 },
+        mid_inhib: { x: 790, y: 210 },
+        bot_t1: { x: 880, y: 630 },
+        bot_t2: { x: 880, y: 470 },
+        bot_t3: { x: 880, y: 310 },
+        bot_inhib: { x: 880, y: 230 },
+        nexus_t1: { x: 850, y: 165 },
+        nexus_t2: { x: 865, y: 150 },
+        nexus: { x: 905, y: 95 }
+      }
+    };
+
+    const renderStructures = (structures, side) => {
+      if (!structures) return "";
+      const sideCoords = MAP_COORDS[side];
+      return structures.map(s => {
+        let coords = sideCoords[s.id];
+        if (!coords) {
+          if (s.id === "t1") coords = sideCoords.mid_t1;
+          else if (s.id === "t2") coords = sideCoords.mid_t2;
+          else if (s.id === "t3") coords = sideCoords.mid_t3;
+          else if (s.id === "inhib") coords = sideCoords.mid_inhib;
+          else if (s.id === "nexus") coords = sideCoords.nexus;
+        }
+        if (!coords) return "";
+        return this._renderMapStructureSvg(s, side, coords);
+      }).join('');
+    };
+
+    const blueStructuresSvg = renderStructures(state.blue?.structures, "blue");
+    const redStructuresSvg = renderStructures(state.red?.structures, "red");
+
+    return `
+      <svg class="summoners-rift-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="blue-base-grad" cx="15%" cy="85%" r="35%">
+            <stop offset="0%" stop-color="#0a2a4a" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#051220" stop-opacity="0.2" />
+          </radialGradient>
+          <radialGradient id="red-base-grad" cx="85%" cy="15%" r="35%">
+            <stop offset="0%" stop-color="#4a0f1d" stop-opacity="0.9" />
+            <stop offset="100%" stop-color="#180408" stop-opacity="0.2" />
+          </radialGradient>
+          <linearGradient id="river-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#082235" />
+            <stop offset="50%" stop-color="#0e3a54" />
+            <stop offset="100%" stop-color="#082030" />
+          </linearGradient>
+          <filter id="rift-glow-blue" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+          <filter id="rift-glow-red" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        <!-- Terreno Global do Mapa (Dark Rift Grass) -->
+        <rect width="1000" height="1000" fill="#08140f" rx="12" />
+
+        <!-- Selva Inferior Esquerda (Blue Jungle) -->
+        <path d="M 120 880 L 120 480 C 260 480, 360 580, 480 620 C 520 740, 520 840, 520 880 Z" fill="#0b1e17" stroke="#122d23" stroke-width="2" />
+        <path d="M 160 540 C 240 540, 300 600, 340 640 C 380 720, 440 780, 460 840" fill="none" stroke="#16382b" stroke-width="10" stroke-dasharray="10 8" />
+
+        <!-- Selva Superior Direita (Red Jungle) -->
+        <path d="M 880 120 L 880 520 C 740 520, 640 420, 520 380 C 480 260, 480 160, 480 120 Z" fill="#141a14" stroke="#1e2d21" stroke-width="2" />
+        <path d="M 840 460 C 760 460, 700 400, 660 360 C 620 280, 560 220, 540 160" fill="none" stroke="#223626" stroke-width="10" stroke-dasharray="10 8" />
+
+        <!-- Rio de Summoner's Rift -->
+        <path d="M 80 320 Q 250 360 440 480 T 650 680 Q 750 820 910 680 L 930 760 Q 730 890 560 720 T 360 520 Q 200 400 70 410 Z" fill="url(#river-grad)" stroke="#0ac8b9" stroke-opacity="0.35" stroke-width="3" />
+        <path d="M 100 360 Q 280 390 480 510 T 700 700 L 880 720" fill="none" stroke="#005a82" stroke-width="6" opacity="0.65" />
+
+        <!-- Covil do Barão Nashor (Top River) -->
+        <g class="pit-marker baron-pit" transform="translate(330, 330)">
+          <path d="M -30 -30 A 42 42 0 1 1 30 30 L 15 15 A 24 24 0 1 0 -15 -15 Z" fill="#200d2c" stroke="#9333ea" stroke-width="2.5" />
+          <circle r="22" fill="#3b0764" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="16">👾</text>
+          <text text-anchor="middle" y="44" fill="#d8b4fe" font-size="11" font-weight="900" letter-spacing="1">BARÃO</text>
+        </g>
+
+        <!-- Covil do Dragão Elemental (Bot River) -->
+        <g class="pit-marker dragon-pit" transform="translate(670, 670)">
+          <path d="M 30 30 A 42 42 0 1 1 -30 -30 L -15 -15 A 24 24 0 1 0 15 15 Z" fill="#301206" stroke="#ea580c" stroke-width="2.5" />
+          <circle r="22" fill="#7c2d12" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="16">🐲</text>
+          <text text-anchor="middle" y="44" fill="#fdba74" font-size="11" font-weight="900" letter-spacing="1">DRAGÃO</text>
+        </g>
+
+        <!-- Campos de Buff da Selva (Blue / Red Buffs) -->
+        <g class="camp-marker camp-blue-buff-blue" transform="translate(280, 630)">
+          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
+        </g>
+        <g class="camp-marker camp-red-buff-blue" transform="translate(480, 770)">
+          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
+        </g>
+        <g class="camp-marker camp-red-buff-red" transform="translate(520, 230)">
+          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
+        </g>
+        <g class="camp-marker camp-blue-buff-red" transform="translate(720, 370)">
+          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
+        </g>
+
+        <!-- Base Azul (Bottom-Left) -->
+        <polygon points="30,970 30,780 120,760 240,880 220,970" fill="url(#blue-base-grad)" stroke="#0ac8b9" stroke-width="2.5" />
+        <text x="50" y="945" fill="#0ac8b9" font-size="14" font-weight="900" letter-spacing="1.5">BASE AZUL</text>
+
+        <!-- Base Vermelha (Top-Right) -->
+        <polygon points="970,30 970,220 880,240 760,120 780,30" fill="url(#red-base-grad)" stroke="#e84057" stroke-width="2.5" />
+        <text x="810" y="65" fill="#e84057" font-size="14" font-weight="900" letter-spacing="1.5">BASE RED</text>
+
+        <!-- Trilhas das 3 Rotas Principais (Top, Mid, Bot) -->
+        <!-- Top Lane -->
+        <path id="top-lane-track" d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Mid Lane -->
+        <path id="mid-lane-track" d="M 150 850 L 850 150" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" />
+        <path d="M 150 850 L 850 150" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" />
+
+        <!-- Bot Lane -->
+        <path id="bot-lane-track" d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Marcadores de Choque de Minions (Minion Clash Waves) -->
+        <g id="clash-top" class="minion-clash-wave" transform="translate(140, 140)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+        <g id="clash-mid" class="minion-clash-wave" transform="translate(500, 500)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+        <g id="clash-bot" class="minion-clash-wave" transform="translate(860, 860)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
+        </g>
+
+        <!-- ESTRUTURAS DO MAPA (30 Estruturas Autênticas) -->
+        <g class="structures-layer blue-structures">
+          ${blueStructuresSvg}
+        </g>
+        <g class="structures-layer red-structures">
+          ${redStructuresSvg}
+        </g>
+      </svg>
+    `;
+  }
+
+  _renderMapStructureSvg(struct, side, coords) {
+    if (!struct || !coords) return "";
+    const isNexus = struct.tier === "nexus" || struct.id === "nexus";
+    const isInhib = struct.tier === "inhib" || struct.id.includes("inhib");
+    const isT1 = struct.tier === 1 || struct.id.includes("t1");
+    const radius = isNexus ? 25 : (isInhib ? 18 : 16);
+    const pct = Math.max(0, Math.min(100, Math.round((struct.currentHp / struct.maxHp) * 100)));
+    const circumference = Math.round(2 * Math.PI * radius);
+    const strokeDash = Math.round((pct / 100) * circumference);
+
+    const iconSymbol = isNexus ? "⚛️" : (isInhib ? "💎" : "🏰");
+
+    return `
+      <g class="map-structure-node ${side}-side ${struct.destroyed ? 'destroyed' : ''} ${isNexus ? 'is-nexus' : ''}" 
+         id="struct-${side}-${struct.id}"
+         data-side="${side}"
+         data-id="${struct.id}"
+         data-name="${struct.name}"
+         data-hp="${struct.currentHp}"
+         data-max-hp="${struct.maxHp}"
+         data-plates="${struct.plates || 0}"
+         data-gold="${struct.goldValue || 0}"
+         data-tier="${struct.tier}"
+         transform="translate(${coords.x}, ${coords.y})">
+        <!-- Glow / Halo de hover e clique -->
+        <circle class="struct-halo" r="${radius + 6}" />
+        <!-- Fundo escuro do anel -->
+        <circle class="struct-hp-bg" r="${radius}" />
+        <!-- Anel de Vida Dinâmico (SVG Stroke Dash) -->
+        <circle class="struct-hp-ring ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" 
+                r="${radius}" 
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${circumference - strokeDash}"
+                transform="rotate(-90)" />
+        <!-- Núcleo interno colorido -->
+        <circle class="struct-core" r="${radius - 3}" />
+        <!-- Ícone representativo -->
+        <text class="struct-icon" text-anchor="middle" dominant-baseline="central" font-size="${isNexus ? 16 : (isInhib ? 13 : 11)}">${iconSymbol}</text>
+        <!-- Badge de Barricadas (Placas ativas da T1) -->
+        ${isT1 && !struct.destroyed && struct.plates > 0 ? `
+          <g class="struct-plates-badge" transform="translate(0, ${radius + 9})">
+            <rect x="-14" y="-7" width="28" height="14" rx="7" fill="#1c160a" stroke="#f0b622" stroke-width="1.5" />
+            <text text-anchor="middle" y="3" fill="#f0e6d2" font-size="8.5" font-weight="900">${struct.plates}P</text>
+          </g>
+        ` : ''}
+        <!-- Indicador de Ruína quando Destruído -->
+        <g class="struct-ruined-indicator" style="display: ${struct.destroyed ? 'block' : 'none'};">
+          <circle r="${radius + 1}" fill="#0a0f14" opacity="0.85" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="13">❌</text>
+        </g>
+      </g>
+    `;
   }
 
   _renderStructuresGroup(structures, side) {
@@ -456,39 +706,138 @@ export class ArenaView {
       }
     }
 
-    // Sincronização em tempo real das estruturas do mapa (evita qualquer descompasso visual)
+    // Sincronização em tempo real das 30 estruturas do mapa Summoner's Rift
     const syncStructures = (structures, side) => {
       if (!structures) return;
       structures.forEach(struct => {
         const el = this.containerEl.querySelector(`#struct-${side}-${struct.id}`);
         if (!el) return;
+
+        el.dataset.hp = struct.currentHp;
+        el.dataset.maxHp = struct.maxHp;
+        el.dataset.plates = struct.plates || 0;
+
+        const isNexus = struct.tier === "nexus" || struct.id === "nexus";
+        const isInhib = struct.tier === "inhib" || struct.id.includes("inhib");
+        const radius = isNexus ? 25 : (isInhib ? 18 : 16);
+        const circumference = Math.round(2 * Math.PI * radius);
+        const pct = Math.max(0, Math.min(100, Math.round((struct.currentHp / struct.maxHp) * 100)));
+        const strokeDash = Math.round((pct / 100) * circumference);
+
+        const ring = el.querySelector(".struct-hp-ring");
+        if (ring) {
+          ring.style.strokeDashoffset = `${circumference - strokeDash}`;
+          if (pct < 30) {
+            ring.classList.add("critical");
+            ring.classList.remove("damaged");
+          } else if (pct < 60) {
+            ring.classList.add("damaged");
+            ring.classList.remove("critical");
+          } else {
+            ring.classList.remove("critical", "damaged");
+          }
+        }
+
+        const ruined = el.querySelector(".struct-ruined-indicator");
+        const plateBadge = el.querySelector(".struct-plates-badge");
+
+        // Suporte a componentes legados se existirem
+        const text = el.querySelector(".structure-hp-text");
+        if (text) text.textContent = struct.destroyed ? "DESTRUÍDO" : `${struct.currentHp}`;
+        const fill = el.querySelector(".structure-hp-fill");
+        if (fill) {
+          fill.style.width = struct.destroyed ? "0%" : `${pct}%`;
+          fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
+        }
+
         if (struct.destroyed) {
-          if (!el.classList.contains("destroyed")) {
-            el.classList.add("destroyed");
-          }
-          const text = el.querySelector(".structure-hp-text");
-          if (text && text.textContent !== "DESTRUÍDO") text.textContent = "DESTRUÍDO";
-          const fill = el.querySelector(".structure-hp-fill");
-          if (fill && fill.style.width !== "0%") fill.style.width = "0%";
-          const plateBadge = el.querySelector(".structure-plates-badge");
-          if (plateBadge) plateBadge.remove();
+          el.classList.add("destroyed");
+          if (ruined) ruined.style.display = "block";
+          if (plateBadge) plateBadge.style.display = "none";
         } else {
-          if (el.classList.contains("destroyed")) {
-            el.classList.remove("destroyed"); // caso o inibidor tenha renascido
+          el.classList.remove("destroyed");
+          if (ruined) ruined.style.display = "none";
+          if (plateBadge) {
+            if (struct.plates > 0) {
+              plateBadge.style.display = "block";
+              const pText = plateBadge.querySelector("text");
+              if (pText) pText.textContent = `${struct.plates}P`;
+            } else {
+              plateBadge.style.display = "none";
+            }
           }
-          const pct = Math.max(0, Math.round((struct.currentHp / struct.maxHp) * 100));
-          const fill = el.querySelector(".structure-hp-fill");
-          if (fill) {
-            fill.style.width = `${pct}%`;
-            fill.className = `structure-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}`;
-          }
-          const text = el.querySelector(".structure-hp-text");
-          if (text) text.textContent = `${struct.currentHp}`;
         }
       });
     };
     if (state.blue && state.blue.structures) syncStructures(state.blue.structures, "blue");
     if (state.red && state.red.structures) syncStructures(state.red.structures, "red");
+
+    // Sincronização dinâmica das 3 Rotas (Top, Mid, Bot): Pressão e Pontos de Choque de Minions
+    const pressures = state.lanePressures || {
+      top: state.lanePressure || 0,
+      mid: state.lanePressure || 0,
+      bot: state.lanePressure || 0
+    };
+
+    const formatPressure = (val) => {
+      if (val > 5) return `+${val}% AZUL`;
+      if (val < -5) return `+${Math.abs(val)}% RED`;
+      return `0% EQUILIBRADO`;
+    };
+
+    const updatePressureBadge = (lane, val) => {
+      const el = this.containerEl.querySelector(`#pressure-val-${lane}`);
+      const badge = this.containerEl.querySelector(`#badge-lane-${lane}`);
+      if (el) el.textContent = formatPressure(val);
+      if (badge) {
+        badge.classList.toggle("blue-push", val > 8);
+        badge.classList.toggle("red-push", val < -8);
+      }
+    };
+
+    updatePressureBadge("top", pressures.top || 0);
+    updatePressureBadge("mid", pressures.mid || 0);
+    updatePressureBadge("bot", pressures.bot || 0);
+
+    // Movimentação dos pontos de colisão ao longo das rotas
+    // Top Lane: (120, 880) -> (120, 160) -> (140, 140) -> (160, 120) -> (880, 120)
+    const clashTop = this.containerEl.querySelector("#clash-top");
+    if (clashTop) {
+      const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
+      let x = 140, y = 140;
+      if (pTop >= 0) {
+        x = 160 + (pTop / 100) * 650;
+        y = 120;
+      } else {
+        x = 120;
+        y = 160 + (-pTop / 100) * 650;
+      }
+      clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
+
+    // Mid Lane: Diagonal (150, 850) -> (500, 500) -> (850, 150)
+    const clashMid = this.containerEl.querySelector("#clash-mid");
+    if (clashMid) {
+      const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
+      const x = 500 + (pMid / 100) * 310;
+      const y = 500 - (pMid / 100) * 310;
+      clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
+
+    // Bot Lane: (120, 880) -> (840, 880) -> (860, 860) -> (880, 840) -> (880, 120)
+    const clashBot = this.containerEl.querySelector("#clash-bot");
+    if (clashBot) {
+      const pBot = Math.max(-100, Math.min(100, pressures.bot || 0));
+      let x = 860, y = 860;
+      if (pBot >= 0) {
+        x = 880;
+        y = 840 - (pBot / 100) * 650;
+      } else {
+        x = 840 - (-pBot / 100) * 650;
+        y = 880;
+      }
+      clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
+    }
 
     // Renderiza os Buffs Ativos / Efeitos Táticos de cada equipe no HUD
     const blueBuffsEl = this.containerEl.querySelector("#blue-active-buffs");
@@ -1436,6 +1785,85 @@ export class ArenaView {
         this.sim.skipToEnd();
       });
     }
+
+    this._bindMapInteractions();
+  }
+
+  _bindMapInteractions() {
+    const tooltip = this.containerEl.querySelector("#rift-structure-tooltip");
+    const svgContainer = this.containerEl.querySelector("#rift-svg-container");
+    if (!tooltip || !svgContainer) return;
+
+    this.containerEl.querySelectorAll(".map-structure-node").forEach(node => {
+      node.addEventListener("mouseenter", (e) => {
+        const side = node.dataset.side;
+        const name = node.dataset.name || "Estrutura";
+        const hp = parseInt(node.dataset.hp, 10) || 0;
+        const maxHp = parseInt(node.dataset.maxHp, 10) || 3000;
+        const plates = parseInt(node.dataset.plates, 10) || 0;
+        const gold = node.dataset.gold || 250;
+        const isDestroyed = node.classList.contains("destroyed");
+        const pct = Math.max(0, Math.round((hp / maxHp) * 100));
+
+        const sideBadge = side === "blue" ? `<span class="tip-team blue">🔵 LADO AZUL</span>` : `<span class="tip-team red">🔴 LADO VERMELHO</span>`;
+        const statusText = isDestroyed
+          ? `<span class="tip-status destroyed">💥 DESTRUÍDA</span>`
+          : (pct < 40 ? `<span class="tip-status critical">⚠️ CRÍTICA (${pct}%)</span>` : `<span class="tip-status intact">🛡️ ATIVA (${pct}%)</span>`);
+
+        tooltip.innerHTML = `
+          <div class="tip-header">
+            ${sideBadge}
+            <div class="tip-name">${name}</div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-hp-row">
+              <span class="tip-label">Integridade:</span>
+              <span class="tip-hp-val">${isDestroyed ? '0 / ' + maxHp : hp + ' / ' + maxHp} HP</span>
+            </div>
+            <div class="tip-hp-bar">
+              <div class="tip-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" style="width: ${isDestroyed ? 0 : pct}%;"></div>
+            </div>
+            ${plates > 0 && !isDestroyed ? `
+              <div class="tip-detail-row plates">
+                <span>🛡️ Barricadas:</span>
+                <strong>${plates} Placas (+${plates * 125}g disponíveis)</strong>
+              </div>
+            ` : ''}
+            <div class="tip-detail-row">
+              <span>Status:</span>
+              ${statusText}
+            </div>
+            <div class="tip-detail-row bounty">
+              <span>Recompensa Global:</span>
+              <strong>+${gold} Ouro</strong>
+            </div>
+          </div>
+        `;
+        tooltip.style.display = "block";
+      });
+
+      node.addEventListener("mousemove", (e) => {
+        const rect = svgContainer.getBoundingClientRect();
+        const x = Math.min(rect.width - 200, Math.max(10, e.clientX - rect.left + 16));
+        const y = Math.min(rect.height - 140, Math.max(10, e.clientY - rect.top + 16));
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+      });
+
+      node.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      node.addEventListener("click", () => {
+        sound.playClick();
+        const halo = node.querySelector(".struct-halo");
+        if (halo) {
+          halo.classList.remove("ping-pulse");
+          void halo.offsetWidth;
+          halo.classList.add("ping-pulse");
+        }
+      });
+    });
   }
 
   // Exibe a legenda flutuante com a fala oficial do campeão escolhido
