@@ -531,6 +531,36 @@ export class MatchSimulator {
         startingCurrentGold = Math.max(0, 500 - (starterItem.cost || 450));
       }
 
+      let secondSpellKey = "teleport";
+      if (r === "jungle") secondSpellKey = "smite";
+      else if (r === "adc") secondSpellKey = (champKey === "Jinx" || champKey === "Ashe") ? "ghost" : "heal";
+      else if (r === "support") secondSpellKey = (champKey === "Leona" || champKey === "Nautilus" || champKey === "Thresh") ? "ignite" : "exhaust";
+      else if (r === "mid") secondSpellKey = (champKey === "Zed" || champKey === "Yasuo") ? "ignite" : "teleport";
+      else if (r === "top") secondSpellKey = (champKey === "Darius" || champKey === "Olaf") ? "ghost" : "teleport";
+
+      const spellD = {
+        id: "flash",
+        name: "Flash",
+        key: "D",
+        cooldown: 300,
+        cdUntil: 0,
+        icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerFlash.png"
+      };
+
+      const spellFMap = {
+        teleport: { id: "teleport", name: "Teleporte", key: "F", cooldown: 360, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerTeleport.png" },
+        smite: { id: "smite", name: "Golpear", key: "F", cooldown: 90, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerSmite.png" },
+        ignite: { id: "ignite", name: "Incendiar", key: "F", cooldown: 180, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerDot.png" },
+        heal: { id: "heal", name: "Curar", key: "F", cooldown: 240, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerHeal.png" },
+        exhaust: { id: "exhaust", name: "Exaustão", key: "F", cooldown: 210, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerExhaust.png" },
+        ghost: { id: "ghost", name: "Fantasma", key: "F", cooldown: 210, icon: "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerHaste.png" }
+      };
+
+      const spellF = {
+        ...(spellFMap[secondSpellKey] || spellFMap.teleport),
+        cdUntil: 0
+      };
+
       state[r] = {
         id: champ ? champ.id : (typeof rawChamp === "object" ? (rawChamp.id || "champ") : String(rawChamp)),
         role: r,
@@ -553,6 +583,10 @@ export class MatchSimulator {
         xpForNextLevel: 280,
         ultimateUnlocked: false,
         ultimateRank: 0,
+        spells: {
+          d: spellD,
+          f: spellF
+        },
         travelingBackUntil: 0, // Tempo de volta da base para a rota
         laneGoldDiff: 0, // Diferença de ouro contra o rival direto
         isMvp: false, // Destaque de carregador mais forte
@@ -651,6 +685,75 @@ export class MatchSimulator {
       if (c.alive) {
         this._addChampionXp(c, amount, side);
       }
+    });
+  }
+
+  _formatSeconds(totalSeconds) {
+    const mins = Math.floor(Math.max(0, totalSeconds) / 60);
+    const secs = Math.floor(Math.max(0, totalSeconds) % 60);
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  _useFlash(champ, side = "blue", reason = "escape") {
+    if (!champ || !champ.spells || !champ.spells.d) return false;
+    if (this.gameSeconds < (champ.spells.d.cdUntil || 0)) return false;
+
+    champ.spells.d.cdUntil = this.gameSeconds + (champ.spells.d.cooldown || 300);
+    const returnTime = this._formatSeconds(champ.spells.d.cdUntil);
+
+    this.onEvent({
+      type: "spell_flash",
+      side: side,
+      icon: "⚡",
+      text: `⚡ FLASH QUEIMADO! ${champ.name} (${side === 'blue' ? 'Seu time' : 'CBLOL'}) gastou o Flash defensivo para escapar da morte! [Sem Flash pelos próximos 5 min • Volta aos ${returnTime}]`,
+      time: this._formatTime()
+    });
+    return true;
+  }
+
+  _useTeleport(champ, side = "blue", reason = "rota") {
+    if (!champ || !champ.spells || !champ.spells.f || champ.spells.f.id !== "teleport") return false;
+    if (this.gameSeconds < (champ.spells.f.cdUntil || 0)) return false;
+
+    champ.spells.f.cdUntil = this.gameSeconds + (champ.spells.f.cooldown || 360);
+    champ.travelingBackUntil = this.gameSeconds + 3; // Corta quase todo o tempo de trânsito (3s de canalização)
+
+    this.onEvent({
+      type: "spell_teleport",
+      side: side,
+      icon: "🏔️",
+      text: `🏔️ TELEPORTE CANALIZADO! ${champ.name} usou o TP para retornar instantaneamente à rota e defender as defesas!`,
+      time: this._formatTime()
+    });
+    return true;
+  }
+
+  _useSmite(champ, side = "blue", targetName = "Monstro") {
+    if (!champ || !champ.spells || !champ.spells.f || champ.spells.f.id !== "smite") return false;
+    champ.spells.f.cdUntil = this.gameSeconds + 45;
+    return true;
+  }
+
+  pingEnemySpell(side, role, spellKey = "d") {
+    const roster = side === "blue" ? this.blueRosterState : this.redRosterState;
+    const c = roster && roster[role];
+    if (!c || !c.spells || !c.spells[spellKey]) return;
+
+    const sp = c.spells[spellKey];
+    const isCd = this.gameSeconds < (sp.cdUntil || 0);
+    const remaining = isCd ? Math.round(sp.cdUntil - this.gameSeconds) : 0;
+    const returnTime = isCd ? this._formatSeconds(sp.cdUntil) : null;
+
+    const text = isCd
+      ? `🎯 PING TÁTICO: ${c.name} (${sp.name}) EM RECARGA! Faltam ${remaining}s (Volta aos ${returnTime}) — Janela aberta para punir!`
+      : `⚠️ PING TÁTICO: ${c.name} com ${sp.name} PRONTO! Cuidado com investidas diretas!`;
+
+    this.onEvent({
+      type: "spell_ping",
+      side: side === "blue" ? "red" : "blue",
+      icon: "🎯",
+      text: text,
+      time: this._formatTime()
     });
   }
 
@@ -7781,6 +7884,46 @@ export class MatchSimulator {
     }
   }
 
+  _handleSkirmishOutcome(winnerSide, victimSide, killerRole, victimRole, skillName, killText) {
+    const winnerRoster = winnerSide === "blue" ? this.blueRosterState : this.redRosterState;
+    const victimRoster = victimSide === "blue" ? this.blueRosterState : this.redRosterState;
+    const killer = winnerRoster[killerRole] || Object.values(winnerRoster)[0];
+    const victim = victimRoster[victimRole] || Object.values(victimRoster)[0];
+
+    if (!victim || !victim.alive) return false;
+
+    // Checagem de Flash Defensivo para escapar da morte (40% de chance se Flash estiver pronto)
+    const hasFlash = victim.spells && victim.spells.d && this.gameSeconds >= (victim.spells.d.cdUntil || 0);
+    if (hasFlash && Math.random() < 0.40) {
+      this._useFlash(victim, victimSide, "escape");
+      victim.hpPct = 18;
+      victim.recallState = "channeling";
+      victim.recallEndsAt = this.gameSeconds + 8;
+      victim.travelingBackUntil = this.gameSeconds + 22;
+
+      // Recompensa tática por forçar o feitiço (+100g e pressão)
+      const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
+      winnerScore.gold += 100;
+      if (killer) {
+        killer.goldEarned = (killer.goldEarned || 500) + 100;
+        killer.goldCurrent = (killer.goldCurrent || 0) + 100;
+      }
+      this.onEvent({
+        type: "flash_forced",
+        side: winnerSide,
+        icon: "⚡",
+        text: `⚡ FLASH ADVERSÁRIO FORÇADO! ${killer ? killer.name : 'Seu time'} forçou o Flash de ${victim.name}! Vantagem tática aberta na rota (+100g)!`,
+        time: this._formatTime()
+      });
+      return false; // Escapou com Flash!
+    }
+
+    // Se não tinha Flash ou engage foi letal: Abate Confirmado!
+    const noFlashNotice = (!hasFlash && victim.spells?.d) ? ` [Sem Flash disponível]` : ``;
+    this._recordKill(winnerSide, victimSide, killerRole, victimRole, skillName, `${killText}${noFlashNotice}`);
+    return true;
+  }
+
   _triggerLaneSkirmish() {
     const zones = ["top", "mid", "bot", "jungle"];
     let lane;
@@ -7870,11 +8013,11 @@ export class MatchSimulator {
       const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
-          this._recordKill("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
+          this._handleSkirmishOutcome("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
         } else if ((bTop.ultimateRank || 0) > (rTop.ultimateRank || 0)) {
-          this._recordKill("blue", "red", "top", "top", "Power Spike de Ultimate", `⚡ POWER SPIKE LETAL NO TOPO! ${bTop.name} usou a vantagem da Habilidade Suprema e destruiu ${rTop.name}!`);
+          this._handleSkirmishOutcome("blue", "red", "top", "top", "Power Spike de Ultimate", `⚡ POWER SPIKE LETAL NO TOPO! ${bTop.name} usou a vantagem da Habilidade Suprema e destruiu ${rTop.name}!`);
         } else {
-          this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
+          this._handleSkirmishOutcome("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
         }
         if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
@@ -7883,15 +8026,15 @@ export class MatchSimulator {
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", "top", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Topo e puniu a agressividade cega de ${bTop.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", "top", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Topo e puniu a agressividade cega de ${bTop.name}!`);
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
-          this._recordKill("red", "blue", "top", "top", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bTop.name} tentou forçar trocas em desvantagem de matchup contra ${rTop.name} e foi solado!`);
+          this._handleSkirmishOutcome("red", "blue", "top", "top", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bTop.name} tentou forçar trocas em desvantagem de matchup contra ${rTop.name} e foi solado!`);
         } else if (blueOverextended && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
         } else if ((rTop.ultimateRank || 0) > (bTop.ultimateRank || 0)) {
-          this._recordKill("red", "blue", "top", "top", "Power Spike Inimigo", `🔴 POWER SPIKE RIVAL NO TOPO! ${rTop.name} atingiu a Ultimate primeiro e executou ${bTop.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "top", "top", "Power Spike Inimigo", `🔴 POWER SPIKE RIVAL NO TOPO! ${rTop.name} atingiu a Ultimate primeiro e executou ${bTop.name}!`);
         } else {
-          this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
         }
         if (this.lanePressures) this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
@@ -7941,16 +8084,16 @@ export class MatchSimulator {
       const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
-          this._recordKill("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
+          this._handleSkirmishOutcome("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
         } else if ((bMid.ultimateRank || 0) > (rMid.ultimateRank || 0)) {
-          this._recordKill("blue", "red", "mid", "mid", "Burst de Ultimate", `⚡ COMBO SUPREMO NO MID! Com vantagem de Ultimate Nível 6, ${bMid.name} explodiu ${rMid.name} num combo letal!`);
+          this._handleSkirmishOutcome("blue", "red", "mid", "mid", "Burst de Ultimate", `⚡ COMBO SUPREMO NO MID! Com vantagem de Ultimate Nível 6, ${bMid.name} explodiu ${rMid.name} num combo letal!`);
         } else {
           const isGank = bJg && bJg.alive && Math.random() < 0.35;
           const kRole = isGank ? "jungle" : "mid";
           const kTxt = isGank
             ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
             : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
-          this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+          this._handleSkirmishOutcome("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         }
         if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
@@ -7959,20 +8102,20 @@ export class MatchSimulator {
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", "mid", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Mid e puniu a agressividade forçada de ${bMid.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", "mid", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Mid e puniu a agressividade forçada de ${bMid.name}!`);
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
-          this._recordKill("red", "blue", "mid", "mid", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bMid.name} tentou forçar trocas agressivas contra ${rMid.name} em desvantagem de matchup e foi explodido!`);
+          this._handleSkirmishOutcome("red", "blue", "mid", "mid", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bMid.name} tentou forçar trocas agressivas contra ${rMid.name} em desvantagem de matchup e foi explodido!`);
         } else if (blueOverextended && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
         } else if ((rMid.ultimateRank || 0) > (bMid.ultimateRank || 0)) {
-          this._recordKill("red", "blue", "mid", "mid", "Burst Rival de Ultimate", `🔴 OUTPLAY NO MID! ${rMid.name} atingiu a Ultimate primeiro e evaporou a barra de vida de ${bMid.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "mid", "mid", "Burst Rival de Ultimate", `🔴 OUTPLAY NO MID! ${rMid.name} atingiu a Ultimate primeiro e evaporou a barra de vida de ${bMid.name}!`);
         } else {
           const isGank = rJg && rJg.alive && Math.random() < 0.35;
           const kRole = isGank ? "jungle" : "mid";
           const kTxt = isGank
             ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
             : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
-          this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+          this._handleSkirmishOutcome("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         }
         if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
@@ -8027,11 +8170,11 @@ export class MatchSimulator {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
         if (redOverextended && bJg && bJg.alive) {
-          this._recordKill("blue", "red", "jungle", victimRole, "Punição sob a Torre", `🏹 PUNIÇÃO SOB A TORRE NO BOT! A dupla adversária tentava pressionar e ${bJg.name} fechou a pinça pelas costas eliminando ${victimName}!`);
+          this._handleSkirmishOutcome("blue", "red", "jungle", victimRole, "Punição sob a Torre", `🏹 PUNIÇÃO SOB A TORRE NO BOT! A dupla adversária tentava pressionar e ${bJg.name} fechou a pinça pelas costas eliminando ${victimName}!`);
         } else if ((bAdc.ultimateRank || 0) > (rAdc.ultimateRank || 0)) {
-          this._recordKill("blue", "red", "adc", victimRole, "Power Spike no Bot", `🏹 ENGAGE COM ULTIMATE! Com vantagem de Ultimate Nível 6 na bot lane, seu time atropelou a dupla rival e abateu ${victimName}!`);
+          this._handleSkirmishOutcome("blue", "red", "adc", victimRole, "Power Spike no Bot", `🏹 ENGAGE COM ULTIMATE! Com vantagem de Ultimate Nível 6 na bot lane, seu time atropelou a dupla rival e abateu ${victimName}!`);
         } else {
-          this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
+          this._handleSkirmishOutcome("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
         }
         if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 20);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
@@ -8042,15 +8185,15 @@ export class MatchSimulator {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", victimRole, "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava na Bot Lane e puniu o avanço agressivo eliminando ${victimName}!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", victimRole, "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava na Bot Lane e puniu o avanço agressivo eliminando ${victimName}!`);
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
-          this._recordKill("red", "blue", "adc", victimRole, "Punição de Matchup no Bot", `⚠️ PRESSÃO AGRESSIVA PUNIDA! A bot lane tentou forçar trocas em desvantagem de matchup e ${rAdc.name} garantiu a eliminação de ${victimName}!`);
+          this._handleSkirmishOutcome("red", "blue", "adc", victimRole, "Punição de Matchup no Bot", `⚠️ PRESSÃO AGRESSIVA PUNIDA! A bot lane tentou forçar trocas em desvantagem de matchup e ${rAdc.name} garantiu a eliminação de ${victimName}!`);
         } else if (blueOverextended && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco letal de ${rJg.name}!`);
+          this._handleSkirmishOutcome("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco letal de ${rJg.name}!`);
         } else if ((rAdc.ultimateRank || 0) > (bAdc.ultimateRank || 0)) {
-          this._recordKill("red", "blue", "adc", victimRole, "Power Spike Inimigo no Bot", `🔴 ULTIMATE INIMIGA LETAL! A bot lane rival conectou o combo supremo de Nível 6 e abateu ${victimName}!`);
+          this._handleSkirmishOutcome("red", "blue", "adc", victimRole, "Power Spike Inimigo no Bot", `🔴 ULTIMATE INIMIGA LETAL! A bot lane rival conectou o combo supremo de Nível 6 e abateu ${victimName}!`);
         } else {
-          this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
+          this._handleSkirmishOutcome("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
         }
         if (this.lanePressures) this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
         this.lanePressure = Math.max(-100, this.lanePressure - 10);

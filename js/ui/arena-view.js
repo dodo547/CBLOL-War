@@ -790,6 +790,16 @@ export class ArenaView {
                 <span id="level-${side}-${role}">Nv.${m.level || 1}</span>
               </div>
             </div>
+            <div class="champ-spells-column" id="spells-col-${side}-${role}">
+              <div class="champ-spell-slot ready" id="spell-d-${side}-${role}" data-side="${side}" data-role="${role}" data-key="d" title="Flash (Pronto) • Clique para Pingar">
+                <img src="${m.spells?.d?.icon || 'https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerFlash.png'}" alt="Flash" />
+                <span class="spell-cd-overlay" id="spell-cd-d-${side}-${role}"></span>
+              </div>
+              <div class="champ-spell-slot ready" id="spell-f-${side}-${role}" data-side="${side}" data-role="${role}" data-key="f" title="${m.spells?.f?.name || 'Feitiço'} (Pronto) • Clique para Pingar">
+                <img src="${m.spells?.f?.icon || 'https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/SummonerTeleport.png'}" alt="Spell F" />
+                <span class="spell-cd-overlay" id="spell-cd-f-${side}-${role}"></span>
+              </div>
+            </div>
             <div class="roster-player-text">
               <div class="champ-ingame-name">
                 ${m.isSignature ? '<span class="sig-star" title="Pick de Conforto!">⭐</span>' : ''}
@@ -1352,6 +1362,41 @@ export class ArenaView {
           ultEl.className = `champ-ult-indicator ${m.ultimateUnlocked ? 'ult-ready' : 'ult-locked'}`;
           ultEl.title = m.ultimateUnlocked ? `Habilidade Suprema Rank ${m.ultimateRank || 1} Ativa!` : 'Ultimate Bloqueada (Libera no Nível 6)';
         }
+      }
+
+      // Atualiza Feitiços de Invocador (Spells: Flash, TP, Smite, etc.)
+      if (m.spells) {
+        ['d', 'f'].forEach(k => {
+          const sp = m.spells[k];
+          if (!sp) return;
+          const slotEl = this.containerEl.querySelector(`#spell-${k}-${side}-${role}`);
+          const cdOverlay = this.containerEl.querySelector(`#spell-cd-${k}-${side}-${role}`);
+          if (slotEl && cdOverlay) {
+            const isCd = gameSecs < (sp.cdUntil || 0);
+            if (isCd) {
+              const rem = Math.max(1, Math.round(sp.cdUntil - gameSecs));
+              slotEl.classList.add("on-cd");
+              slotEl.classList.remove("ready");
+              cdOverlay.textContent = rem >= 60 ? `${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}` : `${rem}s`;
+              slotEl.title = `${sp.name} em Recarga • Faltam ${rem}s [Clique para pingar no chat]`;
+            } else {
+              slotEl.classList.remove("on-cd");
+              slotEl.classList.add("ready");
+              cdOverlay.textContent = "";
+              slotEl.title = `${sp.name} Pronto! [Clique para pingar no chat]`;
+            }
+
+            if (!slotEl._hasPingListener) {
+              slotEl._hasPingListener = true;
+              slotEl.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (this.sim && this.sim.pingEnemySpell) {
+                  this.sim.pingEnemySpell(side, role, k);
+                }
+              });
+            }
+          }
+        });
       }
 
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
