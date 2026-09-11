@@ -38,8 +38,8 @@ export class MatchSimulator {
     this.isPaused = false;
     this.isFinished = false;
 
-    // Tempo de jogo simulado (começa aos 01:30 = tropas chegam na rota)
-    this.gameSeconds = 90;
+    // Tempo de jogo simulado (começa aos 00:00, tempo real com movimentação fluida)
+    this.gameSeconds = 0;
     this.maxGameSeconds = Infinity; // Sem limite de tempo (o jogo só encerra quando o Nexus for destruído, autêntico ao LoL)
 
     // Barra de Pressão de Rotas (Momentum por Rota: -100 [Base Azul] até +100 [Base Vermelha])
@@ -791,7 +791,7 @@ export class MatchSimulator {
 
   _scheduleNextTick() {
     if (this.isFinished || this.isPaused) return;
-    const baseIntervalMs = 1600; // Ritmo sereno e agradável (permite ler o killfeed e acompanhar as jogadas com calma)
+    const baseIntervalMs = 500; // 2 segundos de partida a cada 500ms reais (movimentação fluida e tempo realista)
     const interval = Math.max(10, Math.floor(baseIntervalMs / this.speed));
     this.timer = setTimeout(() => {
       try {
@@ -809,9 +809,10 @@ export class MatchSimulator {
   _simulateStep() {
     if (this.isFinished) return;
 
-    // 15 segundos por tick (ritmo realista de League of Legends)
-    const deltaSeconds = 15;
+    // 2 segundos por tick (ritmo fluido de League of Legends com movimentação em tempo real)
+    const deltaSeconds = 2;
     this.gameSeconds += deltaSeconds;
+    const timeScale = deltaSeconds / 15;
 
     if (this.counterAttackCooldown > 0) {
       this.counterAttackCooldown = Math.max(0, this.counterAttackCooldown - deltaSeconds);
@@ -838,7 +839,7 @@ export class MatchSimulator {
           targetChamp.goldCurrent = (targetChamp.goldCurrent || 0) + 35;
         }
         if (this.lanePressures && this.lanePressures[this.blueJungleCampLane] !== undefined) {
-          this.lanePressures[this.blueJungleCampLane] = Math.min(100, this.lanePressures[this.blueJungleCampLane] + 1.5);
+          this.lanePressures[this.blueJungleCampLane] = Math.min(100, this.lanePressures[this.blueJungleCampLane] + (1.5 * timeScale));
         }
       }
     }
@@ -876,7 +877,7 @@ export class MatchSimulator {
               : 0;
 
             if (opp && opp.alive && lanePress < -10) {
-              if (Math.random() < 0.35 && this.gameSeconds <= 840) {
+              if (Math.random() < (0.35 * timeScale) && this.gameSeconds <= 840) {
                 const oppSide = isBlueTeam ? "red" : "blue";
                 const structList = isBlueTeam ? this.blueStructures : this.redStructures;
                 const t1 = structList.find(s => s.id === `${laneKey}_t1`);
@@ -896,33 +897,36 @@ export class MatchSimulator {
             return; // Ausente da rota: 0 CS nesta onda!
           }
 
-          // Renda passiva oficial de Summoner's Rift (~20.4g / 10s = ~30.6g / 15s)
-          let goldGain = 24;
-          let csGain = 0;
+          // Renda passiva oficial de Summoner's Rift (~2.04g / seg = ~4.08g por tick de 2s)
+          let goldGain = (24 / 15) * deltaSeconds;
 
           // Taxa de CS de Alto Nível Competitivo (CBLOL / Pro Play):
-          // Mid & ADC: 8.8 a 10.4 CS/min (~2 a 3 CS por tick de 15s)
-          // Top: 7.8 a 9.4 CS/min (~2 CS médios por tick)
-          // Jungle: 5.8 a 7.2 CS/min (~1 a 2 monstros de selva/aronguejo por tick)
-          // Support: 1.0 a 1.8 CS/min (apoio esporádico + tributo de ouro do item de suporte)
-          if (role === "mid" || role === "adc") {
-            csGain = Math.random() < 0.35 ? 3 : 2;
-            goldGain += csGain * 21;
-          } else if (role === "top") {
-            csGain = Math.random() < 0.20 ? 3 : (Math.random() < 0.82 ? 2 : 1);
-            goldGain += csGain * 21;
-          } else if (role === "jungle") {
-            csGain = Math.random() < 0.65 ? 2 : 1;
-            goldGain += 32; // Ouro de campos da selva
+          // Mid & ADC: 9.6 CS/min = 0.16 CS/s
+          // Top: 8.6 CS/min = 0.143 CS/s
+          // Jungle: 6.5 CS/min = 0.108 CS/s (+ monstros)
+          // Support: 1.4 CS/min = 0.023 CS/s (+ tributo)
+          let csRate = 0.16;
+          if (role === "top") csRate = 0.143;
+          else if (role === "jungle") {
+            csRate = 0.108;
+            goldGain += (32 / 15) * deltaSeconds;
           } else if (role === "support") {
-            csGain = Math.random() < 0.35 ? 1 : 0;
-            goldGain += 26; // Renda passiva do item de suporte
+            csRate = 0.023;
+            goldGain += (26 / 15) * deltaSeconds;
           }
 
-          c.cs = (c.cs || 0) + csGain;
-          c.goldEarned = (c.goldEarned || 500) + goldGain;
-          c.goldCurrent = (c.goldCurrent || 0) + goldGain;
-          c.csPerMin = parseFloat((c.cs / Math.max(1, this.gameSeconds / 60)).toFixed(1));
+          c._csFloat = (c._csFloat !== undefined ? c._csFloat : (c.cs || 0)) + csRate * deltaSeconds;
+          const newCs = Math.floor(c._csFloat);
+          const csGain = newCs - (c.cs || 0);
+
+          if (csGain > 0) {
+            c.cs = newCs;
+            goldGain += csGain * 21;
+          }
+
+          c.goldEarned = Math.round((c.goldEarned || 500) + goldGain);
+          c.goldCurrent = Math.round((c.goldCurrent || 0) + goldGain);
+          c.csPerMin = parseFloat(((c.cs || 0) / Math.max(1, this.gameSeconds / 60)).toFixed(1));
 
           // Marca comemorativa e educativa de farm (50, 100, 150, 200, 250, 300 CS)
           const currentCs = c.cs;
@@ -1372,16 +1376,18 @@ export class MatchSimulator {
     const redRoll = redBasePower * (0.88 + Math.random() * 0.24);
     const diff = blueRoll - redRoll;
 
-    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum por Rota e Global)
-    const pressureDelta = Math.min(10, Math.max(3, Math.floor(Math.abs(diff) * 1.0)));
+    // Dinamismo cadenciado da Pressão de Rota (Lane Momentum proporcional aos passos de 2s)
+    const timeScale = 2 / 15;
+    const rawDelta = Math.min(10, Math.max(3, Math.floor(Math.abs(diff) * 1.0)));
+    const pressureDelta = Math.max(0.4, Number((rawDelta * timeScale).toFixed(2)));
     const allLanes = ["top", "mid", "bot"];
     if (diff > 2.0) {
       // Avanço Azul
       allLanes.forEach(l => {
         let lDelta = pressureDelta;
-        if (this.focusedLane === l) lDelta = Math.round(lDelta * 1.45);
-        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(lDelta * 1.35);
-        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(lDelta * 0.7));
+        if (this.focusedLane === l) lDelta = Number((lDelta * 1.45).toFixed(2));
+        if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Number((lDelta * 1.35).toFixed(2));
+        if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(0.2, Number((lDelta * 0.7).toFixed(2)));
 
         // Impacto de Matchup e Caçador Rival na postura agressiva
         if (this.playerTactics === "aggressive") {
@@ -1389,13 +1395,13 @@ export class MatchSimulator {
           const isCamped = (this.redJungleCampLane === l);
           if ((m && m.score < -0.5) || isCamped) {
             // Forçar agressividade em desvantagem ou contra acampamento rival NÃO avança; é repelido!
-            lDelta = -Math.max(4, Math.round(pressureDelta * 0.8));
+            lDelta = -Math.max(0.4, Number((pressureDelta * 0.8).toFixed(2)));
           } else if (m && m.score > 0.5 && !isCamped) {
-            lDelta = Math.round(lDelta * 1.3);
+            lDelta = Number((lDelta * 1.3).toFixed(2));
           }
         }
 
-        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1)));
+        this.lanePressures[l] = Math.max(-100, Math.min(100, Number(((this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1) * timeScale).toFixed(2))));
       });
     } else if (diff < -2.0) {
       // Avanço Vermelho
@@ -1406,23 +1412,23 @@ export class MatchSimulator {
           const m = this._getLaneMatchup(l);
           const isCamped = (this.redJungleCampLane === l);
           if ((m && m.score < -0.5) || isCamped) {
-            rDelta = Math.round(rDelta * 1.4);
+            rDelta = Number((rDelta * 1.4).toFixed(2));
           }
         }
-        this.lanePressures[l] = Math.max(-100, (this.lanePressures[l] || 0) - rDelta + (Math.random() * 2 - 1));
+        this.lanePressures[l] = Math.max(-100, Number(((this.lanePressures[l] || 0) - rDelta + (Math.random() * 2 - 1) * timeScale).toFixed(2)));
       });
     } else {
       // Flutuação natural na zona do rio com respeito a matchups
       allLanes.forEach(l => {
-        let naturalShift = Math.random() * 4 - 2;
+        let naturalShift = (Math.random() * 4 - 2) * timeScale;
         if (this.playerTactics === "aggressive") {
           const m = this._getLaneMatchup(l);
           const isCamped = (this.redJungleCampLane === l);
           if ((m && m.score < -0.5) || isCamped) {
-            naturalShift -= 3;
+            naturalShift -= (3 * timeScale);
           }
         }
-        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + naturalShift));
+        this.lanePressures[l] = Math.max(-100, Math.min(100, Number(((this.lanePressures[l] || 0) + naturalShift).toFixed(2))));
       });
     }
     this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
@@ -1434,8 +1440,8 @@ export class MatchSimulator {
       const rChamp = this.redRosterState[role];
       if (bChamp && bChamp.alive && rChamp && rChamp.alive) {
         const roleDmgMod = (role === "adc" || role === "mid") ? 1.4 : (role === "top" ? 1.1 : 0.85);
-        const bDmg = Math.floor((300 + Math.random() * 220) * roleDmgMod * (1 + (bChamp.items ? bChamp.items.length * 0.18 : 0)));
-        const rDmg = Math.floor((300 + Math.random() * 220) * roleDmgMod * (1 + (rChamp.items ? rChamp.items.length * 0.18 : 0)));
+        const bDmg = Math.floor((300 + Math.random() * 220) * roleDmgMod * (1 + (bChamp.items ? bChamp.items.length * 0.18 : 0)) * timeScale);
+        const rDmg = Math.floor((300 + Math.random() * 220) * roleDmgMod * (1 + (rChamp.items ? rChamp.items.length * 0.18 : 0)) * timeScale);
         bChamp.damageDealt = (bChamp.damageDealt || 0) + bDmg;
         rChamp.damageTaken = (rChamp.damageTaken || 0) + bDmg;
         rChamp.damageDealt = (rChamp.damageDealt || 0) + rDmg;
@@ -1447,14 +1453,14 @@ export class MatchSimulator {
     const canFight = this.combatCooldown <= 0;
 
     // Escaramuças autênticas por rota e selva durante toda a partida (duelos, invades, ganks e 2v2)
-    const skirmishChance = this.gameSeconds < 840 ? 0.32 : 0.20;
+    const skirmishChance = (this.gameSeconds < 840 ? 0.32 : 0.20) * timeScale;
     if (canFight && Math.random() < skirmishChance) {
       const skirmishHappened = this._triggerLaneSkirmish();
       if (skirmishHappened) return;
     }
 
     const isUnderPressure = Math.abs(this.lanePressure) >= 35;
-    const fightChance = isUnderPressure ? 0.16 : 0.09;
+    const fightChance = (isUnderPressure ? 0.16 : 0.09) * timeScale;
     const rollForFight = canFight && (Math.random() < fightChance);
 
     if (rollForFight) {
@@ -1480,10 +1486,10 @@ export class MatchSimulator {
       }
     } else {
       // Escaramuça sem mortes: apenas tropas profundas sob a torre causam leve dano de cerco
-      if (this.lanePressure >= 50 && Math.random() < 0.35) {
-        this._damageNextStructure("blue", this.redStructures, Math.max(2, diff), false, 0.45);
-      } else if (this.lanePressure <= -50 && Math.random() < 0.35) {
-        this._damageNextStructure("red", this.blueStructures, Math.max(2, Math.abs(diff)), false, 0.45);
+      if (this.lanePressure >= 50 && Math.random() < (0.35 * timeScale)) {
+        this._damageNextStructure("blue", this.redStructures, Math.max(1, diff * timeScale), false, 0.45);
+      } else if (this.lanePressure <= -50 && Math.random() < (0.35 * timeScale)) {
+        this._damageNextStructure("red", this.blueStructures, Math.max(1, Math.abs(diff) * timeScale), false, 0.45);
       } else {
         this._triggerSkirmishEqual();
       }
@@ -8079,8 +8085,27 @@ export class MatchSimulator {
 
       c.targetX = Math.round(tx);
       c.targetY = Math.round(ty);
-      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
-      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+
+      if (c.x === undefined || c.y === undefined) {
+        c.x = Math.round(tx);
+        c.y = Math.round(ty);
+      } else {
+        const dx = tx - c.x;
+        const dy = ty - c.y;
+        const dist = Math.hypot(dx, dy);
+        const maxStep = 36;
+        if (dist <= maxStep) {
+          const isLaning = status.includes("Duelo") || status.includes("Controle") || status.includes("Farmando");
+          const seed = (c.id ? c.id.charCodeAt(0) : 0) + (c.name ? c.name.charCodeAt(0) : 0);
+          const jitterX = isLaning ? Math.sin((this.gameSeconds * 0.7) + seed) * 4 : 0;
+          const jitterY = isLaning ? Math.cos((this.gameSeconds * 0.7) + seed) * 4 : 0;
+          c.x = Math.round(tx + jitterX);
+          c.y = Math.round(ty + jitterY);
+        } else {
+          c.x = Math.round(c.x + (dx / dist) * maxStep);
+          c.y = Math.round(c.y + (dy / dist) * maxStep);
+        }
+      }
       c.statusText = status;
     };
 
@@ -8147,8 +8172,27 @@ export class MatchSimulator {
 
       c.targetX = Math.round(tx);
       c.targetY = Math.round(ty);
-      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
-      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+
+      if (c.x === undefined || c.y === undefined) {
+        c.x = Math.round(tx);
+        c.y = Math.round(ty);
+      } else {
+        const dx = tx - c.x;
+        const dy = ty - c.y;
+        const dist = Math.hypot(dx, dy);
+        const maxStep = 36;
+        if (dist <= maxStep) {
+          const isLaning = status.includes("Duelo") || status.includes("Controle") || status.includes("Farmando");
+          const seed = (c.id ? c.id.charCodeAt(0) : 0) + (c.name ? c.name.charCodeAt(0) : 0);
+          const jitterX = isLaning ? Math.sin((this.gameSeconds * 0.7) + seed) * 4 : 0;
+          const jitterY = isLaning ? Math.cos((this.gameSeconds * 0.7) + seed) * 4 : 0;
+          c.x = Math.round(tx + jitterX);
+          c.y = Math.round(ty + jitterY);
+        } else {
+          c.x = Math.round(c.x + (dx / dist) * maxStep);
+          c.y = Math.round(c.y + (dy / dist) * maxStep);
+        }
+      }
       c.statusText = status;
     };
 
