@@ -4237,7 +4237,7 @@ class MatchSimulator {
 
     // Tempo de jogo simulado (começa aos 01:30 = tropas chegam na rota)
     this.gameSeconds = 90;
-    this.maxGameSeconds = 2400; // 40 minutos max
+    this.maxGameSeconds = Infinity; // Sem limite de tempo (o jogo só encerra quando o Nexus for destruído, autêntico ao LoL)
 
     // Barra de Pressão de Rotas (Momentum por Rota: -100 [Base Azul] até +100 [Base Vermelha])
     this.lanePressures = {
@@ -4605,15 +4605,13 @@ class MatchSimulator {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    while (!this.isFinished && this.gameSeconds < this.maxGameSeconds) {
+    let maxSteps = 10000;
+    while (!this.isFinished && maxSteps-- > 0) {
       if (this.activeDecision) {
         const choiceId = (this.activeDecision.options && this.activeDecision.options[0]) ? this.activeDecision.options[0].id : null;
         this.resolveTacticalDecision(choiceId, false);
       }
       this._simulateStep();
-    }
-    if (!this.isFinished) {
-      this._checkGameEnd();
     }
   }
 
@@ -5296,9 +5294,10 @@ class MatchSimulator {
     const isAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
     const isBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
 
-    // 1. Dragão Ancião (Late Game >= 28:00 = 1680s, maior prioridade se vivo)
-    if (!this.elderTaken && this.gameSeconds >= this.nextElderAt) {
-      this.elderTaken = true;
+    // 1. Dragão Ancião (Late Game >= 28:00 = 1680s, maior prioridade se vivo, respawn a cada 6 min)
+    if (this.gameSeconds >= this.nextElderAt) {
+      this.nextElderAt = this.gameSeconds + 360;
+      this.nextBaronAt = Math.max(this.nextBaronAt, this.gameSeconds + 120); // Evita colisão com o Barão no mesmo tick
 
       let elderEnemyAction = "";
       let elderOptions = [];
@@ -8160,8 +8159,15 @@ class MatchSimulator {
     if (aliveVictimRoles.length === 0) return;
 
     // Abates decisivos: no early game são 1 ou 2 abates pontuais; no late game (25m+, 33m+) teamfights decisivas produzem 2 a 4 abates ou até ACE quando a margem for alta
+    // Abates decisivos: no early game são 1 ou 2 abates pontuais; no late game (25m+, 33m+, 38m+) teamfights decisivas produzem 2 a 4 abates ou até ACE quando a margem for alta
     let killsCount = 1;
-    if (this.gameSeconds >= 1980) { // 33m+
+    if (this.gameSeconds >= 2280) { // 38m+ (Ultra Late Game)
+      if (margin > 12 && aliveVictimRoles.length >= 3) {
+        killsCount = Math.min(aliveVictimRoles.length, Math.random() < 0.65 ? 4 : 3);
+      } else if (aliveVictimRoles.length >= 2) {
+        killsCount = 2;
+      }
+    } else if (this.gameSeconds >= 1980) { // 33m+
       if (margin > 18 && aliveVictimRoles.length >= 3) {
         killsCount = Math.min(aliveVictimRoles.length, Math.random() < 0.5 ? 4 : 3);
       } else if (aliveVictimRoles.length >= 2) {
@@ -8227,7 +8233,7 @@ class MatchSimulator {
       }
       chosenLane = lanes[0];
     }
-    const siegeIntensity = this.gameSeconds >= 1980 ? 1.5 : (this.gameSeconds >= 1500 ? 1.35 : 1.2);
+    const siegeIntensity = this.gameSeconds >= 2280 ? 1.7 : (this.gameSeconds >= 1980 ? 1.5 : (this.gameSeconds >= 1500 ? 1.35 : 1.2));
     this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, siegeIntensity, chosenLane);
   }
 
@@ -8395,8 +8401,12 @@ class MatchSimulator {
     else manpowerSiegeMod = 0.9;
 
     let lateGameSiegeMod = 1.0;
-    if (this.gameSeconds >= 2040) { // 34m+
-      lateGameSiegeMod = 2.4;
+    if (this.gameSeconds >= 2640) { // 44m+
+      lateGameSiegeMod = 3.0;
+    } else if (this.gameSeconds >= 2280) { // 38m+
+      lateGameSiegeMod = 2.6;
+    } else if (this.gameSeconds >= 2040) { // 34m+
+      lateGameSiegeMod = 2.3;
     } else if (this.gameSeconds >= 1680) { // 28m+
       lateGameSiegeMod = 1.85;
     } else if (this.gameSeconds >= 1200) { // 20m+
@@ -8635,33 +8645,6 @@ class MatchSimulator {
       this.isFinished = true;
       if (this.timer) clearTimeout(this.timer);
       this.onFinish("loss", this._buildSummary("loss"));
-    } else if (this.gameSeconds >= this.maxGameSeconds) {
-      // Clímax narrativo de Fim de Jogo: NUNCA encerra do nada!
-      const blueDestroyed = this.redStructures.filter(s => s.destroyed).length;
-      const redDestroyed = this.blueStructures.filter(s => s.destroyed).length;
-      const blueWins = (blueDestroyed > redDestroyed) || (blueDestroyed === redDestroyed && this.blueScore.gold >= this.redScore.gold);
-      const winnerSide = blueWins ? "blue" : "red";
-      const loserSide = blueWins ? "red" : "blue";
-      const enemyStructures = blueWins ? this.redStructures : this.blueStructures;
-
-      this.onEvent({
-        type: "nexus_destroyed",
-        side: winnerSide,
-        text: `🚨 AVANÇO SUPREMO! ${blueWins ? this.blueTeam.name : this.redTeam.name} conquistou o controle total de Summoner's Rift e implodiu o Nexus adversário! GG WP!`,
-        time: this._formatTime()
-      });
-
-      const targetNexus = enemyStructures.find(s => s.id === "nexus");
-      if (targetNexus) {
-        targetNexus.currentHp = 0;
-        targetNexus.destroyed = true;
-        this.onStructureHit(loserSide, "nexus", 0, targetNexus.maxHp);
-        this.onStructureDestroyed(loserSide, "nexus");
-      }
-
-      this.isFinished = true;
-      if (this.timer) clearTimeout(this.timer);
-      this.onFinish(blueWins ? "win" : "loss", this._buildSummary(blueWins ? "win" : "loss"));
     }
   }
 
