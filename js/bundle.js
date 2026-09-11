@@ -6354,6 +6354,18 @@ class MatchSimulator {
 
     this._checkRespawns();
     this._checkInhibitorRespawns();
+    // Sistema Oficial de Barricadas de Torres: Caem aos 14:00 (840 segundos)
+    if (this.gameSeconds >= 840 && !this._platesFallenAnnounced) {
+      this._platesFallenAnnounced = true;
+      if (this.blueStructures) this.blueStructures.forEach(s => { if (s.tier === 1) s.plates = 0; });
+      if (this.redStructures) this.redStructures.forEach(s => { if (s.tier === 1) s.plates = 0; });
+      this.onEvent({
+        type: "plates_fall",
+        side: "neutral",
+        text: `🛡️ 14:00 — AS BARRICADAS DAS TORRES CAÍRAM! As defesas temporárias ruíram e as torres perderam a blindagem reforçada!`,
+        time: this._formatTime()
+      });
+    }
 
     // Sistema Autêntico de Recompensas de Objetivos (Objective Bounties)
     const goldDeficit = this.redScore.gold - this.blueScore.gold;
@@ -6451,18 +6463,25 @@ class MatchSimulator {
         boughtAny = true;
       } else if (step.type === "COMPONENT" || step.type === "COMPLETE") {
         if (member.items.length >= 6) {
-          const starterIdx = member.items.findIndex(it => it && (it.tier === "STARTER" || [1055, 1056, 1054, 1101, 3865].includes(it.id)));
+          const starterIdx = member.items.findIndex(it => it && (
+            it.tier === "STARTER" ||
+            [1055, 1056, 1054, 1101, 1102, 1103, 3865].includes(Number(it.id)) ||
+            (it.name && (it.name.includes("Doran") || it.name.includes("Atlas") || it.name.includes("Cria das Chamas")))
+          ));
           if (starterIdx !== -1) {
             const sold = member.items.splice(starterIdx, 1)[0];
-            const sellVal = Math.round((sold.cost || 400) * 0.4);
+            const sellVal = Math.round((sold.cost || 450) * 0.4);
             member.goldCurrent = (member.goldCurrent || 0) + sellVal;
+            member.goldEarned = (member.goldEarned || 500) + sellVal;
             this.onEvent({
               type: "item_sell",
               side,
               championName: member.name,
-              text: `💰 ${member.playerNick || member.name} vendeu ${sold.name} (+${sellVal}g) na base para abrir espaço!`,
+              text: `💰 ${member.playerNick || member.name} vendeu ${sold.name} (+${sellVal}g) na base para abrir espaço no inventário!`,
               time: this._formatTime()
             });
+          } else {
+            if (step.type === "COMPONENT") break;
           }
         }
 
@@ -6561,9 +6580,18 @@ class MatchSimulator {
 
     // A) Mau Momento de Recall (Onda empurrada contra nossa torre):
     // Se a onda está recuada sob nossa torre (sidePressure <= -6), sair agora perde 1-2 ondas e barricadas!
+    // Mas se o campeão já acumulou ouro suficiente para um spike maior (>= 1800g),
+    // ele limpa as tropas sob a torre e aproveita o rebote da onda (bounce-back)!
     if (sidePressure <= -6 && (member.hpPct || 100) > 38) {
-      member.statusText = "Segurando a Rota (Limpando onda antes do B)";
-      return; // Permanece na rota para limpar a onda!
+      if (goldCurrent < 1800) {
+        member.statusText = "Segurando a Rota (Limpando onda antes do B)";
+        return; // Permanece na rota para limpar a onda!
+      }
+      member.recallReason = "crash_and_base";
+      member.statusText = `Canalizando Retorno no Bounce-Back (${goldCurrent}g acumulados)...`;
+      member.recallState = "recalling";
+      member.recallEndsAt = this.gameSeconds + 8;
+      return;
     }
 
     // B) Ganância por Item Maior vs Componente Menor:
@@ -6572,6 +6600,15 @@ class MatchSimulator {
     if (step.cost < 500 && goldCurrent < 900 && (member.hpPct || 100) > 65) {
       member.statusText = `Farmando na Rota (Aguardando Power Spike para ${nextItem.name})`;
       return; // Permanece na rota!
+    }
+
+    // Se o campeão tem muito ouro acumulado (>= 2800g), prioridade máxima de recall para fechar item
+    if (goldCurrent >= 2800) {
+      member.recallReason = "item_completed";
+      member.statusText = `Canalizando Retorno (Comprar ${step.item ? step.item.name : 'Itens'} - ${goldCurrent}g)...`;
+      member.recallState = "recalling";
+      member.recallEndsAt = this.gameSeconds + 8;
+      return;
     }
 
     // C) Momento Perfeito de Recall (Crash & Base) OU Spike Chave de Item:
@@ -6656,6 +6693,7 @@ class MatchSimulator {
 
   _checkItemMilestones() {
     this._updateChampionRecallsAndShopping(2);
+    this._updateIndividualLeadsAndMvp();
   }
 
   _updateIndividualLeadsAndMvp() {
@@ -6985,14 +7023,14 @@ class MatchSimulator {
     const canFight = this.combatCooldown <= 0;
 
     // Escaramuças autênticas por rota e selva durante toda a partida (duelos, invades, ganks e 2v2)
-    const skirmishChance = (this.gameSeconds < 840 ? 0.32 : 0.20) * timeScale;
+    const skirmishChance = (this.gameSeconds < 840 ? 0.44 : 0.32) * timeScale;
     if (canFight && Math.random() < skirmishChance) {
       const skirmishHappened = this._triggerLaneSkirmish();
       if (skirmishHappened) return;
     }
 
     const isUnderPressure = Math.abs(this.lanePressure) >= 35;
-    const fightChance = (isUnderPressure ? 0.16 : 0.09) * timeScale;
+    const fightChance = (isUnderPressure ? 0.20 : 0.12) * timeScale;
     const rollForFight = canFight && (Math.random() < fightChance);
 
     if (rollForFight) {
@@ -7014,7 +7052,7 @@ class MatchSimulator {
         }
       } else {
         this._triggerSkirmishEqual();
-        this.combatCooldown = 30;
+        this.combatCooldown = 12;
       }
     } else {
       // Escaramuça sem mortes: apenas tropas profundas sob a torre causam leve dano de cerco
@@ -13065,11 +13103,11 @@ class MatchSimulator {
           duration: 120
         });
         this._awardTeamGold("blue", 180);
-        this.combatCooldown = 55;
+        this.combatCooldown = 18;
         return true;
       } else if (rPower > bPower + 8.5) {
         this._recordKill("red", "blue", "jungle", "jungle", "Invasão de Selva", `🔴 INVASÃO RIVAL! O caçador adversário emboscou ${bJg.name} no rio e garantiu a eliminação!`);
-        this.combatCooldown = 55;
+        this.combatCooldown = 18;
         return true;
       } else {
         this.onEvent({
@@ -13078,7 +13116,7 @@ class MatchSimulator {
           text: `🌲 Disputa equilibrada pelo Aronguejo no rio! Ambos os caçadores recuaram após trocarem feitiços.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 30;
+        this.combatCooldown = 10;
         return true;
       }
     } else if (lane === "top") {
@@ -13119,7 +13157,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
         this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "top");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
@@ -13134,7 +13172,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
         this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "top");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else {
         this.onEvent({
@@ -13143,7 +13181,7 @@ class MatchSimulator {
           text: `🛡️ Troca agressiva na rota do topo! ${bTop.name} e ${rTop.name} gastaram feitiços e recuaram com pouca vida.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 30;
+        this.combatCooldown = 10;
         return true;
       }
     } else if (lane === "mid") {
@@ -13189,7 +13227,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
         this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "mid");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
@@ -13209,7 +13247,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
         this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "mid");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else {
         this.onEvent({
@@ -13218,7 +13256,7 @@ class MatchSimulator {
           text: `🛡️ Duelo mágico equilibrado na rota do meio! Ambos os magos recuaram para farmar.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 30;
+        this.combatCooldown = 10;
         return true;
       }
     } else {
@@ -13264,7 +13302,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 20);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
         this._damageNextStructure("blue", this.redStructures, 12, false, 0.9, "bot");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else if (rPower > bPower + 8.5) {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
@@ -13281,7 +13319,7 @@ class MatchSimulator {
         if (this.lanePressures) this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
         this.lanePressure = Math.max(-100, this.lanePressure - 10);
         this._damageNextStructure("red", this.blueStructures, 12, false, 0.9, "bot");
-        this.combatCooldown = 60;
+        this.combatCooldown = 18;
         return true;
       } else {
         this.onEvent({
@@ -13290,15 +13328,15 @@ class MatchSimulator {
           text: `🛡️ Troca intensa no 2v2 da bot lane! Curas e barreiras foram ativadas e as duplas reposicionaram.`,
           time: this._formatTime()
         });
-        this.combatCooldown = 30;
+        this.combatCooldown = 10;
         return true;
       }
     }
   }
 
   _triggerDecisiveCombat(winnerSide, loserSide, margin, isForcedCounter = false) {
-    // Intervalo de recarga de combate: pacing realista de CBLOL e Mundial (12 a 18 kills por partida)
-    this.combatCooldown = 65;
+    // Intervalo de recarga de combate calibrado para ritmo de CBLOL (14 a 22 kills por partida)
+    this.combatCooldown = 22;
 
     const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
     const winnerRoster = winnerSide === "blue" ? this.blueRosterState : this.redRosterState;
@@ -13575,10 +13613,16 @@ class MatchSimulator {
     }
     let finalDamage = Math.floor(baseDamage * defenseBonus * intensityMod * manpowerSiegeMod * lateGameSiegeMod * (0.90 + Math.random() * 0.22));
 
+    // Bônus de cerco do Barão Na'Shor (Tropas com Buff do Barão causam +55% de dano de cerco)
+    const attackerHasBaron = (attackerSide === "blue" && this.gameSeconds < this.blueBaronUntil) || (attackerSide === "red" && this.gameSeconds < this.redBaronUntil);
+    if (attackerHasBaron) {
+      finalDamage = Math.floor(finalDamage * 1.55);
+    }
+
     target.currentHp = Math.max(0, target.currentHp - finalDamage);
 
-    // Sistema de Barricadas da T1
-    if (target.tier === 1 && target.plates > 0) {
+    // Sistema de Barricadas da T1 (válidas apenas até 14:00)
+    if (this.gameSeconds < 840 && target.tier === 1 && target.plates > 0) {
       const hpPerPlate = target.maxHp / 5;
       const expectedPlates = Math.max(0, Math.ceil(target.currentHp / hpPerPlate));
       if (expectedPlates < target.plates) {
@@ -13845,10 +13889,15 @@ class MatchSimulator {
       }
     });
 
+    const winningRoster = result === "win" ? this.blueRosterState : this.redRosterState;
+    const winMvpRole = result === "win" ? (this.blueMvpRole || "adc") : (this.redMvpRole || "adc");
+    const mvpChamp = (winningRoster && winningRoster[winMvpRole]) ? winningRoster[winMvpRole] : (topDamageChamp || allPlayers[0]);
+
     return {
       result,
       duration: this._formatTime(),
       gameSeconds: this.gameSeconds,
+      mvp: mvpChamp,
       maxDamage,
       maxGold,
       maxTaken,
@@ -14038,7 +14087,7 @@ class MatchSimulator {
     // 2. Caçador Aliado (Blue Jungler)
     const bJg = this.blueRosterState && this.blueRosterState.jungle;
     if (bJg && bJg.alive && this.gameSeconds >= (bJg.travelingBackUntil || 0)) {
-      if (this.blueJungleCampLane) {
+      if (this.blueJungleCampLane && (this.gameSeconds % 90 <= 24)) {
         this.blueJgTargetCampId = null;
       } else if (this.gameSeconds < 90) {
         if (this.blueJgStartChoice === "start_red_buff") {
@@ -14115,7 +14164,7 @@ class MatchSimulator {
     // 3. Caçador Inimigo (Red Jungler)
     const rJg = this.redRosterState && this.redRosterState.jungle;
     if (rJg && rJg.alive && this.gameSeconds >= (rJg.travelingBackUntil || 0)) {
-      if (this.redJungleCampLane) {
+      if (this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24)) {
         this.redJgTargetCampId = null;
       } else if (this.gameSeconds < 90) {
         this.redJgTargetCampId = (this.redJgStartChoice === "start_blue_buff") ? "red_blue_buff" : "red_red_buff";
@@ -14380,7 +14429,8 @@ class MatchSimulator {
         ty = botClash.y - 12;
         status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
-        if (this.blueJungleCampLane) {
+        const isBlueGankWindow = this.blueJungleCampLane && (this.gameSeconds % 90 <= 24);
+        if (isBlueGankWindow) {
           const l = this.blueJungleCampLane;
           const targetCoords = l === "top" ? { x: 270, y: 165 } : (l === "mid" ? { x: 480, y: 320 } : { x: 770, y: 580 });
           tx = targetCoords.x;
@@ -14507,7 +14557,8 @@ class MatchSimulator {
         ty = botClash.y + 12;
         status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
-        if (this.redJungleCampLane) {
+        const isRedGankWindow = this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24);
+        if (isRedGankWindow) {
           const l = this.redJungleCampLane;
           const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });
           tx = targetCoords.x;
