@@ -3962,10 +3962,24 @@ export class MatchSimulator {
     const aliveVictimRoles = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     if (aliveVictimRoles.length === 0) return;
 
-    // Abates decisivos: abates pontuais e estratégicos (1 abate por padrão, raramente 2 em margens extremas)
+    // Abates decisivos: no early game são 1 ou 2 abates pontuais; no late game (25m+, 33m+) teamfights decisivas produzem 2 a 4 abates ou até ACE quando a margem for alta
     let killsCount = 1;
-    if (margin > 24 && aliveVictimRoles.length >= 2) {
-      killsCount = 2; // Vitória tática expressiva
+    if (this.gameSeconds >= 1980) { // 33m+
+      if (margin > 18 && aliveVictimRoles.length >= 3) {
+        killsCount = Math.min(aliveVictimRoles.length, Math.random() < 0.5 ? 4 : 3);
+      } else if (aliveVictimRoles.length >= 2) {
+        killsCount = 2;
+      }
+    } else if (this.gameSeconds >= 1500) { // 25m+
+      if (margin > 20 && aliveVictimRoles.length >= 3) {
+        killsCount = Math.min(aliveVictimRoles.length, 3);
+      } else if (margin > 10 && aliveVictimRoles.length >= 2) {
+        killsCount = 2;
+      }
+    } else {
+      if (margin > 24 && aliveVictimRoles.length >= 2) {
+        killsCount = 2; // Vitória tática expressiva early
+      }
     }
 
     for (let i = 0; i < killsCount; i++) {
@@ -4016,7 +4030,8 @@ export class MatchSimulator {
       }
       chosenLane = lanes[0];
     }
-    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, 1.2, chosenLane);
+    const siegeIntensity = this.gameSeconds >= 1980 ? 1.5 : (this.gameSeconds >= 1500 ? 1.35 : 1.2);
+    this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, siegeIntensity, chosenLane);
   }
 
   _triggerSkirmishEqual() {
@@ -4123,7 +4138,7 @@ export class MatchSimulator {
     this._syncTeamGold();
   }
 
-  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0, preferredLane = null) {
+  _damageNextStructure(attackerSide, targetStructures, margin, isForcedCounter = false, intensityMod = 1.0, preferredLane = null, isFollowThrough = false) {
     const target = this._getCurrentTargetStructure(targetStructures, preferredLane);
     if (!target) return;
 
@@ -4182,7 +4197,14 @@ export class MatchSimulator {
     else if (defenderAlive === 4) manpowerSiegeMod = 1.05;
     else manpowerSiegeMod = 0.9;
 
-    const lateGameSiegeMod = this.gameSeconds >= 1200 ? 1.3 : 1.0;
+    let lateGameSiegeMod = 1.0;
+    if (this.gameSeconds >= 2040) { // 34m+
+      lateGameSiegeMod = 2.4;
+    } else if (this.gameSeconds >= 1680) { // 28m+
+      lateGameSiegeMod = 1.85;
+    } else if (this.gameSeconds >= 1200) { // 20m+
+      lateGameSiegeMod = 1.35;
+    }
     let finalDamage = Math.floor(baseDamage * defenseBonus * intensityMod * manpowerSiegeMod * lateGameSiegeMod * (0.90 + Math.random() * 0.22));
 
     target.currentHp = Math.max(0, target.currentHp - finalDamage);
@@ -4316,6 +4338,15 @@ export class MatchSimulator {
         }
       }
       this._syncTeamGold();
+
+      // Push contínuo / Follow-through se defensores estão com baixas críticas ou time com Barão
+      if (!isFollowThrough && target.id !== "nexus") {
+        const canFollowThrough = (defenderAlive <= 1) || hasBaron || (this.gameSeconds >= 1680 && defenderAlive <= 2);
+        if (canFollowThrough) {
+          const pushLane = target.lane || preferredLane || "mid";
+          this._damageNextStructure(attackerSide, targetStructures, margin, false, intensityMod * 0.85, pushLane, true);
+        }
+      }
     }
   }
 
@@ -4347,41 +4378,8 @@ export class MatchSimulator {
       if (nexus && !nexus.destroyed) return nexus;
     }
 
-    // 2. Se não especificou rota ou a rota preferida já perdeu o inibidor:
-    // Pressiona as rotas em ordem de pressão do time atacante
-    const isTargetingRed = (structures === this.redStructures);
-    const p = this.lanePressures || { top: 0, mid: 0, bot: 0 };
-    const sortedLanes = [...lanes].sort((a, b) => {
-      const valA = isTargetingRed ? (p[a] || 0) : -(p[a] || 0);
-      const valB = isTargetingRed ? (p[b] || 0) : -(p[b] || 0);
-      return valB - valA;
-    });
-
-    // T1 viva na rota de maior pressão
-    for (const lane of sortedLanes) {
-      const t1 = structures.find(s => s.lane === lane && s.tier === 1);
-      if (t1 && !t1.destroyed) return t1;
-    }
-
-    // T2 viva na rota de maior pressão
-    for (const lane of sortedLanes) {
-      const t2 = structures.find(s => s.lane === lane && s.tier === 2);
-      if (t2 && !t2.destroyed) return t2;
-    }
-
-    // T3 viva na rota de maior pressão
-    for (const lane of sortedLanes) {
-      const t3 = structures.find(s => s.lane === lane && s.tier === 3);
-      if (t3 && !t3.destroyed) return t3;
-    }
-
-    // Inibidor vivo na rota de maior pressão
-    for (const lane of sortedLanes) {
-      const inhib = structures.find(s => s.lane === lane && s.tier === "inhib");
-      if (inhib && !inhib.destroyed) return inhib;
-    }
-
-    // 3. Se ao menos 1 inibidor estiver destruído, as Torres do Nexus estão vulneráveis
+    // 2. Se ao menos 1 inibidor adversário estiver destruído, a base está violada!
+    // As defesas centrais da base (Torres do Nexus e Nexus) tornam-se o alvo supremo
     const hasAnyInhibDestroyed = structures.some(s => s.tier === "inhib" && s.destroyed);
     if (hasAnyInhibDestroyed) {
       const nt1 = structures.find(s => s.id === "nexus_t1");
@@ -4394,25 +4392,76 @@ export class MatchSimulator {
       if (nexus && !nexus.destroyed) return nexus;
     }
 
-    return null;
+    // 3. Se não especificou rota ou a rota preferida foi concluída:
+    // Identifica a rota com maior avanço/pressão da equipe atacante (foco em romper uma rota inteira até a base!)
+    const isTargetingRed = (structures === this.redStructures);
+    const p = this.lanePressures || { top: 0, mid: 0, bot: 0 };
+
+    const getLaneScore = (lane) => {
+      const laneStructs = structures.filter(s => s.lane === lane);
+      const destroyedCount = laneStructs.filter(s => s.destroyed).length;
+      const lanePressureVal = isTargetingRed ? (p[lane] || 0) : -(p[lane] || 0);
+      // Pesa fortemente rotas já abertas (T1 já caiu, T2 já caiu) para continuar o cerco focado!
+      return (destroyedCount * 65) + lanePressureVal;
+    };
+
+    const sortedLanes = [...lanes].sort((a, b) => getLaneScore(b) - getLaneScore(a));
+
+    // Na rota prioritária mais avançada, ataca a próxima estrutura em linha reta: T1 -> T2 -> T3 -> Inibidor
+    for (const lane of sortedLanes) {
+      const t1 = structures.find(s => s.lane === lane && s.tier === 1);
+      if (t1 && !t1.destroyed) return t1;
+
+      const t2 = structures.find(s => s.lane === lane && s.tier === 2);
+      if (t2 && !t2.destroyed) return t2;
+
+      const t3 = structures.find(s => s.lane === lane && s.tier === 3);
+      if (t3 && !t3.destroyed) return t3;
+
+      const inhib = structures.find(s => s.lane === lane && s.tier === "inhib");
+      if (inhib && !inhib.destroyed) return inhib;
+    }
+
+    // 4. Fallback: qualquer estrutura restante viva
+    return structures.find(s => !s.destroyed) || null;
   }
 
   _checkGameEnd() {
     const blueNexus = this.blueStructures.find(s => s.id === "nexus");
     const redNexus = this.redStructures.find(s => s.id === "nexus");
 
-    if (redNexus.destroyed) {
+    if (redNexus && redNexus.destroyed) {
       this.isFinished = true;
       if (this.timer) clearTimeout(this.timer);
       this.onFinish("win", this._buildSummary("win"));
-    } else if (blueNexus.destroyed) {
+    } else if (blueNexus && blueNexus.destroyed) {
       this.isFinished = true;
       if (this.timer) clearTimeout(this.timer);
       this.onFinish("loss", this._buildSummary("loss"));
     } else if (this.gameSeconds >= this.maxGameSeconds) {
+      // Clímax narrativo de Fim de Jogo: NUNCA encerra do nada!
       const blueDestroyed = this.redStructures.filter(s => s.destroyed).length;
       const redDestroyed = this.blueStructures.filter(s => s.destroyed).length;
       const blueWins = (blueDestroyed > redDestroyed) || (blueDestroyed === redDestroyed && this.blueScore.gold >= this.redScore.gold);
+      const winnerSide = blueWins ? "blue" : "red";
+      const loserSide = blueWins ? "red" : "blue";
+      const enemyStructures = blueWins ? this.redStructures : this.blueStructures;
+
+      this.onEvent({
+        type: "nexus_destroyed",
+        side: winnerSide,
+        text: `🚨 AVANÇO SUPREMO! ${blueWins ? this.blueTeam.name : this.redTeam.name} conquistou o controle total de Summoner's Rift e implodiu o Nexus adversário! GG WP!`,
+        time: this._formatTime()
+      });
+
+      const targetNexus = enemyStructures.find(s => s.id === "nexus");
+      if (targetNexus) {
+        targetNexus.currentHp = 0;
+        targetNexus.destroyed = true;
+        this.onStructureHit(loserSide, "nexus", 0, targetNexus.maxHp);
+        this.onStructureDestroyed(loserSide, "nexus");
+      }
+
       this.isFinished = true;
       if (this.timer) clearTimeout(this.timer);
       this.onFinish(blueWins ? "win" : "loss", this._buildSummary(blueWins ? "win" : "loss"));
