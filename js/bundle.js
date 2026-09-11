@@ -10632,12 +10632,14 @@ class ArenaView {
 
         <!-- Covil do Barão Nashor (Parte Superior do Rio) -->
         <g class="pit-marker baron-pit" id="pit-baron" transform="translate(344, 336)" data-pit="baron" title="Covil do Barão Nashor">
+          <circle class="pit-hitbox" r="28" fill="transparent" />
           <circle r="22" fill="#200d2c" fill-opacity="0.5" stroke="#c084fc" stroke-width="2" />
           <text text-anchor="middle" dominant-baseline="central" font-size="14">👾</text>
         </g>
 
         <!-- Covil do Dragão Elemental (Parte Inferior do Rio) -->
         <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(684, 713)" data-pit="dragon" title="Covil do Dragão Elemental">
+          <circle class="pit-hitbox" r="28" fill="transparent" />
           <circle r="22" fill="#301206" fill-opacity="0.5" stroke="#fb923c" stroke-width="2" />
           <text text-anchor="middle" dominant-baseline="central" font-size="14">🐲</text>
         </g>
@@ -10694,6 +10696,8 @@ class ArenaView {
          data-gold="${struct.goldValue || 0}"
          data-tier="${struct.tier}"
          transform="translate(${coords.x}, ${coords.y})">
+        <!-- Hitbox invisível estável para captura de mouse sem oscilação -->
+        <circle class="struct-hitbox" r="${radius + 7}" fill="transparent" />
         <!-- Glow / Halo de hover e clique -->
         <circle class="struct-halo" r="${radius + 5}" />
         <!-- Fundo escuro do anel -->
@@ -10994,6 +10998,7 @@ class ArenaView {
     };
     if (state.blue && state.blue.structures) syncStructures(state.blue.structures, "blue");
     if (state.red && state.red.structures) syncStructures(state.red.structures, "red");
+    this._updateActiveStructureTooltip();
 
     // Sincronização dinâmica das 3 Rotas (Top, Mid, Bot): Pressão e Pontos de Choque de Minions
     const pressures = state.lanePressures || {
@@ -12012,68 +12017,110 @@ class ArenaView {
     this._bindMapInteractions();
   }
 
+  _updateActiveStructureTooltip() {
+    if (!this._hoveredStructNode) return;
+    const tooltip = this.containerEl.querySelector("#rift-structure-tooltip");
+    if (!tooltip || tooltip.style.display === "none") return;
+    const node = this._hoveredStructNode;
+    const side = node.dataset.side;
+    const name = node.dataset.name || "Estrutura";
+    const hp = parseInt(node.dataset.hp, 10) || 0;
+    const maxHp = parseInt(node.dataset.maxHp, 10) || 3000;
+    const plates = parseInt(node.dataset.plates, 10) || 0;
+    const gold = node.dataset.gold || 250;
+    const isDestroyed = node.classList.contains("destroyed");
+    const pct = Math.max(0, Math.round((hp / maxHp) * 100));
+
+    const sideBadge = side === "blue" ? `<span class="tip-team blue">🔵 LADO AZUL</span>` : `<span class="tip-team red">🔴 LADO VERMELHO</span>`;
+    const statusText = isDestroyed
+      ? `<span class="tip-status destroyed">💥 DESTRUÍDA</span>`
+      : (pct < 40 ? `<span class="tip-status critical">⚠️ CRÍTICA (${pct}%)</span>` : `<span class="tip-status intact">🛡️ ATIVA (${pct}%)</span>`);
+
+    tooltip.innerHTML = `
+      <div class="tip-header">
+        ${sideBadge}
+        <div class="tip-name">${name}</div>
+      </div>
+      <div class="tip-body">
+        <div class="tip-hp-row">
+          <span class="tip-label">Integridade:</span>
+          <span class="tip-hp-val">${isDestroyed ? '0 / ' + maxHp : hp + ' / ' + maxHp} HP</span>
+        </div>
+        <div class="tip-hp-bar">
+          <div class="tip-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" style="width: ${isDestroyed ? 0 : pct}%;"></div>
+        </div>
+        ${plates > 0 && !isDestroyed ? `
+          <div class="tip-detail-row plates">
+            <span>🛡️ Barricadas:</span>
+            <strong>${plates} Placas (+${plates * 125}g disponíveis)</strong>
+          </div>
+        ` : ''}
+        <div class="tip-detail-row">
+          <span>Status:</span>
+          ${statusText}
+        </div>
+        <div class="tip-detail-row bounty">
+          <span>Recompensa Global:</span>
+          <strong>+${gold} Ouro</strong>
+        </div>
+      </div>
+    `;
+  }
+
   _bindMapInteractions() {
     const tooltip = this.containerEl.querySelector("#rift-structure-tooltip");
     const svgContainer = this.containerEl.querySelector("#rift-svg-container");
     if (!tooltip || !svgContainer) return;
 
+    // Garante que o tooltip nunca intercepte eventos de ponteiro
+    tooltip.style.pointerEvents = "none";
+
+    const updateTooltipPosition = (e) => {
+      const rect = svgContainer.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      const tipWidth = 220;
+      const tipHeight = 145;
+
+      // Posiciona longe do cursor para nunca haver sobreposição
+      let posX;
+      if (cursorX > rect.width * 0.52) {
+        posX = cursorX - tipWidth - 16;
+      } else {
+        posX = cursorX + 18;
+      }
+
+      let posY;
+      if (cursorY > rect.height * 0.52) {
+        posY = cursorY - tipHeight - 12;
+      } else {
+        posY = cursorY + 14;
+      }
+
+      // Limites de segurança para manter o tooltip dentro do mapa
+      posX = Math.max(6, Math.min(rect.width - tipWidth - 6, posX));
+      posY = Math.max(6, Math.min(rect.height - tipHeight - 6, posY));
+
+      tooltip.style.left = `${Math.round(posX)}px`;
+      tooltip.style.top = `${Math.round(posY)}px`;
+    };
+
     this.containerEl.querySelectorAll(".map-structure-node").forEach(node => {
       node.addEventListener("mouseenter", (e) => {
-        const side = node.dataset.side;
-        const name = node.dataset.name || "Estrutura";
-        const hp = parseInt(node.dataset.hp, 10) || 0;
-        const maxHp = parseInt(node.dataset.maxHp, 10) || 3000;
-        const plates = parseInt(node.dataset.plates, 10) || 0;
-        const gold = node.dataset.gold || 250;
-        const isDestroyed = node.classList.contains("destroyed");
-        const pct = Math.max(0, Math.round((hp / maxHp) * 100));
-
-        const sideBadge = side === "blue" ? `<span class="tip-team blue">🔵 LADO AZUL</span>` : `<span class="tip-team red">🔴 LADO VERMELHO</span>`;
-        const statusText = isDestroyed
-          ? `<span class="tip-status destroyed">💥 DESTRUÍDA</span>`
-          : (pct < 40 ? `<span class="tip-status critical">⚠️ CRÍTICA (${pct}%)</span>` : `<span class="tip-status intact">🛡️ ATIVA (${pct}%)</span>`);
-
-        tooltip.innerHTML = `
-          <div class="tip-header">
-            ${sideBadge}
-            <div class="tip-name">${name}</div>
-          </div>
-          <div class="tip-body">
-            <div class="tip-hp-row">
-              <span class="tip-label">Integridade:</span>
-              <span class="tip-hp-val">${isDestroyed ? '0 / ' + maxHp : hp + ' / ' + maxHp} HP</span>
-            </div>
-            <div class="tip-hp-bar">
-              <div class="tip-hp-fill ${pct < 30 ? 'critical' : (pct < 60 ? 'damaged' : '')}" style="width: ${isDestroyed ? 0 : pct}%;"></div>
-            </div>
-            ${plates > 0 && !isDestroyed ? `
-              <div class="tip-detail-row plates">
-                <span>🛡️ Barricadas:</span>
-                <strong>${plates} Placas (+${plates * 125}g disponíveis)</strong>
-              </div>
-            ` : ''}
-            <div class="tip-detail-row">
-              <span>Status:</span>
-              ${statusText}
-            </div>
-            <div class="tip-detail-row bounty">
-              <span>Recompensa Global:</span>
-              <strong>+${gold} Ouro</strong>
-            </div>
-          </div>
-        `;
+        this._hoveredStructNode = node;
+        this._updateActiveStructureTooltip();
+        updateTooltipPosition(e);
         tooltip.style.display = "block";
       });
 
       node.addEventListener("mousemove", (e) => {
-        const rect = svgContainer.getBoundingClientRect();
-        const x = Math.min(rect.width - 200, Math.max(10, e.clientX - rect.left + 16));
-        const y = Math.min(rect.height - 140, Math.max(10, e.clientY - rect.top + 16));
-        tooltip.style.left = `${x}px`;
-        tooltip.style.top = `${y}px`;
+        updateTooltipPosition(e);
       });
 
       node.addEventListener("mouseleave", () => {
+        if (this._hoveredStructNode === node) {
+          this._hoveredStructNode = null;
+        }
         tooltip.style.display = "none";
       });
 
@@ -12089,7 +12136,8 @@ class ArenaView {
     });
 
     this.containerEl.querySelectorAll(".pit-marker").forEach(pit => {
-      pit.addEventListener("mouseenter", () => {
+      pit.addEventListener("mouseenter", (e) => {
+        this._hoveredStructNode = null;
         const isBaron = pit.dataset.pit === "baron";
         const title = isBaron ? "👾 Covil do Barão Na'Shor" : "🐲 Covil do Dragão Elemental";
         const loc = isBaron ? "Parte Superior do Rio (Top River)" : "Parte Inferior do Rio (Bot River)";
@@ -12116,15 +12164,12 @@ class ArenaView {
             </div>
           </div>
         `;
+        updateTooltipPosition(e);
         tooltip.style.display = "block";
       });
 
       pit.addEventListener("mousemove", (e) => {
-        const rect = svgContainer.getBoundingClientRect();
-        const x = Math.min(rect.width - 220, Math.max(10, e.clientX - rect.left + 16));
-        const y = Math.min(rect.height - 140, Math.max(10, e.clientY - rect.top + 16));
-        tooltip.style.left = `${x}px`;
-        tooltip.style.top = `${y}px`;
+        updateTooltipPosition(e);
       });
 
       pit.addEventListener("mouseleave", () => {
