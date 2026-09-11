@@ -10551,38 +10551,38 @@ class ArenaView {
   _renderSummonersRiftSvg(state) {
     const MAP_COORDS = {
       blue: {
-        top_inhib: { x: 117, y: 796 },
-        top_t3: { x: 108, y: 738 },
-        top_t2: { x: 124, y: 576 },
-        top_t1: { x: 100, y: 326 },
-        mid_inhib: { x: 229, y: 814 },
-        mid_t3: { x: 278, y: 732 },
-        mid_t2: { x: 345, y: 693 },
-        mid_t1: { x: 401, y: 611 },
-        bot_inhib: { x: 244, y: 917 },
-        bot_t3: { x: 277, y: 917 },
-        bot_t2: { x: 468, y: 919 },
-        bot_t1: { x: 677, y: 931 },
-        nexus_t1: { x: 173, y: 848 },
-        nexus_t2: { x: 146, y: 869 },
-        nexus: { x: 135, y: 880 }
+        top_inhib: { x: 162, y: 517 },
+        top_t3: { x: 154, y: 464 },
+        top_t2: { x: 196, y: 389 },
+        top_t1: { x: 213, y: 205 },
+        mid_inhib: { x: 265, y: 547 },
+        mid_t3: { x: 298, y: 522 },
+        mid_t2: { x: 399, y: 458 },
+        mid_t1: { x: 430, y: 388 },
+        bot_inhib: { x: 277, y: 658 },
+        bot_t3: { x: 326, y: 654 },
+        bot_t2: { x: 467, y: 626 },
+        bot_t1: { x: 672, y: 624 },
+        nexus_t1: { x: 189, y: 579 },
+        nexus_t2: { x: 212, y: 601 },
+        nexus: { x: 170, y: 610 }
       },
       red: {
-        top_t1: { x: 311, y: 109 },
-        top_t2: { x: 541, y: 124 },
-        top_t3: { x: 699, y: 118 },
-        top_inhib: { x: 742, y: 120 },
-        mid_t1: { x: 653, y: 354 },
-        mid_t2: { x: 730, y: 263 },
-        mid_t3: { x: 765, y: 222 },
-        mid_inhib: { x: 784, y: 195 },
-        bot_t1: { x: 885, y: 701 },
-        bot_t2: { x: 873, y: 477 },
-        bot_t3: { x: 878, y: 294 },
-        bot_inhib: { x: 879, y: 243 },
-        nexus_t1: { x: 819, y: 182 },
-        nexus_t2: { x: 837, y: 160 },
-        nexus: { x: 871, y: 137 }
+        top_t1: { x: 325, y: 69 },
+        top_t2: { x: 516, y: 97 },
+        top_t3: { x: 666, y: 90 },
+        top_inhib: { x: 690, y: 86 },
+        mid_t1: { x: 574, y: 301 },
+        mid_t2: { x: 624, y: 239 },
+        mid_t3: { x: 696, y: 186 },
+        mid_inhib: { x: 703, y: 162 },
+        bot_t1: { x: 842, y: 492 },
+        bot_t2: { x: 803, y: 327 },
+        bot_t3: { x: 835, y: 219 },
+        bot_inhib: { x: 811, y: 192 },
+        nexus_t1: { x: 759, y: 94 },
+        nexus_t2: { x: 776, y: 129 },
+        nexus: { x: 782, y: 105 }
       }
     };
 
@@ -10607,7 +10607,7 @@ class ArenaView {
     const redStructuresSvg = renderStructures(state.red?.structures, "red");
 
     return `
-      <svg class="summoners-rift-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+      <svg class="summoners-rift-svg" viewBox="0 0 1024 727" preserveAspectRatio="xMidYMid meet">
         <defs>
           <radialGradient id="blue-base-grad" cx="15%" cy="85%" r="35%">
             <stop offset="0%" stop-color="#0a2a4a" stop-opacity="0.9" />
@@ -10627,35 +10627,35 @@ class ArenaView {
           </filter>
         </defs>
 
-        <!-- Fundo Oficial Autêntico de Summoner's Rift -->
-        <image href="assets/map/minimap_rift.png" xlink:href="assets/map/minimap_rift.png" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none" />
+        <!-- Fundo Oficial Autêntico 3D de Summoner's Rift com Todas as Estruturas -->
+        <image href="assets/map/summoners_rift_hd.png" xlink:href="assets/map/summoners_rift_hd.png" x="0" y="0" width="1024" height="727" preserveAspectRatio="none" />
 
         <!-- Covil do Barão Nashor (Parte Superior do Rio) -->
-        <g class="pit-marker baron-pit" id="pit-baron" transform="translate(344, 336)" data-pit="baron" title="Covil do Barão Nashor">
+        <g class="pit-marker baron-pit" id="pit-baron" transform="translate(360, 230)" data-pit="baron" title="Covil do Barão Nashor">
           <circle class="pit-hitbox" r="28" fill="transparent" />
-          <circle r="22" fill="#200d2c" fill-opacity="0.5" stroke="#c084fc" stroke-width="2" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="14">👾</text>
+          <circle r="20" fill="#200d2c" fill-opacity="0.45" stroke="#c084fc" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="13">👾</text>
         </g>
 
         <!-- Covil do Dragão Elemental (Parte Inferior do Rio) -->
-        <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(684, 713)" data-pit="dragon" title="Covil do Dragão Elemental">
+        <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(645, 515)" data-pit="dragon" title="Covil do Dragão Elemental">
           <circle class="pit-hitbox" r="28" fill="transparent" />
-          <circle r="22" fill="#301206" fill-opacity="0.5" stroke="#fb923c" stroke-width="2" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="14">🐲</text>
+          <circle r="20" fill="#301206" fill-opacity="0.45" stroke="#fb923c" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="13">🐲</text>
         </g>
 
         <!-- Marcadores de Choque de Minions (Minion Clash Waves) -->
-        <g id="clash-top" class="minion-clash-wave" transform="translate(195, 195)">
+        <g id="clash-top" class="minion-clash-wave" transform="translate(268, 136)">
           <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
           <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
           <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
-        <g id="clash-mid" class="minion-clash-wave" transform="translate(527, 482)">
+        <g id="clash-mid" class="minion-clash-wave" transform="translate(502, 344)">
           <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
           <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
           <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
-        <g id="clash-bot" class="minion-clash-wave" transform="translate(780, 816)">
+        <g id="clash-bot" class="minion-clash-wave" transform="translate(757, 558)">
           <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
           <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
           <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
@@ -11027,42 +11027,42 @@ class ArenaView {
     updatePressureBadge("mid", pressures.mid || 0);
     updatePressureBadge("bot", pressures.bot || 0);
 
-    // Movimentação dos pontos de colisão ao longo das rotas do mapa oficial
-    // Top Lane: (100, 326) <-> (195, 195) <-> (699, 118)
+    // Movimentação dos pontos de colisão ao longo das rotas do mapa 3D oficial
+    // Top Lane: (213, 205) <-> (268, 136) <-> (666, 90)
     const clashTop = this.containerEl.querySelector("#clash-top");
     if (clashTop) {
       const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
-      let x = 195, y = 195;
+      let x = 268, y = 136;
       if (pTop >= 0) {
-        x = 195 + (pTop / 100) * 450;
-        y = 195 - (pTop / 100) * 75;
+        x = 268 + (pTop / 100) * 398;
+        y = 136 - (pTop / 100) * 46;
       } else {
-        x = 195 - (-pTop / 100) * 85;
-        y = 195 + (-pTop / 100) * 450;
+        x = 268 - (-pTop / 100) * 55;
+        y = 136 + (-pTop / 100) * 69;
       }
       clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
-    // Mid Lane: Diagonal (401, 611) <-> (527, 482) <-> (653, 354)
+    // Mid Lane: Diagonal (430, 388) <-> (502, 344) <-> (574, 301)
     const clashMid = this.containerEl.querySelector("#clash-mid");
     if (clashMid) {
       const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
-      const x = 527 + (pMid / 100) * 230;
-      const y = 482 - (pMid / 100) * 230;
+      const x = 502 + (pMid / 100) * 72;
+      const y = 344 - (pMid / 100) * 43;
       clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
-    // Bot Lane: (277, 917) <-> (780, 816) <-> (885, 701)
+    // Bot Lane: (326, 654) <-> (757, 558) <-> (842, 492)
     const clashBot = this.containerEl.querySelector("#clash-bot");
     if (clashBot) {
       const pBot = Math.max(-100, Math.min(100, pressures.bot || 0));
-      let x = 780, y = 816;
+      let x = 757, y = 558;
       if (pBot >= 0) {
-        x = 780 + (pBot / 100) * 95;
-        y = 816 - (pBot / 100) * 450;
+        x = 757 + (pBot / 100) * 85;
+        y = 558 - (pBot / 100) * 66;
       } else {
-        x = 780 - (-pBot / 100) * 450;
-        y = 816 + (-pBot / 100) * 95;
+        x = 757 - (-pBot / 100) * 431;
+        y = 558 + (-pBot / 100) * 96;
       }
       clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
