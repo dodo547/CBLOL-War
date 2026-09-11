@@ -89,10 +89,13 @@ export class MatchSimulator {
     this.heraldTaken = false;
     this.level1Taken = false;
     this.laneFocusTaken = false;
-    this.laneMacroTaken = false;
     this.focusedLane = null; // 'top', 'mid', 'bot' ou null (equilibrado)
     this.elderTaken = false;
-    this.nextElderAt = 1680; // 28:00 (Elder Dragon)
+    this.nextElderAt = 999999; // Dragão Ancião (só surge 6 min após a Alma ser conquistada, ou aos 32:00+ como recurso final)
+    this.dragonSoulClaimed = null; // { side: 'blue'|'red', element: 'Alma Infernal', key: 'infernal', claimedAt: sec }
+    this.teamDragons = { blue: [], red: [] };
+    this.dragonCycle = null;
+    this.riftSoulElement = null;
 
     // Sistema de Decisões Táticas de Rotas Individuais e Momentos Dinâmicos
     this.nextDynamicIncidentAt = 210; // Primeiro incidente dinâmico aos 03:30 (após level 1)
@@ -240,6 +243,186 @@ export class MatchSimulator {
       if (b.bonusDefense) bonusDefense += b.bonusDefense;
     }
     return { bonusCombat, bonusSiege, bonusDefense };
+  }
+
+  _getUpcomingDragonType() {
+    if (!this.dragonCycle) {
+      const allTypes = ["Infernal", "da Montanha", "do Oceano", "das Nuvens", "Hextec"];
+      const shuffled = [...allTypes].sort(() => Math.random() - 0.5);
+      const d1 = shuffled[0];
+      const d2 = shuffled[1];
+      const soulElement = shuffled[2];
+      this.dragonCycle = {
+        d1,
+        d2,
+        soulElement,
+        totalSpawned: 0
+      };
+      this.riftSoulElement = soulElement;
+    }
+    this.dragonCycle.totalSpawned++;
+    if (this.dragonCycle.totalSpawned === 1) return this.dragonCycle.d1;
+    if (this.dragonCycle.totalSpawned === 2) return this.dragonCycle.d2;
+    return this.dragonCycle.soulElement;
+  }
+
+  _getDragonSoulConfig(dType) {
+    const text = (dType || "").toLowerCase();
+    if (text.includes("infernal")) {
+      return {
+        key: "infernal",
+        name: "Alma Infernal",
+        icon: "🔥",
+        desc: "Ataques e habilidades geram explosões adaptativas em área.",
+        bonusCombat: 22,
+        bonusSiege: 0.15,
+        bonusDefense: 0
+      };
+    }
+    if (text.includes("montanha") || text.includes("mountain")) {
+      return {
+        key: "mountain",
+        name: "Alma da Montanha",
+        icon: "🛡️",
+        desc: "Gera um escudo permanente resistente fora de combate e concede armadura e resistência mágica.",
+        bonusCombat: 12,
+        bonusSiege: 0.08,
+        bonusDefense: 20
+      };
+    }
+    if (text.includes("oceano") || text.includes("ocean")) {
+      return {
+        key: "ocean",
+        name: "Alma do Oceano",
+        icon: "🌊",
+        desc: "Restaura vida e mana continuamente ao infligir dano e acelera retorno à rota.",
+        bonusCombat: 14,
+        bonusSiege: 0.08,
+        bonusDefense: 10,
+        hasOceanRegen: true
+      };
+    }
+    if (text.includes("nuvens") || text.includes("cloud")) {
+      return {
+        key: "cloud",
+        name: "Alma das Nuvens",
+        icon: "💨",
+        desc: "Velocidade de movimento elevada permanente e aceleração explosiva de corrida após conjurar a Ultimate.",
+        bonusCombat: 16,
+        bonusSiege: 0.12,
+        bonusDefense: 0
+      };
+    }
+    return {
+      key: "hextech",
+      name: "Alma Hextec",
+      icon: "⚡",
+      desc: "Dispara raios em cadeia que causam dano verdadeiro e lentidão aos oponentes atingidos.",
+      bonusCombat: 20,
+      bonusSiege: 0.10,
+      bonusDefense: 0
+    };
+  }
+
+  _secureDragon(side, dType) {
+    if (!this.teamDragons) this.teamDragons = { blue: [], red: [] };
+    this[side + "Score"].dragons = (this[side + "Score"].dragons || 0) + 1;
+    const count = this[side + "Score"].dragons;
+    this.teamDragons[side].push(dType);
+
+    // Se a equipe atingiu 4 dragões e nenhuma equipe pegou a Alma ainda -> ALMA DO DRAGÃO!
+    if (count === 4 && !this.dragonSoulClaimed) {
+      const soulElement = this.riftSoulElement || dType || "Infernal";
+      const soulConfig = this._getDragonSoulConfig(soulElement);
+      this.dragonSoulClaimed = {
+        side,
+        element: soulConfig.name,
+        key: soulConfig.key,
+        claimedAt: this.gameSeconds
+      };
+
+      // Aplica a Alma do Dragão permanente
+      this._applyTeamBuff(side, {
+        id: `dragon_soul_${soulConfig.key}`,
+        soulKey: soulConfig.key,
+        name: soulConfig.name,
+        icon: soulConfig.icon,
+        bonusCombat: soulConfig.bonusCombat,
+        bonusSiege: soulConfig.bonusSiege,
+        bonusDefense: soulConfig.bonusDefense,
+        hasOceanRegen: soulConfig.hasOceanRegen || false,
+        duration: null
+      });
+
+      const teamName = side === "blue" ? this.blueTeam.name : this.redTeam.name;
+      this.onEvent({
+        type: "dragon_soul",
+        side,
+        icon: soulConfig.icon,
+        text: `👑🐲 ALMA DO DRAGÃO CONQUISTADA! A equipe ${teamName} garantiu a 4ª Alma Elemental (${soulConfig.name})! Um poder mítico ancestral fortalece permanentemente todos os seus campeões!`,
+        time: this._formatTime()
+      });
+
+      // Cessam os dragões elementais comuns; o Dragão Ancião agora é o próximo monstro do covil em 6 minutos (360s)!
+      this.nextDragonAt = 999999;
+      this.nextElderAt = this.gameSeconds + 360;
+
+      this.onEvent({
+        type: "elder_timer",
+        side: "neutral",
+        icon: "🐲⚡",
+        text: `⏳ ALERTA DE COVIL: Com a Alma conquistada, os Dragões Elementais cessaram. O DRAGÃO ANCIÃO despertará no covil em 6 minutos (${this._formatCustomTime(this.nextElderAt)})!`,
+        time: this._formatTime()
+      });
+
+      return { soulAwarded: true, soulConfig };
+    }
+
+    // Se ainda não tem 4 dragões, acumula o buff elemental
+    this._applyTeamBuff(side, {
+      id: "dragon_buff",
+      name: `Alma Elemental (${count}x)`,
+      icon: "🐉",
+      bonusCombat: count * 5,
+      bonusSiege: 0.08,
+      duration: null
+    });
+
+    return { soulAwarded: false, count };
+  }
+
+  _secureElder(side) {
+    this[side + "Score"].elders = (this[side + "Score"].elders || 0) + 1;
+    this.elderTaken = true;
+
+    // Concede o Aspecto do Ancião (150 segundos = 2m30s)
+    this._applyTeamBuff(side, {
+      id: "elder_buff",
+      name: "Aspecto do Ancião",
+      icon: "🐲🔥",
+      bonusCombat: 40,
+      bonusSiege: 0.50,
+      hasElderExecute: true,
+      duration: 150
+    });
+
+    // Próximo Ancião renasce em 6 minutos
+    this.nextElderAt = this.gameSeconds + 360;
+
+    const teamName = side === "blue" ? this.blueTeam.name : this.redTeam.name;
+    this.onEvent({
+      type: "elder",
+      side,
+      icon: "🐲🔥",
+      text: `🔥⚡ ASPECTO DO ANCIÃO CONQUISTADO! ${teamName} abateu o Dragão Ancião! Execução letal instantânea (<20% de Vida) e queimadura ardente ativas por 2m30s!`,
+      time: this._formatTime()
+    });
+  }
+
+  _formatCustomTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   }
 
   _initStructures(side) {
@@ -2734,11 +2917,12 @@ export class MatchSimulator {
       return true;
     }
 
-    // 3. Dragão Elemental (a cada 5 min: 05:00, 10:00, 15:00...)
-    if (this.gameSeconds >= this.nextDragonAt && this.gameSeconds < 1680) {
+    // 3. Dragão Elemental (a cada 5 min: 05:00, 10:00, 15:00... até uma equipe garantir a Alma)
+    if (!this.dragonSoulClaimed && this.gameSeconds >= this.nextDragonAt) {
       this.nextDragonAt = this.gameSeconds + 300;
-      const dragons = ["Infernal (+Dano)", "da Montanha (+Armadura)", "do Oceano (+Cura)", "das Nuvens (+Mobilidade)", "Hextec (+Aceleração)"];
-      const dType = dragons[Math.floor(Math.random() * dragons.length)];
+      const dType = this._getUpcomingDragonType();
+      const isBlueSoulPoint = (this.blueScore.dragons === 3);
+      const isRedSoulPoint = (this.redScore.dragons === 3);
 
       let dragonEnemyAction = "";
       let dragonOptions = [];
@@ -2901,15 +3085,33 @@ export class MatchSimulator {
         time: this._formatTime()
       });
 
+      let badge = `OBJETIVO NEUTRO • ${this._formatTime()}`;
+      let title = `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`;
+      let subtitle = `Análise macro completa do Rift para a disputa do Covil Inferior. Qual a decisão da sua equipe?`;
+
+      if (isBlueSoulPoint && isRedSoulPoint) {
+        badge = `🔥⚠️ DUPLO PONTO DE ALMA • ${this._formatTime()}`;
+        title = `🐲🔥 DISPUTA FINAL DA ALMA DO DRAGÃO (${dType})!`;
+        subtitle = `AMBAS AS EQUIPES COM 3 DRAGÕES! Quem vencer este combate garantirá a lendária Alma Elemental!`;
+      } else if (isBlueSoulPoint) {
+        badge = `🔥 PONTO DE ALMA DO SEU TIME • ${this._formatTime()}`;
+        title = `🐲🔥 PONTO DE ALMA! O DRAGÃO ${dType.toUpperCase()} PODE SELAR A PARTIDA!`;
+        subtitle = `Seu time está a 1 Dragão da ALMA DO DRAGÃO permanente! Vença o combate no covil para consagrar a equipe!`;
+      } else if (isRedSoulPoint) {
+        badge = `⚠️ PONTO DE ALMA DO CBLOL • ${this._formatTime()}`;
+        title = `⚠️ PONTO DE ALMA DO CBLOL! O DRAGÃO ${dType.toUpperCase()} É VITAL!`;
+        subtitle = `O adversário possui 3 Dragões! Contestar ou roubar este objetivo é imperativo para impedir a Alma inimiga!`;
+      }
+
       const decisionData = {
         id: "dragon",
-        meta: { dType },
-        badge: `OBJETIVO NEUTRO • ${this._formatTime()}`,
-        title: `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`,
-        subtitle: `Análise macro completa do Rift para a disputa do Covil Inferior. Qual a decisão da sua equipe?`,
+        meta: { dType, isBlueSoulPoint, isRedSoulPoint },
+        badge,
+        title,
+        subtitle,
         macroBriefing,
         scouting: {
-          intelTag: "📡 RADAR DE OBJETIVO NEUTRO",
+          intelTag: (isBlueSoulPoint || isRedSoulPoint) ? "🔥 RADAR DE PONTO DE ALMA" : "📡 RADAR DE OBJETIVO NEUTRO",
           enemyAction: dragonEnemyAction
         },
         options: dragonOptions
@@ -5096,17 +5298,9 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 35);
-        this._applyTeamBuff("blue", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.blueScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.blueScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", blueAliveRoles[0] || "mid", redAliveRoles[0]);
 
@@ -5121,23 +5315,17 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "DRAGÃO CONQUISTADO!",
-          subtitle: `Teamfight Vitoriosa (${prob}% chance)`,
-          text: `Seu time forçou a luta no covil com precisão! O Dragão ${dType} foi garantido e o CBLOL recuou com baixas!`
+          title: soulRes.soulAwarded ? "👑 ALMA DO DRAGÃO CONQUISTADA!" : "DRAGÃO CONQUISTADO!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Desbloqueada (${prob}% chance)` : `Teamfight Vitoriosa (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `Seu time forçou a luta no covil com precisão lendária e garantiu o 4º Dragão! A ${soulRes.soulConfig.name} agora fortalece toda a equipe até o fim da partida!`
+            : `Seu time forçou a luta no covil com precisão! O Dragão ${dType} foi garantido e o CBLOL recuou com baixas!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 35);
         this._damageNextStructure("red", this.blueStructures, 30, false, 1.2);
-        this._applyTeamBuff("red", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.redScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.redScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         if (blueAliveRoles.length > 0) this._recordKill("red", "blue", redAliveRoles[0] || "mid", blueAliveRoles[0]);
 
@@ -5152,9 +5340,11 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "LUTA PERDIDA NO COVIL",
-          subtitle: `O CBLOL Virou a Luta (${prob}% chance)`,
-          text: `O adversário contra-atacou no covil e garantiu o Dragão ${dType}. O time teve que recuar sob dano na torre.`
+          title: soulRes.soulAwarded ? "⚠️ O ADVERSÁRIO GARANTIU A ALMA!" : "LUTA PERDIDA NO COVIL",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} do CBLOL (${prob}% chance)` : `O CBLOL Virou a Luta (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O adversário virou a luta no covil e garantiu a 4ª Alma (${soulRes.soulConfig.name})! O time rival obteve um poder mítico permanente.`
+            : `O adversário contra-atacou no covil e garantiu o Dragão ${dType}. O time teve que recuar sob dano na torre.`
         };
       }
     } else if (choiceId === "steal") {
@@ -5172,17 +5362,9 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 20);
-        this._applyTeamBuff("blue", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.blueScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.blueScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         const jName = this.blueRosterState[jRole].name;
         this.onEvent({
@@ -5196,23 +5378,17 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "ROUBO DO SÉCULO NO SMITE!",
-          subtitle: `Milagre do Caçador (${prob}% chance)`,
-          text: `Seu Caçador (${jName}) acertou o Golpear aos 80 de vida do monstro, garantiu o Dragão ${dType} e escapou pelo rio!`
+          title: soulRes.soulAwarded ? "👑 ROUBO HISTÓRICO DA ALMA DO DRAGÃO!" : "ROUBO DO SÉCULO NO SMITE!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Roubada (${prob}% chance)` : `Milagre do Caçador (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `INACREDITÁVEL! Seu Caçador (${jName}) cravou o Golpear e ROUBOU A ALMA DO DRAGÃO (${soulRes.soulConfig.name}) no último segundo das mãos do rival!`
+            : `Seu Caçador (${jName}) acertou o Golpear aos 80 de vida do monstro, garantiu o Dragão ${dType} e escapou pelo rio!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 20);
         this._damageNextStructure("red", this.blueStructures, 20, false, 1.0);
-        this._applyTeamBuff("red", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.redScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.redScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         if (jAlive) {
           this._recordKill("red", "blue", redAliveRoles[0] || "mid", jRole, "Smite Falho", `🔴 O Caçador tentou o roubo mas foi executado no covil!`);
@@ -5229,9 +5405,11 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "TENTATIVA DE ROUBO FRUSTRADA",
-          subtitle: `O CBLOL Venceu o Smite (${prob}% chance)`,
-          text: `O Caçador rival cravou o Golpear milissegundos antes. Seu caçador foi cercado e abatido, e o adversário aproveitou a superioridade para atacar defesas.`
+          title: soulRes.soulAwarded ? "⚠️ O CBLOL ASSEGUROU A ALMA DO DRAGÃO" : "TENTATIVA DE ROUBO FRUSTRADA",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Conquistada (${prob}% chance)` : `O CBLOL Venceu o Smite (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O Caçador rival cravou o Golpear e selou a 4ª Alma (${soulRes.soulConfig.name})! O caçador aliado foi cercado e abatido.`
+            : `O Caçador rival cravou o Golpear milissegundos antes. Seu caçador foi cercado e abatido, e o adversário aproveitou a superioridade para atacar defesas.`
         };
       }
     } else if (choiceId === "flank") {
@@ -5246,7 +5424,7 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", (150 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 30);
 
@@ -5269,12 +5447,14 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "FLANCO CIRÚRGICO & DRAGÃO!",
-          subtitle: `Jogada de Mestre (${prob}% chance)`,
-          text: `O flanqueador contornou a visão inimiga, eliminou o Atirador rival no primeiro segundo e garantiu o Dragão ${dType} sem contestação!`
+          title: soulRes.soulAwarded ? "👑 FLANCO CIRÚRGICO & ALMA DO DRAGÃO!" : "FLANCO CIRÚRGICO & DRAGÃO!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Conquistada (${prob}% chance)` : `Jogada de Mestre (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O flanco deletou a retaguarda inimiga e assegurou o 4º Dragão! A ${soulRes.soulConfig.name} agora está ativa permanentemente!`
+            : `O flanqueador contornou a visão inimiga, eliminou o Atirador rival no primeiro segundo e garantiu o Dragão ${dType} sem contestação!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 25);
         this._damageNextStructure("red", this.blueStructures, 25, false, 1.1);
@@ -5287,9 +5467,11 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "FLANCO REVELADO PELA VISÃO",
-          subtitle: `Sentinela Inimiga Efetiva (${prob}% chance)`,
-          text: `Uma sentinela de controle revelou o trajeto do flanco. O CBLOL colapsou sobre o flanqueador, garantiu o Dragão ${dType} e danificou sua torre.`
+          title: soulRes.soulAwarded ? "⚠️ O CBLOL ASSEGUROU A ALMA DO DRAGÃO" : "FLANCO REVELADO PELA VISÃO",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} para o Inimigo (${prob}% chance)` : `Sentinela Inimiga Efetiva (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O flanco foi interceptado, o CBLOL assegurou o 4º Dragão e conquistou a ${soulRes.soulConfig.name}!`
+            : `Uma sentinela de controle revelou o trajeto do flanco. O CBLOL colapsou sobre o flanqueador, garantiu o Dragão ${dType} e danificou sua torre.`
         };
       }
     } else if (choiceId === "dragon_rush") {
@@ -5304,17 +5486,9 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", (200 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 30);
-        this._applyTeamBuff("blue", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.blueScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.blueScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         this.onEvent({
           type: "dragon",
@@ -5327,12 +5501,14 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "DRAGÃO GARANTIDO COM MAESTRIA!",
-          subtitle: `Rush Veloz (${prob}% chance)`,
-          text: `Com controle absoluto do mapa, seu time queimou o Dragão ${dType} em segundos sem dar qualquer chance de resposta ao CBLOL!`
+          title: soulRes.soulAwarded ? "👑 RUSH MORTAL & ALMA DO DRAGÃO!" : "DRAGÃO GARANTIDO COM MAESTRIA!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Desbloqueada (${prob}% chance)` : `Rush Veloz (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `Rush impiedoso! Seu time pulverizou o monstro, garantiu o 4º Dragão e selou a ${soulRes.soulConfig.name}!`
+            : `Com controle absoluto do mapa, seu time queimou o Dragão ${dType} em segundos sem dar qualquer chance de resposta ao CBLOL!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 15);
         this._damageNextStructure("red", this.blueStructures, 15, false, 1.0);
@@ -5340,9 +5516,11 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "HESITAÇÃO NO DRAGÃO",
-          subtitle: `CBLOL Chegou a Tempo (${prob}% chance)`,
-          text: `O rush demorou mais que o esperado. O CBLOL contestou o covil e garantiu o Dragão ${dType} enquanto seu time recuava.`
+          title: soulRes.soulAwarded ? "⚠️ CBLOL CONQUISTOU A ALMA NO RUSH" : "HESITAÇÃO NO DRAGÃO",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Inimiga (${prob}% chance)` : `CBLOL Chegou a Tempo (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O rush atrasou e o adversário aproveitou para contestar e selar a 4ª Alma (${soulRes.soulConfig.name})!`
+            : `O rush demorou mais que o esperado. O CBLOL contestou o covil e garantiu o Dragão ${dType} enquanto seu time recuava.`
         };
       }
     } else if (choiceId === "dragon_bait") {
@@ -5351,17 +5529,9 @@ export class MatchSimulator {
         if (redAliveRoles.length >= 2) {
           this._recordKill("blue", "red", blueAliveRoles[1] || "adc", redAliveRoles[1], "Foco Cirúrgico");
         }
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", 300);
         this.lanePressure = Math.min(100, this.lanePressure + 40);
-        this._applyTeamBuff("blue", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.blueScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.blueScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         this.onEvent({
           type: "dragon",
@@ -5374,36 +5544,32 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "BAIT EXECUTADO COM PERFEIÇÃO!",
-          subtitle: `Wipe no Rio (${prob}% chance)`,
-          text: `Seu time fingiu fazer o Dragão e virou com força total nos defensores rivais desavisados! Abates limpos e Dragão ${dType} garantido!`
+          title: soulRes.soulAwarded ? "👑 BAIT PERFEITO & ALMA DO DRAGÃO!" : "BAIT EXECUTADO COM PERFEIÇÃO!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Conquistada (${prob}% chance)` : `Wipe no Rio (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `Isca lendária! Seu time destruiu os adversários no rio e garantiu o 4º Dragão (${soulRes.soulConfig.name})!`
+            : `Seu time fingiu fazer o Dragão e virou com força total nos defensores rivais desavisados! Abates limpos e Dragão ${dType} garantido!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 20);
         return {
           success: false,
           roll,
           probability: prob,
-          title: "BAIT IGNORADO",
-          subtitle: `CBLOL Não Caiu na Isca (${prob}% chance)`,
-          text: `O adversário preferiu não contestar o covil diretamente e garantiu tempo para reverter a pressão de rotas.`
+          title: soulRes.soulAwarded ? "⚠️ CBLOL GARANTIU A ALMA DO DRAGÃO" : "BAIT IGNORADO",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Inimiga (${prob}% chance)` : `CBLOL Não Caiu na Isca (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O rival contornou a isca, assegurou o monstro e finalizou a 4ª Alma (${soulRes.soulConfig.name})!`
+            : `O adversário preferiu não contestar o covil diretamente e garantiu tempo para reverter a pressão de rotas.`
         };
       }
     } else if (choiceId === "dragon_zone") {
       if (isSuccess) {
-        this.blueScore.dragons++;
+        const soulRes = this._secureDragon("blue", dType);
         this._awardTeamGold("blue", 200);
         this.lanePressure = Math.min(100, this.lanePressure + 20);
-        this._applyTeamBuff("blue", {
-          id: "dragon_buff",
-          name: `Alma Elemental (${this.blueScore.dragons}x)`,
-          icon: "🐉",
-          bonusCombat: this.blueScore.dragons * 5,
-          bonusSiege: 0.08,
-          duration: null
-        });
 
         this.onEvent({
           type: "dragon",
@@ -5416,12 +5582,14 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "CONTROLE DE RIO & DRAGÃO!",
-          subtitle: `Zoneamento Metódico (${prob}% chance)`,
-          text: `Com sentinelas e controle de terreno perfeito, sua equipe expulsou os inimigos do rio e pegou o Dragão ${dType} com segurança total!`
+          title: soulRes.soulAwarded ? "👑 ZONEAMENTO & ALMA DO DRAGÃO!" : "CONTROLE DE RIO & DRAGÃO!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Desbloqueada (${prob}% chance)` : `Zoneamento Metódico (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `Controle magistral de terreno! Seu time bloqueou todo o rio e selou o 4º Dragão (${soulRes.soulConfig.name})!`
+            : `Com sentinelas e controle de terreno perfeito, sua equipe expulsou os inimigos do rio e pegou o Dragão ${dType} com segurança total!`
         };
       } else {
-        this.redScore.dragons++;
+        const soulRes = this._secureDragon("red", dType);
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 20);
         this._damageNextStructure("red", this.blueStructures, 20, false, 1.0);
@@ -5429,13 +5597,16 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "ZONEAMENTO QUEBRADO",
-          subtitle: `Invasão Rival (${prob}% chance)`,
-          text: `O CBLOL avançou com habilidades de longa distância, desfez o bloqueio do rio e roubou o Dragão ${dType}.`
+          title: soulRes.soulAwarded ? "⚠️ CBLOL QUEBROU O BLOQUEIO E LEVOU A ALMA" : "ZONEAMENTO QUEBRADO",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} do CBLOL (${prob}% chance)` : `Invasão Rival (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O CBLOL quebrou a linha de visão e roubou a 4ª Alma (${soulRes.soulConfig.name})!`
+            : `O CBLOL avançou com habilidades de longa distância, desfez o bloqueio do rio e roubou o Dragão ${dType}.`
         };
       }
     } else {
       // cross_trade
+      const soulRes = this._secureDragon("red", dType);
       if (isSuccess) {
         let bountyGold = 0;
         if (this.objectiveBountiesActive) {
@@ -5447,7 +5618,6 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.redScore.dragons++;
         this._awardTeamGold("red", 150);
         this._awardTeamGold("blue", (600 + bountyGold));
         this.lanePressure = Math.min(100, this.lanePressure + 35);
@@ -5464,12 +5634,13 @@ export class MatchSimulator {
           success: true,
           roll,
           probability: prob,
-          title: "TROCA DE MAPA PERFEITA!",
-          subtitle: `Macro Seguro (${prob}% chance)`,
-          text: `Seu time ignorou o monstro neutro e puniu o adversário: derrubou defesas da rota oposta e conquistou ouro garantido sem sofrer baixas!`
+          title: soulRes.soulAwarded ? "⚠️ TROCA DE MAPA (CBLOL GARANTIU A ALMA)" : "TROCA DE MAPA PERFEITA!",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Conquistada pelo Rival (${prob}% chance)` : `Macro Seguro (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `Seu time derrubou estruturas no mapa oposto (+600g), mas o adversário assegurou o 4º Dragão e ativou a ${soulRes.soulConfig.name}!`
+            : `Seu time ignorou o monstro neutro e puniu o adversário: derrubou defesas da rota oposta e conquistou ouro garantido sem sofrer baixas!`
         };
       } else {
-        this.redScore.dragons++;
         this._awardTeamGold("red", 150);
         this.lanePressure = Math.max(-100, this.lanePressure - 25);
         this._damageNextStructure("red", this.blueStructures, 25, false, 1.0);
@@ -5477,9 +5648,11 @@ export class MatchSimulator {
           success: false,
           roll,
           probability: prob,
-          title: "TROCA FALHA NO MAPA",
-          subtitle: `Defesa Rápida do CBLOL (${prob}% chance)`,
-          text: `O CBLOL pegou o Dragão ${dType} com velocidade extrema, recuou a tempo de defender as barricadas e ainda contra-atacou sua rota (+450g pro rival).`
+          title: soulRes.soulAwarded ? "⚠️ TROCA FALHA & ALMA PARA O CBLOL" : "TROCA FALHA NO MAPA",
+          subtitle: soulRes.soulAwarded ? `${soulRes.soulConfig.name} Inimiga (${prob}% chance)` : `Defesa Rápida do CBLOL (${prob}% chance)`,
+          text: soulRes.soulAwarded
+            ? `O adversário assegurou a 4ª Alma (${soulRes.soulConfig.name}) com velocidade e ainda defendeu as defesas opostas!`
+            : `O CBLOL pegou o Dragão ${dType} com velocidade extrema, recuou a tempo de defender as barricadas e ainda contra-atacou sua rota (+450g pro rival).`
         };
       }
     }
@@ -5863,29 +6036,14 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._secureElder("blue");
         this._awardTeamGold("blue", (600 + bountyGold));
         this.lanePressure = 100;
-        this._applyTeamBuff("blue", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
 
         redAliveRoles.slice(0, 2).forEach((r, idx) => {
           this._recordKill("blue", "red", blueAliveRoles[idx % blueAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
         });
         this._damageNextStructure("blue", this.redStructures, 100, false, 2.5);
-
-        this.onEvent({
-          type: "elder",
-          side: "blue",
-          text: `🔥 RUSH DE ANCIÃO COLOSSAL! O monstro foi derretido e seu time avança executando os rivais rumo ao Nexus!`,
-          time: this._formatTime()
-        });
 
         return {
           success: true,
@@ -5896,7 +6054,7 @@ export class MatchSimulator {
           text: "Sua equipe aproveitou a tremenda vantagem para exterminar o Dragão Ancião em segundos! O buff de execução garante o avanço final no Nexus!"
         };
       } else {
-        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._secureElder("red");
         this._awardTeamGold("red", 500);
         this.lanePressure = -80;
         this._damageNextStructure("red", this.blueStructures, 60, false, 2.0);
@@ -5911,23 +6069,9 @@ export class MatchSimulator {
       }
     } else if (choiceId === "elder_zone") {
       if (isSuccess) {
-        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._secureElder("blue");
         this._awardTeamGold("blue", 500);
         this.lanePressure = 100;
-        this._applyTeamBuff("blue", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
-        this.onEvent({
-          type: "elder",
-          side: "blue",
-          text: `🛡️ ZONEAMENTO MESTRE NO ANCIÃO! O adversário foi mantido longe do covil e o Dragão Ancião foi assegurado!`,
-          time: this._formatTime()
-        });
         return {
           success: true,
           roll,
@@ -5937,7 +6081,7 @@ export class MatchSimulator {
           text: "Sua equipe bloqueou as entradas do rio, não deixou o CBLOL se aproximar e finalizou o Dragão Ancião sem sofrer perdas!"
         };
       } else {
-        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._secureElder("red");
         this._awardTeamGold("red", 500);
         this.lanePressure = -80;
         return {
@@ -5961,17 +6105,9 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._secureElder("blue");
         this._awardTeamGold("blue", (500 + bountyGold));
         this.lanePressure = 100;
-        this._applyTeamBuff("blue", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
 
         redAliveRoles.slice(0, 3).forEach((r, idx) => {
           this._recordKill("blue", "red", blueAliveRoles[idx % blueAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
@@ -5986,17 +6122,9 @@ export class MatchSimulator {
           text: "O Aspecto do Dragão Ancião executou os campeões do CBLOL! Suas tropas avançam com fúria para destruir o Nexus!"
         };
       } else {
-        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._secureElder("red");
         this._awardTeamGold("red", 500);
         this.lanePressure = -100;
-        this._applyTeamBuff("red", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
 
         blueAliveRoles.slice(0, 3).forEach((r, idx) => {
           this._recordKill("red", "blue", redAliveRoles[idx % redAliveRoles.length] || "adc", r, "Execução do Dragão Ancião");
@@ -6025,17 +6153,9 @@ export class MatchSimulator {
             time: this._formatTime()
           });
         }
-        this.blueScore.elders = (this.blueScore.elders || 0) + 1;
+        this._secureElder("blue");
         this._awardTeamGold("blue", (400 + bountyGold));
         this.lanePressure = 100;
-        this._applyTeamBuff("blue", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
 
         if (redAliveRoles.length > 0) this._recordKill("blue", "red", jRole, redAliveRoles[0], "Execução do Ancião Roubado");
         return {
@@ -6047,18 +6167,10 @@ export class MatchSimulator {
           text: "O Caçador acertou o Smite lendário roubando o Dragão Ancião! Com o buff de execução, sua equipe vira o jogo na hora!"
         };
       } else {
-        this.redScore.elders = (this.redScore.elders || 0) + 1;
+        this._secureElder("red");
         this._awardTeamGold("red", 400);
         this.lanePressure = -100;
         this._damageNextStructure("red", this.blueStructures, 70, false, 2.0);
-        this._applyTeamBuff("red", {
-          id: "elder_buff",
-          name: "Aspecto do Ancião",
-          icon: "🔥",
-          bonusCombat: 35,
-          bonusSiege: 0.6,
-          duration: 150
-        });
 
         if (jAlive) this._recordKill("red", "blue", redAliveRoles[0] || "mid", jRole);
         return {
@@ -6425,9 +6537,8 @@ export class MatchSimulator {
 
     if (choiceId === "bot_sneak_dragon") {
       if (isSuccess) {
-        this.blueScore.dragons = (this.blueScore.dragons || 0) + 1;
+        const soulRes = this._secureDragon("blue", this._getUpcomingDragonType());
         this.nextDragonAt = this.gameSeconds + 300;
-        this._applyTeamBuff("blue", { id: "sneak_dragon_buff", name: "Bênção Dracônica", icon: "🐲", bonusCombat: 8, duration: 200 });
         this._awardTeamGold("blue", 300);
         this.onEvent({
           type: "dragon_killed",
@@ -7892,14 +8003,32 @@ export class MatchSimulator {
 
     if (!victim || !victim.alive) return false;
 
-    // Checagem de Flash Defensivo para escapar da morte (40% de chance se Flash estiver pronto)
+    // 1. Checagem de Execução Absoluta pelo Dragão Ancião (Aspect of the Dragon)
+    const winnerHasElder = this._getActiveBuffs(winnerSide).some(b => b.id === "elder_buff");
+    if (winnerHasElder) {
+      const executeText = `⚡☠️ EXECUÇÃO DO DRAGÃO ANCIÃO! ${killer ? killer.name : 'Campeão'} desferiu dano e o Raio Cósmico do Dragão Ancião executou ${victim.name} instantaneamente (< 20% Vida)!`;
+      this.onEvent({
+        type: "elder_execute",
+        side: winnerSide,
+        icon: "⚡☠️",
+        text: executeText,
+        time: this._formatTime()
+      });
+      this._recordKill(winnerSide, victimSide, killerRole, victimRole, "Execução do Dragão Ancião", executeText);
+      return true;
+    }
+
+    // 2. Checagem de Flash Defensivo para escapar da morte (40% de chance se Flash estiver pronto)
     const hasFlash = victim.spells && victim.spells.d && this.gameSeconds >= (victim.spells.d.cdUntil || 0);
     if (hasFlash && Math.random() < 0.40) {
       this._useFlash(victim, victimSide, "escape");
-      victim.hpPct = 18;
+
+      // Alma do Oceano acelera regeneração de vida após trocas
+      const victimHasOcean = this._getActiveBuffs(victimSide).some(b => b.id === "dragon_soul_ocean");
+      victim.hpPct = victimHasOcean ? 45 : 18;
       victim.recallState = "channeling";
       victim.recallEndsAt = this.gameSeconds + 8;
-      victim.travelingBackUntil = this.gameSeconds + 22;
+      victim.travelingBackUntil = this.gameSeconds + (victimHasOcean ? 15 : 22);
 
       // Recompensa tática por forçar o feitiço (+100g e pressão)
       const winnerScore = winnerSide === "blue" ? this.blueScore : this.redScore;
@@ -9659,6 +9788,10 @@ export class MatchSimulator {
         blue: this._getActiveBuffs("blue"),
         red: this._getActiveBuffs("red")
       },
+      dragonSoul: this.dragonSoulClaimed || null,
+      riftSoulElement: this.riftSoulElement || null,
+      dragonCycle: this.dragonCycle ? { ...this.dragonCycle } : null,
+      teamDragons: this.teamDragons || { blue: [], red: [] },
       blue: {
         name: this.blueTeam.name,
         iconUrl: this.blueTeam.iconUrl,
@@ -9668,6 +9801,9 @@ export class MatchSimulator {
         superMinionsByLane: { ...(this.blueSuperMinionsByLane || { top: false, mid: false, bot: false }) },
         hasBaron: this.gameSeconds < this.blueBaronUntil,
         buffs: this._getActiveBuffs("blue"),
+        dragonSoul: (this.dragonSoulClaimed && this.dragonSoulClaimed.side === "blue") ? this.dragonSoulClaimed : null,
+        dragonsList: (this.teamDragons && this.teamDragons.blue) ? [...this.teamDragons.blue] : [],
+        hasElder: this._getActiveBuffs("blue").some(b => b.id === "elder_buff"),
         roster: this.blueRosterState,
         mvpRole: this.blueMvpRole
       },
@@ -9681,6 +9817,9 @@ export class MatchSimulator {
         superMinionsByLane: { ...(this.redSuperMinionsByLane || { top: false, mid: false, bot: false }) },
         hasBaron: this.gameSeconds < this.redBaronUntil,
         buffs: this._getActiveBuffs("red"),
+        dragonSoul: (this.dragonSoulClaimed && this.dragonSoulClaimed.side === "red") ? this.dragonSoulClaimed : null,
+        dragonsList: (this.teamDragons && this.teamDragons.red) ? [...this.teamDragons.red] : [],
+        hasElder: this._getActiveBuffs("red").some(b => b.id === "elder_buff"),
         roster: this.redRosterState,
         mvpRole: this.redMvpRole
       }

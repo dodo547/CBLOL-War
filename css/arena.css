@@ -3091,6 +3091,91 @@
   color: #ff7688;
 }
 
+/* Estilos da Alma do Dragão e Aspecto do Ancião */
+.dragon-stat-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.soul-badge-slot {
+  display: inline-flex;
+  align-items: center;
+}
+
+.team-soul-badge {
+  font-size: 8.5px;
+  font-weight: 900;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  animation: soul-pulse 2s infinite ease-in-out;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.team-soul-badge.soul-infernal,
+.active-buff-pill.soul-infernal {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(245, 158, 11, 0.45)) !important;
+  border: 1px solid #ef4444 !important;
+  color: #fca5a5 !important;
+  text-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
+.team-soul-badge.soul-mountain,
+.active-buff-pill.soul-mountain {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.45)) !important;
+  border: 1px solid #d97706 !important;
+  color: #fcd34d !important;
+  text-shadow: 0 0 6px rgba(217, 119, 6, 0.8);
+}
+
+.team-soul-badge.soul-ocean,
+.active-buff-pill.soul-ocean {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(6, 182, 212, 0.45)) !important;
+  border: 1px solid #0ea5e9 !important;
+  color: #7dd3fc !important;
+  text-shadow: 0 0 6px rgba(14, 165, 233, 0.8);
+}
+
+.team-soul-badge.soul-cloud,
+.active-buff-pill.soul-cloud {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(192, 132, 252, 0.45)) !important;
+  border: 1px solid #a855f7 !important;
+  color: #e9d5ff !important;
+  text-shadow: 0 0 6px rgba(168, 85, 247, 0.8);
+}
+
+.team-soul-badge.soul-hextech,
+.active-buff-pill.soul-hextech {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(234, 179, 8, 0.45)) !important;
+  border: 1px solid #3b82f6 !important;
+  color: #93c5fd !important;
+  text-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+}
+
+.active-buff-pill.elder-dragon-buff {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(185, 28, 28, 0.6)) !important;
+  border: 1px solid #f87171 !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.8);
+  animation: elder-burn 1.5s infinite alternate;
+}
+
+@keyframes soul-pulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.06); filter: brightness(1.25); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes elder-burn {
+  0% { box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
+  100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.95); }
+}
+
 @media (max-width: 768px) {
   .decision-status-row {
     grid-template-columns: 1fr;

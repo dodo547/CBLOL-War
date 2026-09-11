@@ -33,7 +33,10 @@ export class ArenaView {
               <div class="scoreboard-name" style="color: var(--lol-blue-team);">${state.blue.name} (Você)</div>
               <div class="scoreboard-stats">
                 <span>💰 <strong id="blue-gold">${state.blue.score.gold}</strong></span>
-                <span>🐲 <strong id="blue-dragons">${state.blue.score.dragons}</strong></span>
+                <span class="dragon-stat-container">
+                  <span>🐲 <strong id="blue-dragons">${state.blue.score.dragons}</strong></span>
+                  <span id="blue-soul-badge" class="soul-badge-slot"></span>
+                </span>
                 <span>👑 <strong id="blue-barons">${state.blue.score.barons}</strong></span>
               </div>
               <div class="team-active-buffs-bar" id="blue-active-buffs"></div>
@@ -59,7 +62,10 @@ export class ArenaView {
               <div class="scoreboard-name" style="color: var(--lol-red-team);">${state.red.name}</div>
               <div class="scoreboard-stats">
                 <span>💰 <strong id="red-gold">${state.red.score.gold}</strong></span>
-                <span>🐲 <strong id="red-dragons">${state.red.score.dragons}</strong></span>
+                <span class="dragon-stat-container">
+                  <span>🐲 <strong id="red-dragons">${state.red.score.dragons}</strong></span>
+                  <span id="red-soul-badge" class="soul-badge-slot"></span>
+                </span>
                 <span>👑 <strong id="red-barons">${state.red.score.barons}</strong></span>
               </div>
               <div class="team-active-buffs-bar" id="red-active-buffs"></div>
@@ -856,6 +862,25 @@ export class ArenaView {
     if (blueDragons) blueDragons.textContent = state.blue.score.dragons;
     if (redDragons) redDragons.textContent = state.red.score.dragons;
 
+    const blueSoulBadge = this.containerEl.querySelector("#blue-soul-badge");
+    const redSoulBadge = this.containerEl.querySelector("#red-soul-badge");
+    if (blueSoulBadge) {
+      if (state.blue.dragonSoul) {
+        const soul = state.blue.dragonSoul;
+        blueSoulBadge.innerHTML = `<span class="team-soul-badge soul-${soul.key || 'infernal'}" title="${soul.element || 'Alma do Dragão'}: Poder ancestral ativo!">${soul.icon || '🔥'} ALMA</span>`;
+      } else {
+        blueSoulBadge.innerHTML = "";
+      }
+    }
+    if (redSoulBadge) {
+      if (state.red.dragonSoul) {
+        const soul = state.red.dragonSoul;
+        redSoulBadge.innerHTML = `<span class="team-soul-badge soul-${soul.key || 'infernal'}" title="${soul.element || 'Alma do Dragão'}: Poder ancestral ativo!">${soul.icon || '🔥'} ALMA</span>`;
+      } else {
+        redSoulBadge.innerHTML = "";
+      }
+    }
+
     const blueBarons = this.containerEl.querySelector("#blue-barons");
     const redBarons = this.containerEl.querySelector("#red-barons");
     if (blueBarons) blueBarons.textContent = state.blue.score.barons;
@@ -1068,9 +1093,15 @@ export class ArenaView {
         if (b.bonusCombat) desc.push(`+${b.bonusCombat} Dano`);
         if (b.bonusSiege) desc.push(`+${Math.round(b.bonusSiege * 100)}% Torres`);
         if (b.bonusDefense) desc.push(`-${b.bonusDefense}% Dano Sofh.`);
+        if (b.hasElderExecute) desc.push(`⚡ Executa alvos <20% HP`);
+        if (b.hasOceanRegen) desc.push(`🌊 Regeneração Contínua`);
         const tooltip = desc.length > 0 ? desc.join(", ") : "Efeito Tático Ativo";
 
-        return `<span class="active-buff-pill ${side}" title="${b.name}: ${tooltip}">${b.icon || '⚡'} ${b.name}${remainingText}</span>`;
+        const isSoul = b.id && (b.id.startsWith("dragon_soul") || b.id === "dragon_soul");
+        const isElder = b.id === "elder_buff";
+        const extraClass = isSoul ? `dragon-soul-buff soul-${b.soulKey || 'infernal'}` : (isElder ? 'elder-dragon-buff' : '');
+
+        return `<span class="active-buff-pill ${side} ${extraClass}" title="${b.name}: ${tooltip}">${b.icon || '⚡'} ${b.name}${remainingText}</span>`;
       }).join("");
     };
 
@@ -2537,10 +2568,19 @@ export class ArenaView {
       pit.addEventListener("mouseenter", (e) => {
         this._hoveredStructNode = null;
         const isBaron = pit.dataset.pit === "baron";
-        const title = isBaron ? "👾 Covil do Barão Na'Shor" : "🐲 Covil do Dragão Elemental";
-        const loc = isBaron ? "Parte Superior do Rio (Top River)" : "Parte Inferior do Rio (Bot River)";
-        const desc = isBaron ? "Buff Mão do Barão: Super Cerco, bônus adaptativo e fortalecimento de tropas." : "Buff Elemental: Bônus cumulativo de dano, armadura ou regeneração.";
-        const spawn = isBaron ? "Surge aos 20:00 (Respawn 6 min)" : "Surge aos 05:00 (Respawn 5 min)";
+        const hasSoul = Boolean(this.lastState && this.lastState.dragonSoul);
+        const riftSoul = (this.lastState && this.lastState.riftSoulElement) || "A Definir";
+
+        let title = isBaron ? "👾 Covil do Barão Na'Shor" : (hasSoul ? "⚡ Covil do Dragão Ancião (Elder Dragon)" : "🐲 Covil do Dragão Elemental");
+        let loc = isBaron ? "Parte Superior do Rio (Top River)" : "Parte Inferior do Rio (Bot River)";
+        let desc = isBaron
+          ? "Buff Mão do Barão: Super Cerco, bônus adaptativo e fortalecimento de tropas."
+          : (hasSoul
+              ? "Aspecto do Ancião: Execução instantânea de oponentes com <20% de Vida e queimadura ardente cósmica!"
+              : `Buff Elemental: Alma em disputa [${riftSoul}]. A 4ª conquista garante a Alma definitiva!`);
+        let spawn = isBaron
+          ? "Surge aos 20:00 (Respawn 6 min)"
+          : (hasSoul ? "Surge 6 min após a Alma do Dragão (Respawn 6 min)" : "Surge aos 05:00 (Respawn 5 min)");
 
         tooltip.innerHTML = `
           <div class="tip-header">
