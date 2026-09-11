@@ -108,12 +108,22 @@ export class MatchSimulator {
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
     this.objectiveBountiesActive = false;
 
+    // Sistema de Visão, Sentinelas e Névoa de Guerra (Fog of War)
+    this.wards = [];
+    this.nextWardDropAt = 75; // Primeiras sentinelas aos 01:15
+    this.blueVisionSources = [];
+    this.lastEnemySightings = {};
+
     // Estados dos campeões e pro players
-    this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam);
-    this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam);
+    this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam, "blue");
+    this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam, "red");
 
     this._initLaneMatchups();
     this._updateRedJungleCampTarget(true);
+
+    // Inicializa posições no mapa e cálculo de visão inicial
+    this._updateChampionPositions();
+    this._calculateVisionAndVisibility();
 
     this._normalizeTeamStats();
   }
@@ -474,7 +484,7 @@ export class MatchSimulator {
     }
   }
 
-  _initRosterState(roster, team = null) {
+  _initRosterState(roster, team = null, side = "blue") {
     const state = {};
     const roles = ["top", "jungle", "mid", "adc", "support"];
     const safeRoster = roster || {};
@@ -501,6 +511,7 @@ export class MatchSimulator {
       state[r] = {
         id: champ ? champ.id : (typeof rawChamp === "object" ? (rawChamp.id || "champ") : String(rawChamp)),
         role: r,
+        side: side,
         name: champResolvedName,
         proPlayer: proPlayer || null,
         playerNick: proPlayer ? proPlayer.nick : null,
@@ -521,7 +532,15 @@ export class MatchSimulator {
         turrets: 0,
         alive: true,
         respawnAt: 0,
-        items: startingItems // Itens equipados (até 6 slots)
+        items: startingItems, // Itens equipados (até 6 slots)
+        hpPct: 100,
+        x: side === "blue" ? 188 : 812,
+        y: side === "blue" ? 630 : 116,
+        targetX: side === "blue" ? 188 : 812,
+        targetY: side === "blue" ? 630 : 116,
+        isVisibleToBlue: side === "blue",
+        lastSeen: null,
+        statusText: "Na Base"
       };
     });
     return state;
@@ -966,6 +985,11 @@ export class MatchSimulator {
 
     // Rola simulação de pressão de rota e combate tático
     this._resolveCombatRound();
+
+    // Atualiza sentinelas/trinkets, posições orgânicas dos campeões e cálculo de névoa de guerra
+    this._updateWards();
+    this._updateChampionPositions();
+    this._calculateVisionAndVisibility();
 
     this.onTick(this.getState());
     this._checkGameEnd();
@@ -7818,6 +7842,431 @@ export class MatchSimulator {
     };
   }
 
+  _getLaneClashCoords(lane) {
+    const LANE_WAYPOINTS = {
+      top: [
+        { x: 154, y: 464 }, // blue_t3
+        { x: 198, y: 389 }, // blue_t2
+        { x: 216, y: 208 }, // blue_t1
+        { x: 268, y: 136 }, // river
+        { x: 338, y: 84 },  // red_t1
+        { x: 525, y: 116 }, // red_t2
+        { x: 660, y: 92 }   // red_t3
+      ],
+      mid: [
+        { x: 322, y: 524 }, // blue_t3
+        { x: 398, y: 460 }, // blue_t2
+        { x: 430, y: 395 }, // blue_t1
+        { x: 514, y: 344 }, // river
+        { x: 597, y: 292 }, // red_t1
+        { x: 626, y: 240 }, // red_t2
+        { x: 692, y: 190 }  // red_t3
+      ],
+      bot: [
+        { x: 356, y: 654 }, // blue_t3
+        { x: 484, y: 636 }, // blue_t2
+        { x: 690, y: 656 }, // blue_t1
+        { x: 814, y: 610 }, // river / alcove curve
+        { x: 864, y: 484 }, // red_t1
+        { x: 804, y: 328 }, // red_t2
+        { x: 836, y: 222 }  // red_t3
+      ]
+    };
+
+    const waypoints = LANE_WAYPOINTS[lane] || LANE_WAYPOINTS.mid;
+    const isAlive = (structures, structId) => {
+      if (!structures || !Array.isArray(structures)) return true;
+      const s = structures.find(st => st.id === structId);
+      return s ? !s.destroyed : true;
+    };
+
+    const blueT1Alive = isAlive(this.blueStructures, `${lane}_t1`);
+    const blueT2Alive = isAlive(this.blueStructures, `${lane}_t2`);
+    const blueT3Alive = isAlive(this.blueStructures, `${lane}_t3`);
+
+    const redT1Alive = isAlive(this.redStructures, `${lane}_t1`);
+    const redT2Alive = isAlive(this.redStructures, `${lane}_t2`);
+    const redT3Alive = isAlive(this.redStructures, `${lane}_t3`);
+
+    let maxIdx = redT1Alive ? 3.85 : (redT2Alive ? 4.85 : (redT3Alive ? 5.85 : 6.0));
+    let minIdx = blueT1Alive ? 2.15 : (blueT2Alive ? 1.15 : (blueT3Alive ? 0.15 : 0.0));
+
+    const p = Math.max(-100, Math.min(100, (this.lanePressures && this.lanePressures[lane]) || 0));
+    const centerIdx = 3.0;
+
+    let pos = centerIdx;
+    if (p >= 0) {
+      pos = centerIdx + (p / 100) * (maxIdx - centerIdx);
+    } else {
+      pos = centerIdx - (-p / 100) * (centerIdx - minIdx);
+    }
+
+    if (lane === "bot" && pos >= 2.0 && pos <= 4.0) {
+      const t = (pos - 2.0) / 2.0;
+      const x = (1 - t) * (1 - t) * 690 + 2 * (1 - t) * t * 850 + t * t * 864;
+      const y = (1 - t) * (1 - t) * 656 + 2 * (1 - t) * t * 650 + t * t * 484;
+      return { x: Math.round(x), y: Math.round(y) };
+    }
+
+    const baseIdx = Math.max(0, Math.min(waypoints.length - 2, Math.floor(pos)));
+    const frac = Math.max(0, Math.min(1, pos - baseIdx));
+    const pA = waypoints[baseIdx];
+    const pB = waypoints[baseIdx + 1];
+
+    return {
+      x: Math.round(pA.x + (pB.x - pA.x) * frac),
+      y: Math.round(pA.y + (pB.y - pA.y) * frac)
+    };
+  }
+
+  _updateWards() {
+    this.wards = (this.wards || []).filter(w => w.expiresAt > this.gameSeconds);
+
+    if (this.gameSeconds >= this.nextWardDropAt) {
+      this.nextWardDropAt = this.gameSeconds + 60 + Math.floor(Math.random() * 30);
+
+      const blueWardSpots = [
+        { name: "Arbusto Rio Top", x: 260, y: 190 },
+        { name: "Entrada do Barão", x: 380, y: 260 },
+        { name: "Entrada do Dragão", x: 610, y: 470 },
+        { name: "Arbusto Rio Bot", x: 750, y: 530 },
+        { name: "Tribush Inferior", x: 790, y: 630 },
+        { name: "Entrada Blue Inimigo", x: 420, y: 320 },
+        { name: "Pixel Mid Rio", x: 550, y: 380 }
+      ];
+
+      const redWardSpots = [
+        { name: "Arbusto Rio Top Red", x: 320, y: 150 },
+        { name: "Entrada Dragão Red", x: 670, y: 530 },
+        { name: "Entrada Barão Red", x: 390, y: 200 },
+        { name: "Arbusto Rio Bot Red", x: 810, y: 490 }
+      ];
+
+      const blueAliveSupOrJg = (this.blueRosterState?.support?.alive) || (this.blueRosterState?.jungle?.alive);
+      if (blueAliveSupOrJg && Math.random() < 0.85) {
+        const availableSpots = blueWardSpots.filter(s => !this.wards.some(w => w.team === "blue" && Math.hypot(w.x - s.x, w.y - s.y) < 50));
+        if (availableSpots.length > 0) {
+          const spot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
+          const isControl = Math.random() < 0.25;
+          this.wards.push({
+            id: `ward_blue_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            team: "blue",
+            name: spot.name,
+            x: spot.x,
+            y: spot.y,
+            type: isControl ? "pink" : "yellow",
+            expiresAt: this.gameSeconds + (isControl ? 240 : 120),
+            hp: isControl ? 4 : 3,
+            range: isControl ? 110 : 95
+          });
+        }
+      }
+
+      if (Math.random() < 0.80) {
+        const availableRedSpots = redWardSpots.filter(s => !this.wards.some(w => w.team === "red" && Math.hypot(w.x - s.x, w.y - s.y) < 50));
+        if (availableRedSpots.length > 0) {
+          const spot = availableRedSpots[Math.floor(Math.random() * availableRedSpots.length)];
+          const isControl = Math.random() < 0.25;
+          this.wards.push({
+            id: `ward_red_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            team: "red",
+            name: spot.name,
+            x: spot.x,
+            y: spot.y,
+            type: isControl ? "pink" : "yellow",
+            expiresAt: this.gameSeconds + (isControl ? 240 : 120),
+            hp: isControl ? 4 : 3,
+            range: isControl ? 110 : 95
+          });
+        }
+      }
+    }
+  }
+
+  _updateChampionPositions() {
+    if (!this.blueRosterState || !this.redRosterState) return;
+
+    const topClash = this._getLaneClashCoords("top");
+    const midClash = this._getLaneClashCoords("mid");
+    const botClash = this._getLaneClashCoords("bot");
+
+    const blueBase = { x: 188, y: 630 };
+    const redBase = { x: 812, y: 116 };
+
+    const isDragonSpawningOrContested = (this.gameSeconds >= 270 && this.gameSeconds % 300 >= 240);
+    const isBaronSpawningOrContested = (this.gameSeconds >= 1200 && (this.gameSeconds < this.blueBaronUntil || this.gameSeconds < this.redBaronUntil || this.gameSeconds % 360 >= 300));
+
+    const blueJgCamps = [
+      { name: "Blue Buff", x: 382, y: 520 },
+      { name: "Gromp", x: 210, y: 440 },
+      { name: "Lobos", x: 380, y: 440 },
+      { name: "Acuâminas", x: 440, y: 340 },
+      { name: "Red Buff", x: 500, y: 440 },
+      { name: "Aronguejo Bot", x: 680, y: 480 },
+      { name: "Aronguejo Top", x: 330, y: 200 }
+    ];
+
+    const redJgCamps = [
+      { name: "Red Buff", x: 460, y: 220 },
+      { name: "Acuâminas", x: 540, y: 260 },
+      { name: "Lobos", x: 640, y: 220 },
+      { name: "Blue Buff", x: 640, y: 150 },
+      { name: "Gromp", x: 750, y: 180 },
+      { name: "Aronguejo Top", x: 330, y: 200 },
+      { name: "Aronguejo Bot", x: 680, y: 480 }
+    ];
+
+    const updateBlueChamp = (c, role) => {
+      if (!c) return;
+      if (!c.alive) {
+        c.x = blueBase.x;
+        c.y = blueBase.y;
+        c.statusText = "Ressurgindo...";
+        c.hpPct = 0;
+        return;
+      }
+      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+        c.x = blueBase.x;
+        c.y = blueBase.y;
+        c.statusText = "Na Base (Compras)";
+        c.hpPct = 100;
+        return;
+      }
+
+      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+
+      let tx = blueBase.x, ty = blueBase.y, status = "Na Rota";
+
+      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+        tx = 380 + (Math.random() * 30 - 15);
+        ty = 250 + (Math.random() * 30 - 15);
+        status = "Contestando Barão Na'Shor";
+      } else if (isDragonSpawningOrContested && ["jungle", "adc", "support", "mid"].includes(role)) {
+        tx = 610 + (Math.random() * 30 - 15);
+        ty = 490 + (Math.random() * 30 - 15);
+        status = "Contestando Dragão";
+      } else if (role === "top") {
+        tx = topClash.x - 20;
+        ty = topClash.y + 14;
+        status = "Duelo no Topo";
+      } else if (role === "mid") {
+        tx = midClash.x - 16;
+        ty = midClash.y + 16;
+        status = "Controle do Meio";
+      } else if (role === "adc") {
+        tx = botClash.x - 14;
+        ty = botClash.y + 10;
+        status = "Farmando no Bot";
+      } else if (role === "support") {
+        tx = botClash.x - 24;
+        ty = botClash.y - 12;
+        status = "Proteção / Visão";
+      } else if (role === "jungle") {
+        if (this.blueJungleCampLane) {
+          const l = this.blueJungleCampLane;
+          const targetCoords = l === "top" ? { x: 270, y: 165 } : (l === "mid" ? { x: 480, y: 320 } : { x: 770, y: 580 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gankando a rota ${l.toUpperCase()}`;
+        } else {
+          const campIdx = Math.floor(this.gameSeconds / 30) % blueJgCamps.length;
+          const camp = blueJgCamps[campIdx];
+          tx = camp.x;
+          ty = camp.y;
+          status = `Farmando ${camp.name}`;
+        }
+      }
+
+      c.targetX = Math.round(tx);
+      c.targetY = Math.round(ty);
+      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
+      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+      c.statusText = status;
+    };
+
+    const updateRedChamp = (c, role) => {
+      if (!c) return;
+      if (!c.alive) {
+        c.x = redBase.x;
+        c.y = redBase.y;
+        c.statusText = "Ressurgindo...";
+        c.hpPct = 0;
+        return;
+      }
+      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+        c.x = redBase.x;
+        c.y = redBase.y;
+        c.statusText = "Na Base (Compras)";
+        c.hpPct = 100;
+        return;
+      }
+
+      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+
+      let tx = redBase.x, ty = redBase.y, status = "Na Rota";
+
+      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+        tx = 350 + (Math.random() * 30 - 15);
+        ty = 210 + (Math.random() * 30 - 15);
+        status = "Contestando Barão Na'Shor";
+      } else if (isDragonSpawningOrContested && ["jungle", "adc", "support", "mid"].includes(role)) {
+        tx = 660 + (Math.random() * 30 - 15);
+        ty = 530 + (Math.random() * 30 - 15);
+        status = "Contestando Dragão";
+      } else if (role === "top") {
+        tx = topClash.x + 20;
+        ty = topClash.y - 14;
+        status = "Duelo no Topo";
+      } else if (role === "mid") {
+        tx = midClash.x + 16;
+        ty = midClash.y - 16;
+        status = "Controle do Meio";
+      } else if (role === "adc") {
+        tx = botClash.x + 14;
+        ty = botClash.y - 10;
+        status = "Farmando no Bot";
+      } else if (role === "support") {
+        tx = botClash.x + 24;
+        ty = botClash.y + 12;
+        status = "Proteção / Visão";
+      } else if (role === "jungle") {
+        if (this.redJungleCampLane) {
+          const l = this.redJungleCampLane;
+          const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gankando a rota ${l.toUpperCase()}`;
+        } else {
+          const campIdx = Math.floor(this.gameSeconds / 30) % redJgCamps.length;
+          const camp = redJgCamps[campIdx];
+          tx = camp.x;
+          ty = camp.y;
+          status = `Farmando ${camp.name}`;
+        }
+      }
+
+      c.targetX = Math.round(tx);
+      c.targetY = Math.round(ty);
+      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
+      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+      c.statusText = status;
+    };
+
+    Object.keys(this.blueRosterState).forEach(r => updateBlueChamp(this.blueRosterState[r], r));
+    Object.keys(this.redRosterState).forEach(r => updateRedChamp(this.redRosterState[r], r));
+  }
+
+  _calculateVisionAndVisibility() {
+    if (!this.blueRosterState || !this.redRosterState) return;
+
+    const visionSources = [];
+
+    // Torres azuis de pé: visão verdadeira raio 135px
+    if (this.blueStructures && Array.isArray(this.blueStructures)) {
+      const coords = {
+        top_inhib: { x: 170, y: 528 },
+        top_t3: { x: 154, y: 464 },
+        top_t2: { x: 198, y: 389 },
+        top_t1: { x: 216, y: 208 },
+        mid_inhib: { x: 286, y: 560 },
+        mid_t3: { x: 322, y: 524 },
+        mid_t2: { x: 398, y: 460 },
+        mid_t1: { x: 430, y: 395 },
+        bot_inhib: { x: 298, y: 672 },
+        bot_t3: { x: 356, y: 654 },
+        bot_t2: { x: 484, y: 636 },
+        bot_t1: { x: 690, y: 656 },
+        nexus_t1: { x: 202, y: 582 },
+        nexus_t2: { x: 226, y: 612 },
+        nexus: { x: 188, y: 630 }
+      };
+      this.blueStructures.forEach(st => {
+        if (!st.destroyed && coords[st.id]) {
+          visionSources.push({
+            type: "tower",
+            id: st.id,
+            x: coords[st.id].x,
+            y: coords[st.id].y,
+            range: 135
+          });
+        }
+      });
+    }
+
+    // Base azul: raio 160px
+    visionSources.push({ type: "base", x: 188, y: 630, range: 160 });
+
+    // Campeões azuis vivos: raio 115px
+    Object.values(this.blueRosterState).forEach(c => {
+      if (c && c.alive) {
+        visionSources.push({
+          type: "champion",
+          role: c.role,
+          id: c.id,
+          x: c.x || 188,
+          y: c.y || 630,
+          range: 115
+        });
+      }
+    });
+
+    // Sentinelas azuis ativas: raio 95px ou 110px
+    (this.wards || []).forEach(w => {
+      if (w.team === "blue") {
+        visionSources.push({
+          type: "ward",
+          id: w.id,
+          x: w.x,
+          y: w.y,
+          range: w.range || 95
+        });
+      }
+    });
+
+    // Ondas de tropas azuis nas rotas: raio 80px
+    ["top", "mid", "bot"].forEach(l => {
+      const clash = this._getLaneClashCoords(l);
+      if (clash) {
+        visionSources.push({
+          type: "minions",
+          lane: l,
+          x: clash.x,
+          y: clash.y,
+          range: 80
+        });
+      }
+    });
+
+    this.blueVisionSources = visionSources;
+
+    // Calcula visibilidade para cada campeão vermelho
+    Object.values(this.redRosterState).forEach(rc => {
+      if (!rc) return;
+      if (!rc.alive) {
+        rc.isVisibleToBlue = false;
+        return;
+      }
+
+      const rx = rc.x || 812;
+      const ry = rc.y || 116;
+
+      let isSeen = false;
+      for (const vs of visionSources) {
+        const d = Math.hypot(rx - vs.x, ry - vs.y);
+        if (d <= vs.range) {
+          isSeen = true;
+          break;
+        }
+      }
+
+      rc.isVisibleToBlue = isSeen;
+      if (isSeen) {
+        rc.lastSeen = { x: rx, y: ry, time: this.gameSeconds };
+        this.lastEnemySightings[rc.role] = { x: rx, y: ry, time: this.gameSeconds, name: rc.name };
+      }
+    });
+  }
+
   _formatTime() {
     const mins = Math.floor(this.gameSeconds / 60);
     const secs = this.gameSeconds % 60;
@@ -7848,6 +8297,9 @@ export class MatchSimulator {
       counterAttackCooldown: this.counterAttackCooldown,
       objectiveBountiesActive: this.objectiveBountiesActive,
       isComebackMode: isBehind,
+      wards: this.wards || [],
+      visionSources: this.blueVisionSources || [],
+      lastEnemySightings: this.lastEnemySightings || {},
       activeBuffs: {
         blue: this._getActiveBuffs("blue"),
         red: this._getActiveBuffs("red")

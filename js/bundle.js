@@ -5208,12 +5208,22 @@ class MatchSimulator {
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
     this.objectiveBountiesActive = false;
 
+    // Sistema de Visão, Sentinelas e Névoa de Guerra (Fog of War)
+    this.wards = [];
+    this.nextWardDropAt = 75; // Primeiras sentinelas aos 01:15
+    this.blueVisionSources = [];
+    this.lastEnemySightings = {};
+
     // Estados dos campeões e pro players
-    this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam);
-    this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam);
+    this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam, "blue");
+    this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam, "red");
 
     this._initLaneMatchups();
     this._updateRedJungleCampTarget(true);
+
+    // Inicializa posições no mapa e cálculo de visão inicial
+    this._updateChampionPositions();
+    this._calculateVisionAndVisibility();
 
     this._normalizeTeamStats();
   }
@@ -5574,7 +5584,7 @@ class MatchSimulator {
     }
   }
 
-  _initRosterState(roster, team = null) {
+  _initRosterState(roster, team = null, side = "blue") {
     const state = {};
     const roles = ["top", "jungle", "mid", "adc", "support"];
     const safeRoster = roster || {};
@@ -5601,6 +5611,7 @@ class MatchSimulator {
       state[r] = {
         id: champ ? champ.id : (typeof rawChamp === "object" ? (rawChamp.id || "champ") : String(rawChamp)),
         role: r,
+        side: side,
         name: champResolvedName,
         proPlayer: proPlayer || null,
         playerNick: proPlayer ? proPlayer.nick : null,
@@ -5621,7 +5632,15 @@ class MatchSimulator {
         turrets: 0,
         alive: true,
         respawnAt: 0,
-        items: startingItems // Itens equipados (até 6 slots)
+        items: startingItems, // Itens equipados (até 6 slots)
+        hpPct: 100,
+        x: side === "blue" ? 188 : 812,
+        y: side === "blue" ? 630 : 116,
+        targetX: side === "blue" ? 188 : 812,
+        targetY: side === "blue" ? 630 : 116,
+        isVisibleToBlue: side === "blue",
+        lastSeen: null,
+        statusText: "Na Base"
       };
     });
     return state;
@@ -6066,6 +6085,11 @@ class MatchSimulator {
 
     // Rola simulação de pressão de rota e combate tático
     this._resolveCombatRound();
+
+    // Atualiza sentinelas/trinkets, posições orgânicas dos campeões e cálculo de névoa de guerra
+    this._updateWards();
+    this._updateChampionPositions();
+    this._calculateVisionAndVisibility();
 
     this.onTick(this.getState());
     this._checkGameEnd();
@@ -12918,6 +12942,431 @@ class MatchSimulator {
     };
   }
 
+  _getLaneClashCoords(lane) {
+    const LANE_WAYPOINTS = {
+      top: [
+        { x: 154, y: 464 }, // blue_t3
+        { x: 198, y: 389 }, // blue_t2
+        { x: 216, y: 208 }, // blue_t1
+        { x: 268, y: 136 }, // river
+        { x: 338, y: 84 },  // red_t1
+        { x: 525, y: 116 }, // red_t2
+        { x: 660, y: 92 }   // red_t3
+      ],
+      mid: [
+        { x: 322, y: 524 }, // blue_t3
+        { x: 398, y: 460 }, // blue_t2
+        { x: 430, y: 395 }, // blue_t1
+        { x: 514, y: 344 }, // river
+        { x: 597, y: 292 }, // red_t1
+        { x: 626, y: 240 }, // red_t2
+        { x: 692, y: 190 }  // red_t3
+      ],
+      bot: [
+        { x: 356, y: 654 }, // blue_t3
+        { x: 484, y: 636 }, // blue_t2
+        { x: 690, y: 656 }, // blue_t1
+        { x: 814, y: 610 }, // river / alcove curve
+        { x: 864, y: 484 }, // red_t1
+        { x: 804, y: 328 }, // red_t2
+        { x: 836, y: 222 }  // red_t3
+      ]
+    };
+
+    const waypoints = LANE_WAYPOINTS[lane] || LANE_WAYPOINTS.mid;
+    const isAlive = (structures, structId) => {
+      if (!structures || !Array.isArray(structures)) return true;
+      const s = structures.find(st => st.id === structId);
+      return s ? !s.destroyed : true;
+    };
+
+    const blueT1Alive = isAlive(this.blueStructures, `${lane}_t1`);
+    const blueT2Alive = isAlive(this.blueStructures, `${lane}_t2`);
+    const blueT3Alive = isAlive(this.blueStructures, `${lane}_t3`);
+
+    const redT1Alive = isAlive(this.redStructures, `${lane}_t1`);
+    const redT2Alive = isAlive(this.redStructures, `${lane}_t2`);
+    const redT3Alive = isAlive(this.redStructures, `${lane}_t3`);
+
+    let maxIdx = redT1Alive ? 3.85 : (redT2Alive ? 4.85 : (redT3Alive ? 5.85 : 6.0));
+    let minIdx = blueT1Alive ? 2.15 : (blueT2Alive ? 1.15 : (blueT3Alive ? 0.15 : 0.0));
+
+    const p = Math.max(-100, Math.min(100, (this.lanePressures && this.lanePressures[lane]) || 0));
+    const centerIdx = 3.0;
+
+    let pos = centerIdx;
+    if (p >= 0) {
+      pos = centerIdx + (p / 100) * (maxIdx - centerIdx);
+    } else {
+      pos = centerIdx - (-p / 100) * (centerIdx - minIdx);
+    }
+
+    if (lane === "bot" && pos >= 2.0 && pos <= 4.0) {
+      const t = (pos - 2.0) / 2.0;
+      const x = (1 - t) * (1 - t) * 690 + 2 * (1 - t) * t * 850 + t * t * 864;
+      const y = (1 - t) * (1 - t) * 656 + 2 * (1 - t) * t * 650 + t * t * 484;
+      return { x: Math.round(x), y: Math.round(y) };
+    }
+
+    const baseIdx = Math.max(0, Math.min(waypoints.length - 2, Math.floor(pos)));
+    const frac = Math.max(0, Math.min(1, pos - baseIdx));
+    const pA = waypoints[baseIdx];
+    const pB = waypoints[baseIdx + 1];
+
+    return {
+      x: Math.round(pA.x + (pB.x - pA.x) * frac),
+      y: Math.round(pA.y + (pB.y - pA.y) * frac)
+    };
+  }
+
+  _updateWards() {
+    this.wards = (this.wards || []).filter(w => w.expiresAt > this.gameSeconds);
+
+    if (this.gameSeconds >= this.nextWardDropAt) {
+      this.nextWardDropAt = this.gameSeconds + 60 + Math.floor(Math.random() * 30);
+
+      const blueWardSpots = [
+        { name: "Arbusto Rio Top", x: 260, y: 190 },
+        { name: "Entrada do Barão", x: 380, y: 260 },
+        { name: "Entrada do Dragão", x: 610, y: 470 },
+        { name: "Arbusto Rio Bot", x: 750, y: 530 },
+        { name: "Tribush Inferior", x: 790, y: 630 },
+        { name: "Entrada Blue Inimigo", x: 420, y: 320 },
+        { name: "Pixel Mid Rio", x: 550, y: 380 }
+      ];
+
+      const redWardSpots = [
+        { name: "Arbusto Rio Top Red", x: 320, y: 150 },
+        { name: "Entrada Dragão Red", x: 670, y: 530 },
+        { name: "Entrada Barão Red", x: 390, y: 200 },
+        { name: "Arbusto Rio Bot Red", x: 810, y: 490 }
+      ];
+
+      const blueAliveSupOrJg = (this.blueRosterState?.support?.alive) || (this.blueRosterState?.jungle?.alive);
+      if (blueAliveSupOrJg && Math.random() < 0.85) {
+        const availableSpots = blueWardSpots.filter(s => !this.wards.some(w => w.team === "blue" && Math.hypot(w.x - s.x, w.y - s.y) < 50));
+        if (availableSpots.length > 0) {
+          const spot = availableSpots[Math.floor(Math.random() * availableSpots.length)];
+          const isControl = Math.random() < 0.25;
+          this.wards.push({
+            id: `ward_blue_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            team: "blue",
+            name: spot.name,
+            x: spot.x,
+            y: spot.y,
+            type: isControl ? "pink" : "yellow",
+            expiresAt: this.gameSeconds + (isControl ? 240 : 120),
+            hp: isControl ? 4 : 3,
+            range: isControl ? 110 : 95
+          });
+        }
+      }
+
+      if (Math.random() < 0.80) {
+        const availableRedSpots = redWardSpots.filter(s => !this.wards.some(w => w.team === "red" && Math.hypot(w.x - s.x, w.y - s.y) < 50));
+        if (availableRedSpots.length > 0) {
+          const spot = availableRedSpots[Math.floor(Math.random() * availableRedSpots.length)];
+          const isControl = Math.random() < 0.25;
+          this.wards.push({
+            id: `ward_red_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            team: "red",
+            name: spot.name,
+            x: spot.x,
+            y: spot.y,
+            type: isControl ? "pink" : "yellow",
+            expiresAt: this.gameSeconds + (isControl ? 240 : 120),
+            hp: isControl ? 4 : 3,
+            range: isControl ? 110 : 95
+          });
+        }
+      }
+    }
+  }
+
+  _updateChampionPositions() {
+    if (!this.blueRosterState || !this.redRosterState) return;
+
+    const topClash = this._getLaneClashCoords("top");
+    const midClash = this._getLaneClashCoords("mid");
+    const botClash = this._getLaneClashCoords("bot");
+
+    const blueBase = { x: 188, y: 630 };
+    const redBase = { x: 812, y: 116 };
+
+    const isDragonSpawningOrContested = (this.gameSeconds >= 270 && this.gameSeconds % 300 >= 240);
+    const isBaronSpawningOrContested = (this.gameSeconds >= 1200 && (this.gameSeconds < this.blueBaronUntil || this.gameSeconds < this.redBaronUntil || this.gameSeconds % 360 >= 300));
+
+    const blueJgCamps = [
+      { name: "Blue Buff", x: 382, y: 520 },
+      { name: "Gromp", x: 210, y: 440 },
+      { name: "Lobos", x: 380, y: 440 },
+      { name: "Acuâminas", x: 440, y: 340 },
+      { name: "Red Buff", x: 500, y: 440 },
+      { name: "Aronguejo Bot", x: 680, y: 480 },
+      { name: "Aronguejo Top", x: 330, y: 200 }
+    ];
+
+    const redJgCamps = [
+      { name: "Red Buff", x: 460, y: 220 },
+      { name: "Acuâminas", x: 540, y: 260 },
+      { name: "Lobos", x: 640, y: 220 },
+      { name: "Blue Buff", x: 640, y: 150 },
+      { name: "Gromp", x: 750, y: 180 },
+      { name: "Aronguejo Top", x: 330, y: 200 },
+      { name: "Aronguejo Bot", x: 680, y: 480 }
+    ];
+
+    const updateBlueChamp = (c, role) => {
+      if (!c) return;
+      if (!c.alive) {
+        c.x = blueBase.x;
+        c.y = blueBase.y;
+        c.statusText = "Ressurgindo...";
+        c.hpPct = 0;
+        return;
+      }
+      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+        c.x = blueBase.x;
+        c.y = blueBase.y;
+        c.statusText = "Na Base (Compras)";
+        c.hpPct = 100;
+        return;
+      }
+
+      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+
+      let tx = blueBase.x, ty = blueBase.y, status = "Na Rota";
+
+      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+        tx = 380 + (Math.random() * 30 - 15);
+        ty = 250 + (Math.random() * 30 - 15);
+        status = "Contestando Barão Na'Shor";
+      } else if (isDragonSpawningOrContested && ["jungle", "adc", "support", "mid"].includes(role)) {
+        tx = 610 + (Math.random() * 30 - 15);
+        ty = 490 + (Math.random() * 30 - 15);
+        status = "Contestando Dragão";
+      } else if (role === "top") {
+        tx = topClash.x - 20;
+        ty = topClash.y + 14;
+        status = "Duelo no Topo";
+      } else if (role === "mid") {
+        tx = midClash.x - 16;
+        ty = midClash.y + 16;
+        status = "Controle do Meio";
+      } else if (role === "adc") {
+        tx = botClash.x - 14;
+        ty = botClash.y + 10;
+        status = "Farmando no Bot";
+      } else if (role === "support") {
+        tx = botClash.x - 24;
+        ty = botClash.y - 12;
+        status = "Proteção / Visão";
+      } else if (role === "jungle") {
+        if (this.blueJungleCampLane) {
+          const l = this.blueJungleCampLane;
+          const targetCoords = l === "top" ? { x: 270, y: 165 } : (l === "mid" ? { x: 480, y: 320 } : { x: 770, y: 580 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gankando a rota ${l.toUpperCase()}`;
+        } else {
+          const campIdx = Math.floor(this.gameSeconds / 30) % blueJgCamps.length;
+          const camp = blueJgCamps[campIdx];
+          tx = camp.x;
+          ty = camp.y;
+          status = `Farmando ${camp.name}`;
+        }
+      }
+
+      c.targetX = Math.round(tx);
+      c.targetY = Math.round(ty);
+      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
+      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+      c.statusText = status;
+    };
+
+    const updateRedChamp = (c, role) => {
+      if (!c) return;
+      if (!c.alive) {
+        c.x = redBase.x;
+        c.y = redBase.y;
+        c.statusText = "Ressurgindo...";
+        c.hpPct = 0;
+        return;
+      }
+      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+        c.x = redBase.x;
+        c.y = redBase.y;
+        c.statusText = "Na Base (Compras)";
+        c.hpPct = 100;
+        return;
+      }
+
+      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+
+      let tx = redBase.x, ty = redBase.y, status = "Na Rota";
+
+      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+        tx = 350 + (Math.random() * 30 - 15);
+        ty = 210 + (Math.random() * 30 - 15);
+        status = "Contestando Barão Na'Shor";
+      } else if (isDragonSpawningOrContested && ["jungle", "adc", "support", "mid"].includes(role)) {
+        tx = 660 + (Math.random() * 30 - 15);
+        ty = 530 + (Math.random() * 30 - 15);
+        status = "Contestando Dragão";
+      } else if (role === "top") {
+        tx = topClash.x + 20;
+        ty = topClash.y - 14;
+        status = "Duelo no Topo";
+      } else if (role === "mid") {
+        tx = midClash.x + 16;
+        ty = midClash.y - 16;
+        status = "Controle do Meio";
+      } else if (role === "adc") {
+        tx = botClash.x + 14;
+        ty = botClash.y - 10;
+        status = "Farmando no Bot";
+      } else if (role === "support") {
+        tx = botClash.x + 24;
+        ty = botClash.y + 12;
+        status = "Proteção / Visão";
+      } else if (role === "jungle") {
+        if (this.redJungleCampLane) {
+          const l = this.redJungleCampLane;
+          const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });
+          tx = targetCoords.x;
+          ty = targetCoords.y;
+          status = `Gankando a rota ${l.toUpperCase()}`;
+        } else {
+          const campIdx = Math.floor(this.gameSeconds / 30) % redJgCamps.length;
+          const camp = redJgCamps[campIdx];
+          tx = camp.x;
+          ty = camp.y;
+          status = `Farmando ${camp.name}`;
+        }
+      }
+
+      c.targetX = Math.round(tx);
+      c.targetY = Math.round(ty);
+      c.x = Math.round(c.x ? (c.x * 0.4 + tx * 0.6) : tx);
+      c.y = Math.round(c.y ? (c.y * 0.4 + ty * 0.6) : ty);
+      c.statusText = status;
+    };
+
+    Object.keys(this.blueRosterState).forEach(r => updateBlueChamp(this.blueRosterState[r], r));
+    Object.keys(this.redRosterState).forEach(r => updateRedChamp(this.redRosterState[r], r));
+  }
+
+  _calculateVisionAndVisibility() {
+    if (!this.blueRosterState || !this.redRosterState) return;
+
+    const visionSources = [];
+
+    // Torres azuis de pé: visão verdadeira raio 135px
+    if (this.blueStructures && Array.isArray(this.blueStructures)) {
+      const coords = {
+        top_inhib: { x: 170, y: 528 },
+        top_t3: { x: 154, y: 464 },
+        top_t2: { x: 198, y: 389 },
+        top_t1: { x: 216, y: 208 },
+        mid_inhib: { x: 286, y: 560 },
+        mid_t3: { x: 322, y: 524 },
+        mid_t2: { x: 398, y: 460 },
+        mid_t1: { x: 430, y: 395 },
+        bot_inhib: { x: 298, y: 672 },
+        bot_t3: { x: 356, y: 654 },
+        bot_t2: { x: 484, y: 636 },
+        bot_t1: { x: 690, y: 656 },
+        nexus_t1: { x: 202, y: 582 },
+        nexus_t2: { x: 226, y: 612 },
+        nexus: { x: 188, y: 630 }
+      };
+      this.blueStructures.forEach(st => {
+        if (!st.destroyed && coords[st.id]) {
+          visionSources.push({
+            type: "tower",
+            id: st.id,
+            x: coords[st.id].x,
+            y: coords[st.id].y,
+            range: 135
+          });
+        }
+      });
+    }
+
+    // Base azul: raio 160px
+    visionSources.push({ type: "base", x: 188, y: 630, range: 160 });
+
+    // Campeões azuis vivos: raio 115px
+    Object.values(this.blueRosterState).forEach(c => {
+      if (c && c.alive) {
+        visionSources.push({
+          type: "champion",
+          role: c.role,
+          id: c.id,
+          x: c.x || 188,
+          y: c.y || 630,
+          range: 115
+        });
+      }
+    });
+
+    // Sentinelas azuis ativas: raio 95px ou 110px
+    (this.wards || []).forEach(w => {
+      if (w.team === "blue") {
+        visionSources.push({
+          type: "ward",
+          id: w.id,
+          x: w.x,
+          y: w.y,
+          range: w.range || 95
+        });
+      }
+    });
+
+    // Ondas de tropas azuis nas rotas: raio 80px
+    ["top", "mid", "bot"].forEach(l => {
+      const clash = this._getLaneClashCoords(l);
+      if (clash) {
+        visionSources.push({
+          type: "minions",
+          lane: l,
+          x: clash.x,
+          y: clash.y,
+          range: 80
+        });
+      }
+    });
+
+    this.blueVisionSources = visionSources;
+
+    // Calcula visibilidade para cada campeão vermelho
+    Object.values(this.redRosterState).forEach(rc => {
+      if (!rc) return;
+      if (!rc.alive) {
+        rc.isVisibleToBlue = false;
+        return;
+      }
+
+      const rx = rc.x || 812;
+      const ry = rc.y || 116;
+
+      let isSeen = false;
+      for (const vs of visionSources) {
+        const d = Math.hypot(rx - vs.x, ry - vs.y);
+        if (d <= vs.range) {
+          isSeen = true;
+          break;
+        }
+      }
+
+      rc.isVisibleToBlue = isSeen;
+      if (isSeen) {
+        rc.lastSeen = { x: rx, y: ry, time: this.gameSeconds };
+        this.lastEnemySightings[rc.role] = { x: rx, y: ry, time: this.gameSeconds, name: rc.name };
+      }
+    });
+  }
+
   _formatTime() {
     const mins = Math.floor(this.gameSeconds / 60);
     const secs = this.gameSeconds % 60;
@@ -12948,6 +13397,9 @@ class MatchSimulator {
       counterAttackCooldown: this.counterAttackCooldown,
       objectiveBountiesActive: this.objectiveBountiesActive,
       isComebackMode: isBehind,
+      wards: this.wards || [],
+      visionSources: this.blueVisionSources || [],
+      lastEnemySightings: this.lastEnemySightings || {},
       activeBuffs: {
         blue: this._getActiveBuffs("blue"),
         red: this._getActiveBuffs("red")
@@ -14886,6 +15338,14 @@ class ArenaView {
             <feGaussianBlur stdDeviation="5" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
+          <!-- Clipes circulares dos 10 campeões no minimapa -->
+          ${["blue", "red"].map(s => 
+            ["top", "jungle", "mid", "adc", "support"].map(r => `
+              <clipPath id="clip-champ-${s}-${r}">
+                <circle cx="0" cy="0" r="14" />
+              </clipPath>
+            `).join('')
+          ).join('')}
         </defs>
 
         <!-- Fundo Oficial Autêntico 3D de Summoner's Rift com Todas as Estruturas -->
@@ -14949,8 +15409,86 @@ class ArenaView {
         <g class="structures-layer red-structures">
           ${redStructuresSvg}
         </g>
+
+        <!-- SENTINELAS E VISÃO (Wards & Trinkets) -->
+        <g id="wards-layer" class="wards-layer"></g>
+
+        <!-- CAMPEÕES NO MAPA (10 Campeões com Avatar Oficial Circular, Barra de Vida e Fog of War) -->
+        <g id="champions-layer" class="champions-layer">
+          ${this._renderChampionsSvg(state)}
+        </g>
       </svg>
     `;
+  }
+
+  _renderChampionsSvg(state) {
+    if (!state) return "";
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    const sides = ["blue", "red"];
+    let html = "";
+
+    sides.forEach(side => {
+      const roster = state[side] && state[side].roster;
+      if (!roster) return;
+
+      roles.forEach(role => {
+        const m = roster[role];
+        if (!m) return;
+        const champ = getChampionById(m.id);
+        const champKey = champ ? champ.id : (m.id === "Wukong" ? "MonkeyKing" : m.id);
+        const champImg = `https://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/${champKey}.png`;
+        const isVisible = side === "blue" || Boolean(m.isVisibleToBlue);
+        const posX = (m.x !== undefined) ? m.x : (side === "blue" ? 200 : 800);
+        const posY = (m.y !== undefined) ? m.y : (side === "blue" ? 600 : 150);
+        const hpPct = Math.max(0, Math.min(100, m.hpPct !== undefined ? m.hpPct : 100));
+        const hpFillW = Math.max(0, Math.min(27, (hpPct / 100) * 27));
+        const roleLetter = role === "top" ? "T" : (role === "jungle" ? "J" : (role === "mid" ? "M" : (role === "adc" ? "A" : "S")));
+
+        html += `
+          <g id="champ-marker-${side}-${role}" 
+             class="champ-map-marker ${side} ${role} ${isVisible ? 'visible' : 'fog-hidden'} ${!m.alive ? 'dead' : ''}" 
+             data-side="${side}" 
+             data-role="${role}" 
+             transform="translate(${posX}, ${posY})"
+             style="${!isVisible ? 'display: none;' : ''}">
+            <!-- Hitbox invisível para captura de cursor sem oscilação -->
+            <circle class="champ-hitbox" r="20" fill="transparent" />
+            <!-- Halo de combate / hover -->
+            <circle class="champ-halo" r="17" />
+            <!-- Fundo base escuro do avatar -->
+            <circle r="14" fill="#091428" />
+            <!-- Avatar oficial do Campeão (DataDragon) com corte circular perfeito -->
+            <image href="${champImg}" xlink:href="${champImg}" x="-14" y="-14" width="28" height="28" clip-path="url(#clip-champ-${side}-${role})" preserveAspectRatio="xMidYMid slice" />
+            <!-- Borda temática de Equipe (Azul / Vermelho) -->
+            <circle class="champ-border ${side === 'blue' ? 'border-blue' : 'border-red'}" r="14" fill="none" stroke-width="2.5" />
+            <!-- Selo da Rota/Posição (T, J, M, A, S) -->
+            <g class="champ-role-badge" transform="translate(11, -11)">
+              <circle r="5" fill="#091428" stroke="${side === 'blue' ? '#0ac8b9' : '#e84057'}" stroke-width="1.2" />
+              <text text-anchor="middle" dominant-baseline="central" font-size="6.5" font-weight="900" fill="#f0e6d2">${roleLetter}</text>
+            </g>
+            <!-- Barra de Vida Mini sob o Avatar -->
+            <g class="champ-hp-container" transform="translate(-14, 16)">
+              <rect class="champ-hp-bg" x="0" y="0" width="28" height="4.5" rx="2" fill="#050b14" stroke="#1e293b" stroke-width="0.8" />
+              <rect class="champ-hp-fill ${side}-hp ${hpPct < 30 ? 'critical' : (hpPct < 60 ? 'damaged' : '')}" 
+                    id="champ-hp-fill-${side}-${role}" 
+                    x="0.5" y="0.5" width="${hpFillW}" height="3.5" rx="1.5" />
+            </g>
+            <!-- Indicador de Abatido (Morte) -->
+            <g class="champ-dead-overlay" id="champ-dead-${side}-${role}" style="display: ${m.alive ? 'none' : 'block'};">
+              <circle r="14" fill="rgba(6, 11, 19, 0.78)" />
+              <text text-anchor="middle" dominant-baseline="central" font-size="12">💀</text>
+            </g>
+            <!-- Badge de Ponto de Interrogação caso perdido recente na névoa -->
+            <g class="champ-missing-badge" id="champ-missing-${side}-${role}" style="display: none;" transform="translate(0, -18)">
+              <circle r="6" fill="#1c1917" stroke="#f59e0b" stroke-width="1.2" />
+              <text text-anchor="middle" dominant-baseline="central" font-size="8.5" font-weight="900" fill="#f59e0b">?</text>
+            </g>
+          </g>
+        `;
+      });
+    });
+
+    return html;
   }
 
   _renderMapStructureSvg(struct, side, coords) {
@@ -15414,6 +15952,112 @@ class ArenaView {
     // Atualiza status e itens dos campeões
     this._updateRosterUI(state.blue.roster, "blue", state);
     this._updateRosterUI(state.red.roster, "red", state);
+
+    // Atualiza movimentação dos campeões, barra de vida e névoa de guerra (Fog of War)
+    this._updateMapChampions(state);
+
+    // Atualiza sentinelas de visão ativas no mapa
+    this._updateMapWards(state);
+  }
+
+  _updateMapChampions(state) {
+    if (!state) return;
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    const sides = ["blue", "red"];
+    const gameSecs = state.gameSeconds || 0;
+
+    sides.forEach(side => {
+      const roster = state[side] && state[side].roster;
+      if (!roster) return;
+
+      roles.forEach(role => {
+        const m = roster[role];
+        if (!m) return;
+        const marker = this.containerEl.querySelector(`#champ-marker-${side}-${role}`);
+        if (!marker) return;
+
+        // Posição e visibilidade
+        if (side === "blue") {
+          // Aliados: 100% visíveis em tempo real em qualquer lugar do mapa
+          marker.style.display = "";
+          marker.classList.remove("fog-hidden", "last-seen-ghost");
+          marker.classList.add("visible");
+          marker.setAttribute("transform", `translate(${m.x}, ${m.y})`);
+          const missingEl = marker.querySelector(".champ-missing-badge");
+          if (missingEl) missingEl.style.display = "none";
+        } else {
+          // Inimigos: Visíveis SOMENTE se dentro do alcance de visão aliado (campeões, sentinelas, torres)
+          const isVis = Boolean(m.isVisibleToBlue);
+          const missingEl = marker.querySelector(".champ-missing-badge");
+
+          if (isVis) {
+            marker.style.display = "";
+            marker.classList.remove("fog-hidden", "last-seen-ghost");
+            marker.classList.add("visible");
+            marker.setAttribute("transform", `translate(${m.x}, ${m.y})`);
+            if (missingEl) missingEl.style.display = "none";
+          } else {
+            // Se não está no alcance, verificar se foi avistado recentemente (últimos 10 segundos)
+            if (m.lastSeen && (gameSecs - m.lastSeen.time <= 10)) {
+              marker.style.display = "";
+              marker.classList.remove("visible");
+              marker.classList.add("last-seen-ghost");
+              marker.setAttribute("transform", `translate(${m.lastSeen.x}, ${m.lastSeen.y})`);
+              if (missingEl) missingEl.style.display = "block";
+            } else {
+              // Completamente oculto na Fog of War
+              marker.style.display = "none";
+              marker.classList.add("fog-hidden");
+              marker.classList.remove("visible", "last-seen-ghost");
+              if (missingEl) missingEl.style.display = "none";
+            }
+          }
+        }
+
+        // Atualiza Barra de Vida
+        const hpPct = Math.max(0, Math.min(100, m.hpPct !== undefined ? m.hpPct : 100));
+        const hpFill = marker.querySelector(`#champ-hp-fill-${side}-${role}`);
+        if (hpFill) {
+          const hpW = Math.max(0, Math.min(27, (hpPct / 100) * 27));
+          hpFill.setAttribute("width", `${hpW}`);
+          hpFill.className.baseVal = `champ-hp-fill ${side}-hp ${hpPct < 30 ? 'critical' : (hpPct < 60 ? 'damaged' : '')}`;
+        }
+
+        // Atualiza Estado de Vida/Morte
+        const deadEl = marker.querySelector(`#champ-dead-${side}-${role}`);
+        if (deadEl) {
+          deadEl.style.display = m.alive ? "none" : "block";
+        }
+        marker.classList.toggle("dead", !m.alive);
+      });
+    });
+  }
+
+  _updateMapWards(state) {
+    const wardsLayer = this.containerEl.querySelector("#wards-layer");
+    if (!wardsLayer) return;
+
+    const wards = state.wards || [];
+    const gameSecs = state.gameSeconds || 0;
+
+    // Apenas sentinelas ativas da equipe Azul
+    const visibleWards = wards.filter(w => w.team === "blue");
+
+    wardsLayer.innerHTML = visibleWards.map(w => {
+      const isControl = w.type === "control";
+      const remaining = Math.max(0, Math.round(w.expiresAt - gameSecs));
+      const icon = isControl ? "👁️" : "🟡";
+      const borderColor = isControl ? "#ec4899" : "#f59e0b";
+
+      return `
+        <g class="ward-map-marker ${w.team}" id="ward-${w.id}" data-id="${w.id}" data-type="${w.type}" data-remaining="${remaining}" transform="translate(${w.x}, ${w.y})">
+          <circle class="ward-hitbox" r="16" fill="transparent" cursor="pointer" />
+          <circle class="ward-vision-circle" r="14" fill="rgba(56, 189, 248, 0.16)" stroke="#38bdf8" stroke-dasharray="2 2" stroke-width="1" />
+          <circle r="7" fill="#0b131e" stroke="${borderColor}" stroke-width="1.8" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">${icon}</text>
+        </g>
+      `;
+    }).join("");
   }
 
   _updateRosterUI(rosterState, side, fullState = null) {
@@ -16720,6 +17364,126 @@ class ArenaView {
         });
       }
     });
+
+    // Interatividade dos Campeões no Minimapa
+    this.containerEl.querySelectorAll(".champ-map-marker").forEach(marker => {
+      marker.addEventListener("mouseenter", (e) => {
+        this._hoveredStructNode = null;
+        const side = marker.dataset.side;
+        const role = marker.dataset.role;
+        const liveState = this.sim ? this.sim.getState() : state;
+        const roster = liveState[side] && liveState[side].roster;
+        const m = roster && roster[role];
+        if (!m) return;
+
+        const p = m.proPlayer;
+        const nickDisplay = p ? `${p.nick} (${m.name})` : m.name;
+        const roleName = role === "top" ? "Rota Superior (Top)" : (role === "jungle" ? "Selva (Jungle)" : (role === "mid" ? "Rota do Meio (Mid)" : (role === "adc" ? "Atirador (ADC)" : "Suporte (Support)")));
+        const isBlue = side === "blue";
+        const hpVal = Math.round(m.hpPct !== undefined ? m.hpPct : 100);
+        const statusText = m.alive ? (m.statusText || "Em ação pelo Rift") : "Morto (Aguardando Renascimento)";
+
+        tooltip.innerHTML = `
+          <div class="tip-header" style="border-bottom: 2px solid ${isBlue ? '#0ac8b9' : '#e84057'};">
+            <span class="tip-team ${isBlue ? 'blue' : 'red'}">
+              ${isBlue ? '🛡️ CAMPEÃO ALIADO' : '⚔️ CAMPEÃO INIMIGO'} • ${roleName.toUpperCase()}
+            </span>
+            <div class="tip-name" style="color:#fff; font-size:13px; margin-top:2px;">
+              ${nickDisplay}
+            </div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-hp-row">
+              <span>Vida:</span>
+              <strong class="tip-hp-val" style="color: ${hpVal < 30 ? '#ff3344' : (hpVal < 60 ? '#f0b622' : '#0ac8b9')}">${hpVal}%</strong>
+            </div>
+            <div class="tip-hp-bar">
+              <div class="tip-hp-fill ${hpVal < 30 ? 'critical' : (hpVal < 60 ? 'damaged' : '')}" style="width: ${hpVal}%; background: ${isBlue ? '#0ac8b9' : '#e84057'};"></div>
+            </div>
+            <div class="tip-detail-row">
+              <span>Status:</span>
+              <strong style="color: #f0e6d2;">${statusText}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Placar / Farm:</span>
+              <strong>${m.kills || 0}/${m.deaths || 0}/${m.assists || 0} (${m.cs || 0} CS)</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Ouro Individual:</span>
+              <strong style="color: var(--lol-gold-1);">${m.gold || 0} 🪙</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Visão:</span>
+              <strong style="color: ${isBlue ? '#0ac8b9' : '#f59e0b'};">
+                ${isBlue ? 'Visão Aliada Permanente (115px)' : (m.isVisibleToBlue ? '👁️ Revelado na Visão Aliada' : '❓ Última Posição Conhecida')}
+              </strong>
+            </div>
+          </div>
+        `;
+        updateTooltipPosition(e);
+        tooltip.style.display = "block";
+      });
+
+      marker.addEventListener("mousemove", (e) => {
+        updateTooltipPosition(e);
+      });
+
+      marker.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      marker.addEventListener("click", () => {
+        sound.playClick();
+      });
+    });
+
+    // Interatividade das Sentinelas (Wards) no Minimapa
+    const wardsLayer = this.containerEl.querySelector("#wards-layer");
+    if (wardsLayer) {
+      wardsLayer.addEventListener("mouseover", (e) => {
+        const wardNode = e.target.closest(".ward-map-marker");
+        if (!wardNode) return;
+        this._hoveredStructNode = null;
+        const type = wardNode.dataset.type;
+        const remaining = wardNode.dataset.remaining;
+        const isControl = type === "control";
+
+        tooltip.innerHTML = `
+          <div class="tip-header" style="border-bottom: 2px solid ${isControl ? '#ec4899' : '#f59e0b'};">
+            <span class="tip-team blue">👁️ SENTINELA ALIADA</span>
+            <div class="tip-name">${isControl ? 'Sentinela de Controle (Rosa)' : 'Sentinela Invisível (Amarela)'}</div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-detail-row">
+              <span>Raio de Visão:</span>
+              <strong>${isControl ? '110px (Visão Verdadeira)' : '95px (Visão Padrão)'}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Duração Restante:</span>
+              <strong style="color:#f0b622;">${isControl ? 'Permanente até ser destruída' : `${remaining}s`}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Efeito:</span>
+              <span style="color:#f0e6d2; font-size:11px;">Revela e remove a Névoa de Guerra (Fog of War) na área.</span>
+            </div>
+          </div>
+        `;
+        updateTooltipPosition(e);
+        tooltip.style.display = "block";
+      });
+
+      wardsLayer.addEventListener("mousemove", (e) => {
+        if (e.target.closest(".ward-map-marker")) {
+          updateTooltipPosition(e);
+        }
+      });
+
+      wardsLayer.addEventListener("mouseout", (e) => {
+        if (e.target.closest(".ward-map-marker")) {
+          tooltip.style.display = "none";
+        }
+      });
+    }
 
     // Inicializa o modal da Loja Hextech e Árvore de Receitas
     this._initItemShopModal();

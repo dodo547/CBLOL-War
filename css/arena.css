@@ -1020,6 +1020,132 @@
   opacity: 0.85;
 }
 
+/* =========================================================
+   CAMPEÕES NO MINIMAPA (CHAMPIONS LAYER & FOG OF WAR)
+   ========================================================= */
+.champions-layer {
+  pointer-events: none;
+}
+
+.champ-map-marker {
+  pointer-events: all !important;
+  cursor: pointer;
+  transition: transform 0.65s cubic-bezier(0.2, 0.8, 0.4, 1), opacity 0.35s ease;
+}
+
+.champ-map-marker .champ-hitbox {
+  pointer-events: all !important;
+  cursor: pointer;
+}
+
+.champ-map-marker > *:not(.champ-hitbox) {
+  pointer-events: none !important;
+}
+
+/* Halos e Seleção */
+.champ-map-marker .champ-halo {
+  fill: none;
+  stroke: rgba(240, 182, 34, 0);
+  stroke-width: 2;
+  transition: all 0.2s ease;
+}
+
+.champ-map-marker:hover .champ-halo {
+  stroke: #f0b622;
+  stroke-width: 3.5;
+  stroke-dasharray: 4 2;
+}
+
+/* Bordas de Equipe */
+.champ-border.border-blue {
+  stroke: #0ac8b9;
+  filter: drop-shadow(0 0 3px rgba(10, 200, 185, 0.8));
+}
+
+.champ-border.border-red {
+  stroke: #e84057;
+  filter: drop-shadow(0 0 3px rgba(232, 64, 87, 0.8));
+}
+
+/* Barras de HP dos Campeões no Mapa */
+.champ-hp-container {
+  pointer-events: none;
+}
+
+.champ-hp-fill.blue-hp {
+  fill: #10b981;
+}
+
+.champ-hp-fill.red-hp {
+  fill: #e84057;
+}
+
+.champ-hp-fill.damaged {
+  fill: #f59e0b !important;
+}
+
+.champ-hp-fill.critical {
+  fill: #dc2626 !important;
+  animation: critHpPulse 1s infinite alternate;
+}
+
+@keyframes critHpPulse {
+  0% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+/* Fog of War & Ghost Icon */
+.champ-map-marker.fog-hidden {
+  display: none !important;
+  opacity: 0;
+  pointer-events: none !important;
+}
+
+.champ-map-marker.last-seen-ghost {
+  opacity: 0.45;
+  filter: grayscale(60%) drop-shadow(0 0 6px rgba(239, 68, 68, 0.7));
+}
+
+.champ-map-marker.dead {
+  filter: grayscale(85%);
+  opacity: 0.65;
+}
+
+/* Sentinelas no Mapa */
+.wards-layer {
+  pointer-events: none;
+}
+
+.ward-map-marker {
+  pointer-events: all !important;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+
+.ward-map-marker .ward-hitbox {
+  pointer-events: all !important;
+  cursor: pointer;
+}
+
+.ward-map-marker > *:not(.ward-hitbox) {
+  pointer-events: none !important;
+}
+
+.ward-vision-circle {
+  animation: wardPulse 2.4s infinite ease-in-out;
+  transform-origin: center;
+}
+
+@keyframes wardPulse {
+  0%, 100% { r: 12; opacity: 0.18; }
+  50% { r: 18; opacity: 0.45; }
+}
+
+.ward-map-marker:hover circle:not(.ward-hitbox):not(.ward-vision-circle) {
+  stroke-width: 3px;
+  filter: brightness(1.3) drop-shadow(0 0 6px #f59e0b);
+}
+
 /* Tooltip Flutuante do Mapa de Summoner's Rift */
 .rift-structure-tooltip {
   position: absolute;
