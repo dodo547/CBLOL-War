@@ -176,6 +176,9 @@ export class MatchSimulator {
     this.redJgStartChoice = Math.random() < 0.5 ? "start_red_buff" : "start_blue_buff";
     this.earlyGankTargetLane = null; // "bot" | "top" | "mid"
     this.redEarlyGankTargetLane = this.redJgStartChoice === "start_red_buff" ? "top" : "bot";
+    // Inicializa rota de gank autônoma do JG inimigo (corrige bug: sem isso, isRedGankWindow nunca dispara)
+    this.redJungleCampLane = this.redEarlyGankTargetLane;
+    this._nextRedJgRotationAt = 270; // Primeira rotação de rota do JG inimigo aos 4:30
     this.earlyGankExecuted = false;
     this.level1InvadeResolved = false;
 
@@ -1434,6 +1437,20 @@ export class MatchSimulator {
     // Atualiza a rota favorita de gank do caçador rival periodicamente
     if (this.gameSeconds >= this.nextJungleCampUpdateAt) {
       this._updateRedJungleCampTarget(false);
+    }
+
+    // Rotação autônoma de rota de gank do JG inimigo (Red) a cada ~90s de jogo
+    // Garante que redJungleCampLane seja rotacionada, ativando isRedGankWindow periodicamente
+    if (this.gameSeconds >= (this._nextRedJgRotationAt || 270)) {
+      const lanes = ["top", "mid", "bot"];
+      const currentLane = this.redJungleCampLane;
+      const otherLanes = lanes.filter(l => l !== currentLane);
+      // 60% chance de trocar rota, 40% de manter pressão na mesma rota
+      this.redJungleCampLane = Math.random() < 0.6
+        ? otherLanes[Math.floor(Math.random() * otherLanes.length)]
+        : currentLane;
+      // Próxima rotação entre 75s e 120s
+      this._nextRedJgRotationAt = this.gameSeconds + 75 + Math.floor(Math.random() * 45);
     }
 
     // Auxílio e foco de gank do Caçador Aliado (Blue JG) na rota escolhida
@@ -9630,8 +9647,37 @@ export class MatchSimulator {
     // 3. Caçador Inimigo (Red Jungler)
     const rJg = this.redRosterState && this.redRosterState.jungle;
     if (rJg && rJg.alive && this.gameSeconds >= (rJg.travelingBackUntil || 0)) {
-      if (this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24)) {
+      if (this.redJungleCampLane && (this.gameSeconds % 90 <= 24)) {
+        // Janela de gank ativa — JG inimigo pressiona a rota alvo
         this.redJgTargetCampId = null;
+
+        // Executa o gank do JG inimigo contra a equipe azul na rota alvo (a cada 90s, quando janela abre)
+        if (this.gameSeconds % 90 === 0 && this.gameSeconds >= 180) {
+          const gankLane = this.redJungleCampLane;
+          const victimRole = gankLane === "bot" ? "adc" : gankLane;
+          const bVictim = this.blueRosterState && this.blueRosterState[victimRole];
+          if (bVictim && bVictim.alive) {
+            // Chance de sucesso do gank inimigo baseada em stats e se a rota está coberta pelo JG azul
+            const blueJgCovering = this.blueJungleCampLane === gankLane;
+            const redCombat = (this.redTeam.stats?.combat || 50) + (Math.random() * 30);
+            const blueDef = (this.blueTeam.stats?.vision || 50) + (blueJgCovering ? 20 : 0) + (Math.random() * 20);
+            if (redCombat > blueDef) {
+              // Gank inimigo bem-sucedido
+              this._handleSkirmishOutcome("red", "blue", "jungle", victimRole,
+                "Gank Inimigo Bem-Sucedido",
+                `⚠️ GANK INIMIGO! ${rJg.proPlayer?.nick || rJg.name} emboscou a rota ${gankLane.toUpperCase()} e abateu ${bVictim.proPlayer?.nick || bVictim.name}!`
+              );
+            } else {
+              // Gank frustrado — vítima sobrevive ou contra-gank azul
+              const rJgNick = rJg.proPlayer?.nick || rJg.name;
+              const bVictimNick = bVictim.proPlayer?.nick || bVictim.name;
+              const evadeText = blueJgCovering
+                ? `🛡️ CONTRA-GANK! Sentinela no rio revelou a aproximação de ${rJgNick} — ${bVictimNick} recuou a tempo e o Caçador Aliado está a caminho!`
+                : `🏃 GANK EVITADO! ${bVictimNick} recuou para baixo da torre antes de ${rJgNick} fechar a emboscada!`;
+              this.onEvent({ type: "jungle", side: "red", icon: "⚠️", text: evadeText, time: this._formatTime() });
+            }
+          }
+        }
       } else if (this.gameSeconds < 90) {
         this.redJgTargetCampId = (this.redJgStartChoice === "start_blue_buff") ? "red_blue_buff" : "red_red_buff";
       } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.redEarlyGankTargetLane) {
@@ -10024,7 +10070,7 @@ export class MatchSimulator {
         ty = botClash.y + 12;
         status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
-        const isRedGankWindow = this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24);
+        const isRedGankWindow = this.redJungleCampLane && (this.gameSeconds % 90 <= 24);
         if (isRedGankWindow) {
           const l = this.redJungleCampLane;
           const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });

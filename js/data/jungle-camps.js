@@ -6,6 +6,8 @@
 export const JUNGLE_CAMPS = [
   // ==========================================
   // SELVA DA EQUIPE AZUL (BLUE SIDE JUNGLE)
+  // Referências SVG: Baron pit (360,230) | Dragon pit (645,515) | viewBox 1024x727
+  // Equipe Azul: canto inferior-esquerdo | Equipe Vermelha: canto superior-direito
   // ==========================================
   {
     id: "blue_blue_buff",
@@ -15,8 +17,8 @@ export const JUNGLE_CAMPS = [
     icon: "🔵",
     badge: "BUFF AZUL",
     themeColor: "#38bdf8",
-    x: 382,
-    y: 520,
+    x: 210,
+    y: 540,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -32,7 +34,7 @@ export const JUNGLE_CAMPS = [
     icon: "🐸",
     badge: "GROMP",
     themeColor: "#34d399",
-    x: 210,
+    x: 115,
     y: 440,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
@@ -49,8 +51,8 @@ export const JUNGLE_CAMPS = [
     icon: "🐺",
     badge: "LOBOS",
     themeColor: "#a78bfa",
-    x: 380,
-    y: 440,
+    x: 200,
+    y: 460,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 85,
@@ -66,8 +68,8 @@ export const JUNGLE_CAMPS = [
     icon: "🦅",
     badge: "ACUÂMINAS",
     themeColor: "#f43f5e",
-    x: 440,
-    y: 340,
+    x: 270,
+    y: 540,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 70,
@@ -83,8 +85,8 @@ export const JUNGLE_CAMPS = [
     icon: "🔴",
     badge: "BUFF RED",
     themeColor: "#ef4444",
-    x: 500,
-    y: 440,
+    x: 265,
+    y: 620,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -100,14 +102,14 @@ export const JUNGLE_CAMPS = [
     icon: "🪨",
     badge: "KRUGS",
     themeColor: "#f59e0b",
-    x: 630,
-    y: 630,
+    x: 195,
+    y: 655,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 110,
     cs: 4,
     buff: "Divisão Rochosa: O Krug Maior se divide em Krugs Médios e Menores (maior ouro total de acampamento comum).",
-    desc: "Golens de pedra mágica no canto inferior direito da rota bot."
+    desc: "Golens de pedra mágica no canto inferior esquerdo da rota bot."
   },
 
   // ==========================================
@@ -121,8 +123,8 @@ export const JUNGLE_CAMPS = [
     icon: "🔴",
     badge: "BUFF RED",
     themeColor: "#ef4444",
-    x: 460,
-    y: 220,
+    x: 760,
+    y: 185,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -138,8 +140,8 @@ export const JUNGLE_CAMPS = [
     icon: "🦅",
     badge: "ACUÂMINAS",
     themeColor: "#f43f5e",
-    x: 540,
-    y: 260,
+    x: 755,
+    y: 270,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 70,
@@ -155,8 +157,8 @@ export const JUNGLE_CAMPS = [
     icon: "🪨",
     badge: "KRUGS",
     themeColor: "#f59e0b",
-    x: 380,
-    y: 110,
+    x: 830,
+    y: 100,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 110,
@@ -172,8 +174,8 @@ export const JUNGLE_CAMPS = [
     icon: "🐺",
     badge: "LOBOS",
     themeColor: "#a78bfa",
-    x: 640,
-    y: 220,
+    x: 820,
+    y: 260,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 85,
@@ -189,14 +191,14 @@ export const JUNGLE_CAMPS = [
     icon: "🔵",
     badge: "BUFF AZUL",
     themeColor: "#38bdf8",
-    x: 640,
-    y: 150,
+    x: 815,
+    y: 185,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
     cs: 4,
     buff: "Bênção da Perspicácia (Crest of Insight): Aceleração de Habilidade e regeneração rápida de Mana.",
-    desc: "Sentinela rúnica de pedra e magia no quadrante inferior vermelho."
+    desc: "Sentinela rúnica de pedra e magia no quadrante superior direito vermelho."
   },
   {
     id: "red_gromp",
@@ -206,14 +208,14 @@ export const JUNGLE_CAMPS = [
     icon: "🐸",
     badge: "GROMP",
     themeColor: "#34d399",
-    x: 750,
-    y: 180,
+    x: 875,
+    y: 325,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 80,
     cs: 4,
     buff: "Restauração de Combate: Recupera vida e recurso ao ser finalizado.",
-    desc: "Monstro cogumelo anfíbio na entrada norte da selva vermelha."
+    desc: "Monstro cogumelo anfíbio na entrada leste da selva vermelha."
   },
 
   // ==========================================
@@ -227,8 +229,8 @@ export const JUNGLE_CAMPS = [
     icon: "🦀",
     badge: "ARONGUEJO TOP",
     themeColor: "#06b6d4",
-    x: 330,
-    y: 200,
+    x: 340,
+    y: 255,
     spawnAt: 210, // 03:30
     respawnDuration: 150, // 2:30 min
     gold: 55,
@@ -244,8 +246,8 @@ export const JUNGLE_CAMPS = [
     icon: "🦀",
     badge: "ARONGUEJO BOT",
     themeColor: "#06b6d4",
-    x: 680,
-    y: 480,
+    x: 675,
+    y: 490,
     spawnAt: 210, // 03:30
     respawnDuration: 150, // 2:30 min
     gold: 55,

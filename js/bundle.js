@@ -4404,6 +4404,8 @@ function _resolveNextStep(currentInventory, targetItemId, currentGold, isRoot = 
 const JUNGLE_CAMPS = [
   // ==========================================
   // SELVA DA EQUIPE AZUL (BLUE SIDE JUNGLE)
+  // Referências SVG: Baron pit (360,230) | Dragon pit (645,515) | viewBox 1024x727
+  // Equipe Azul: canto inferior-esquerdo | Equipe Vermelha: canto superior-direito
   // ==========================================
   {
     id: "blue_blue_buff",
@@ -4413,8 +4415,8 @@ const JUNGLE_CAMPS = [
     icon: "🔵",
     badge: "BUFF AZUL",
     themeColor: "#38bdf8",
-    x: 382,
-    y: 520,
+    x: 210,
+    y: 540,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -4430,7 +4432,7 @@ const JUNGLE_CAMPS = [
     icon: "🐸",
     badge: "GROMP",
     themeColor: "#34d399",
-    x: 210,
+    x: 115,
     y: 440,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
@@ -4447,8 +4449,8 @@ const JUNGLE_CAMPS = [
     icon: "🐺",
     badge: "LOBOS",
     themeColor: "#a78bfa",
-    x: 380,
-    y: 440,
+    x: 200,
+    y: 460,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 85,
@@ -4464,8 +4466,8 @@ const JUNGLE_CAMPS = [
     icon: "🦅",
     badge: "ACUÂMINAS",
     themeColor: "#f43f5e",
-    x: 440,
-    y: 340,
+    x: 270,
+    y: 540,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 70,
@@ -4481,8 +4483,8 @@ const JUNGLE_CAMPS = [
     icon: "🔴",
     badge: "BUFF RED",
     themeColor: "#ef4444",
-    x: 500,
-    y: 440,
+    x: 265,
+    y: 620,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -4498,14 +4500,14 @@ const JUNGLE_CAMPS = [
     icon: "🪨",
     badge: "KRUGS",
     themeColor: "#f59e0b",
-    x: 630,
-    y: 630,
+    x: 195,
+    y: 655,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 110,
     cs: 4,
     buff: "Divisão Rochosa: O Krug Maior se divide em Krugs Médios e Menores (maior ouro total de acampamento comum).",
-    desc: "Golens de pedra mágica no canto inferior direito da rota bot."
+    desc: "Golens de pedra mágica no canto inferior esquerdo da rota bot."
   },
 
   // ==========================================
@@ -4519,8 +4521,8 @@ const JUNGLE_CAMPS = [
     icon: "🔴",
     badge: "BUFF RED",
     themeColor: "#ef4444",
-    x: 460,
-    y: 220,
+    x: 760,
+    y: 185,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
@@ -4536,8 +4538,8 @@ const JUNGLE_CAMPS = [
     icon: "🦅",
     badge: "ACUÂMINAS",
     themeColor: "#f43f5e",
-    x: 540,
-    y: 260,
+    x: 755,
+    y: 270,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 70,
@@ -4553,8 +4555,8 @@ const JUNGLE_CAMPS = [
     icon: "🪨",
     badge: "KRUGS",
     themeColor: "#f59e0b",
-    x: 380,
-    y: 110,
+    x: 830,
+    y: 100,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 110,
@@ -4570,8 +4572,8 @@ const JUNGLE_CAMPS = [
     icon: "🐺",
     badge: "LOBOS",
     themeColor: "#a78bfa",
-    x: 640,
-    y: 220,
+    x: 820,
+    y: 260,
     spawnAt: 90, // 01:30
     respawnDuration: 135, // 2:15 min
     gold: 85,
@@ -4587,14 +4589,14 @@ const JUNGLE_CAMPS = [
     icon: "🔵",
     badge: "BUFF AZUL",
     themeColor: "#38bdf8",
-    x: 640,
-    y: 150,
+    x: 815,
+    y: 185,
     spawnAt: 90, // 01:30
     respawnDuration: 300, // 5:00 min
     gold: 90,
     cs: 4,
     buff: "Bênção da Perspicácia (Crest of Insight): Aceleração de Habilidade e regeneração rápida de Mana.",
-    desc: "Sentinela rúnica de pedra e magia no quadrante inferior vermelho."
+    desc: "Sentinela rúnica de pedra e magia no quadrante superior direito vermelho."
   },
   {
     id: "red_gromp",
@@ -4604,14 +4606,14 @@ const JUNGLE_CAMPS = [
     icon: "🐸",
     badge: "GROMP",
     themeColor: "#34d399",
-    x: 750,
-    y: 180,
+    x: 875,
+    y: 325,
     spawnAt: 102, // 01:42
     respawnDuration: 135, // 2:15 min
     gold: 80,
     cs: 4,
     buff: "Restauração de Combate: Recupera vida e recurso ao ser finalizado.",
-    desc: "Monstro cogumelo anfíbio na entrada norte da selva vermelha."
+    desc: "Monstro cogumelo anfíbio na entrada leste da selva vermelha."
   },
 
   // ==========================================
@@ -4625,8 +4627,8 @@ const JUNGLE_CAMPS = [
     icon: "🦀",
     badge: "ARONGUEJO TOP",
     themeColor: "#06b6d4",
-    x: 330,
-    y: 200,
+    x: 340,
+    y: 255,
     spawnAt: 210, // 03:30
     respawnDuration: 150, // 2:30 min
     gold: 55,
@@ -4642,8 +4644,8 @@ const JUNGLE_CAMPS = [
     icon: "🦀",
     badge: "ARONGUEJO BOT",
     themeColor: "#06b6d4",
-    x: 680,
-    y: 480,
+    x: 675,
+    y: 490,
     spawnAt: 210, // 03:30
     respawnDuration: 150, // 2:30 min
     gold: 55,
@@ -5596,6 +5598,9 @@ class MatchSimulator {
     this.redJgStartChoice = Math.random() < 0.5 ? "start_red_buff" : "start_blue_buff";
     this.earlyGankTargetLane = null; // "bot" | "top" | "mid"
     this.redEarlyGankTargetLane = this.redJgStartChoice === "start_red_buff" ? "top" : "bot";
+    // Inicializa rota de gank autônoma do JG inimigo (corrige bug: sem isso, isRedGankWindow nunca dispara)
+    this.redJungleCampLane = this.redEarlyGankTargetLane;
+    this._nextRedJgRotationAt = 270; // Primeira rotação de rota do JG inimigo aos 4:30
     this.earlyGankExecuted = false;
     this.level1InvadeResolved = false;
 
@@ -6854,6 +6859,20 @@ class MatchSimulator {
     // Atualiza a rota favorita de gank do caçador rival periodicamente
     if (this.gameSeconds >= this.nextJungleCampUpdateAt) {
       this._updateRedJungleCampTarget(false);
+    }
+
+    // Rotação autônoma de rota de gank do JG inimigo (Red) a cada ~90s de jogo
+    // Garante que redJungleCampLane seja rotacionada, ativando isRedGankWindow periodicamente
+    if (this.gameSeconds >= (this._nextRedJgRotationAt || 270)) {
+      const lanes = ["top", "mid", "bot"];
+      const currentLane = this.redJungleCampLane;
+      const otherLanes = lanes.filter(l => l !== currentLane);
+      // 60% chance de trocar rota, 40% de manter pressão na mesma rota
+      this.redJungleCampLane = Math.random() < 0.6
+        ? otherLanes[Math.floor(Math.random() * otherLanes.length)]
+        : currentLane;
+      // Próxima rotação entre 75s e 120s
+      this._nextRedJgRotationAt = this.gameSeconds + 75 + Math.floor(Math.random() * 45);
     }
 
     // Auxílio e foco de gank do Caçador Aliado (Blue JG) na rota escolhida
@@ -15050,8 +15069,37 @@ class MatchSimulator {
     // 3. Caçador Inimigo (Red Jungler)
     const rJg = this.redRosterState && this.redRosterState.jungle;
     if (rJg && rJg.alive && this.gameSeconds >= (rJg.travelingBackUntil || 0)) {
-      if (this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24)) {
+      if (this.redJungleCampLane && (this.gameSeconds % 90 <= 24)) {
+        // Janela de gank ativa — JG inimigo pressiona a rota alvo
         this.redJgTargetCampId = null;
+
+        // Executa o gank do JG inimigo contra a equipe azul na rota alvo (a cada 90s, quando janela abre)
+        if (this.gameSeconds % 90 === 0 && this.gameSeconds >= 180) {
+          const gankLane = this.redJungleCampLane;
+          const victimRole = gankLane === "bot" ? "adc" : gankLane;
+          const bVictim = this.blueRosterState && this.blueRosterState[victimRole];
+          if (bVictim && bVictim.alive) {
+            // Chance de sucesso do gank inimigo baseada em stats e se a rota está coberta pelo JG azul
+            const blueJgCovering = this.blueJungleCampLane === gankLane;
+            const redCombat = (this.redTeam.stats?.combat || 50) + (Math.random() * 30);
+            const blueDef = (this.blueTeam.stats?.vision || 50) + (blueJgCovering ? 20 : 0) + (Math.random() * 20);
+            if (redCombat > blueDef) {
+              // Gank inimigo bem-sucedido
+              this._handleSkirmishOutcome("red", "blue", "jungle", victimRole,
+                "Gank Inimigo Bem-Sucedido",
+                `⚠️ GANK INIMIGO! ${rJg.proPlayer?.nick || rJg.name} emboscou a rota ${gankLane.toUpperCase()} e abateu ${bVictim.proPlayer?.nick || bVictim.name}!`
+              );
+            } else {
+              // Gank frustrado — vítima sobrevive ou contra-gank azul
+              const rJgNick = rJg.proPlayer?.nick || rJg.name;
+              const bVictimNick = bVictim.proPlayer?.nick || bVictim.name;
+              const evadeText = blueJgCovering
+                ? `🛡️ CONTRA-GANK! Sentinela no rio revelou a aproximação de ${rJgNick} — ${bVictimNick} recuou a tempo e o Caçador Aliado está a caminho!`
+                : `🏃 GANK EVITADO! ${bVictimNick} recuou para baixo da torre antes de ${rJgNick} fechar a emboscada!`;
+              this.onEvent({ type: "jungle", side: "red", icon: "⚠️", text: evadeText, time: this._formatTime() });
+            }
+          }
+        }
       } else if (this.gameSeconds < 90) {
         this.redJgTargetCampId = (this.redJgStartChoice === "start_blue_buff") ? "red_blue_buff" : "red_red_buff";
       } else if (this.gameSeconds >= 165 && this.gameSeconds <= 200 && this.redEarlyGankTargetLane) {
@@ -15444,7 +15492,7 @@ class MatchSimulator {
         ty = botClash.y + 12;
         status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
-        const isRedGankWindow = this.redJungleCampLane && ((this.gameSeconds + 45) % 90 <= 24);
+        const isRedGankWindow = this.redJungleCampLane && (this.gameSeconds % 90 <= 24);
         if (isRedGankWindow) {
           const l = this.redJungleCampLane;
           const targetCoords = l === "top" ? { x: 310, y: 120 } : (l === "mid" ? { x: 550, y: 280 } : { x: 820, y: 530 });
