@@ -579,6 +579,11 @@ export class ArenaView {
               <circle r="5" fill="#091428" stroke="${side === 'blue' ? '#0ac8b9' : '#e84057'}" stroke-width="1.2" />
               <text text-anchor="middle" dominant-baseline="central" font-size="6.5" font-weight="900" fill="#f0e6d2">${roleLetter}</text>
             </g>
+            <!-- Selo de Nível no Minimap (-11, 11) -->
+            <g class="champ-map-level-badge" transform="translate(-11, 11)">
+              <circle r="5" fill="#091428" stroke="#c8aa6e" stroke-width="1.2" />
+              <text id="map-level-${side}-${role}" text-anchor="middle" dominant-baseline="central" font-size="6" font-weight="900" fill="#f0e6d2">${m.level || 1}</text>
+            </g>
             <!-- Barra de Vida Mini sob o Avatar -->
             <g class="champ-hp-container" transform="translate(-14, 16)">
               <rect class="champ-hp-bg" x="0" y="0" width="28" height="4.5" rx="2" fill="#050b14" stroke="#1e293b" stroke-width="0.8" />
@@ -781,6 +786,9 @@ export class ArenaView {
                 </div>
               ` : ''}
               <div class="dead-overlay">💀</div>
+              <div class="champ-level-badge-pill" id="level-pill-${side}-${role}" title="Nível ${m.level || 1}">
+                <span id="level-${side}-${role}">Nv.${m.level || 1}</span>
+              </div>
             </div>
             <div class="roster-player-text">
               <div class="champ-ingame-name">
@@ -791,6 +799,7 @@ export class ArenaView {
               </div>
               <div class="champ-meta-tags">
                 <span class="champ-role-tag">${role.toUpperCase()}</span>
+                <span class="champ-ult-indicator ${m.ultimateUnlocked ? 'ult-ready' : 'ult-locked'}" id="ult-${side}-${role}" title="${m.ultimateUnlocked ? `Habilidade Suprema Rank ${m.ultimateRank || 1} Ativa!` : 'Ultimate Bloqueada (Libera no Nível 6)'}">${m.ultimateUnlocked ? `👑 R${m.ultimateRank || 1}` : '🔒 R'}</span>
                 <span class="champ-matchup-slot" id="matchup-slot-${side}-${role}"></span>
               </div>
             </div>
@@ -1145,6 +1154,12 @@ export class ArenaView {
           deadEl.style.display = m.alive ? "none" : "block";
         }
         marker.classList.toggle("dead", !m.alive);
+
+        // Atualiza Nível no Minimap
+        const lvlEl = marker.querySelector(`#map-level-${side}-${role}`);
+        if (lvlEl && lvlEl.textContent !== String(m.level || 1)) {
+          lvlEl.textContent = String(m.level || 1);
+        }
       });
     });
   }
@@ -1317,6 +1332,28 @@ export class ArenaView {
           }
         }
       }
+
+      // Atualiza Nível e Ultimate
+      const lvlNumEl = this.containerEl.querySelector(`#level-${side}-${role}`);
+      if (lvlNumEl) {
+        const lvlText = `Nv.${m.level || 1}`;
+        if (lvlNumEl.textContent !== lvlText) lvlNumEl.textContent = lvlText;
+      }
+      const lvlPillEl = this.containerEl.querySelector(`#level-pill-${side}-${role}`);
+      if (lvlPillEl) {
+        lvlPillEl.title = `Nível ${m.level || 1} • ${(m.xp || 0)}/${(m.xpForNextLevel || 280)} XP`;
+      }
+
+      const ultEl = this.containerEl.querySelector(`#ult-${side}-${role}`);
+      if (ultEl) {
+        const ultText = m.ultimateUnlocked ? `👑 R${m.ultimateRank || 1}` : '🔒 R';
+        if (ultEl.textContent !== ultText) {
+          ultEl.textContent = ultText;
+          ultEl.className = `champ-ult-indicator ${m.ultimateUnlocked ? 'ult-ready' : 'ult-locked'}`;
+          ultEl.title = m.ultimateUnlocked ? `Habilidade Suprema Rank ${m.ultimateRank || 1} Ativa!` : 'Ultimate Bloqueada (Libera no Nível 6)';
+        }
+      }
+
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
       if (kdaEl) {
         kdaEl.textContent = `${m.kills} / ${m.deaths} / ${m.assists}`;
@@ -1860,7 +1897,7 @@ export class ArenaView {
                   <span class="stats-role-badge">${roleLabels[role]}</span>
                 </div>
                 <div class="stats-champ-info">
-                  <span class="stats-champ-name">${c.name}</span>
+                  <span class="stats-champ-name">${c.name} <span class="stats-champ-level-badge">Nv.${c.level || 1}</span></span>
                   <span class="stats-champ-kda">${c.kills} / <span class="death-num">${c.deaths}</span> / ${c.assists}</span>
                 </div>
               </div>

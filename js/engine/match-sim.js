@@ -548,6 +548,11 @@ export class MatchSimulator {
         goldCurrent: startingCurrentGold, // Ouro líquido restante após compra inicial (Doran/Pet/Atlas)
         cs: 0,
         csPerMin: 0.0,
+        level: 1,
+        xp: 0,
+        xpForNextLevel: 280,
+        ultimateUnlocked: false,
+        ultimateRank: 0,
         travelingBackUntil: 0, // Tempo de volta da base para a rota
         laneGoldDiff: 0, // Diferença de ouro contra o rival direto
         isMvp: false, // Destaque de carregador mais forte
@@ -583,6 +588,70 @@ export class MatchSimulator {
       c.goldCurrent = (c.goldCurrent || 0) + split;
     });
     this._syncTeamGold();
+  }
+
+  _addChampionXp(champ, amount, side = "blue") {
+    if (!champ || champ.level >= 18 || !amount || amount <= 0) return;
+    champ.xp = (champ.xp || 0) + amount;
+
+    const XP_TABLE = {
+      1: 280, 2: 380, 3: 480, 4: 580, 5: 680,
+      6: 780, 7: 880, 8: 980, 9: 1080, 10: 1180,
+      11: 1280, 12: 1380, 13: 1480, 14: 1580, 15: 1680,
+      16: 1780, 17: 1880
+    };
+
+    while (champ.level < 18) {
+      const needed = XP_TABLE[champ.level] || 1880;
+      if (champ.xp >= needed) {
+        champ.xp -= needed;
+        champ.level++;
+        champ.xpForNextLevel = XP_TABLE[champ.level] || 1880;
+
+        if (champ.level === 6) {
+          champ.ultimateUnlocked = true;
+          champ.ultimateRank = 1;
+          this.onEvent({
+            type: "level_up",
+            side: side,
+            icon: "⚡",
+            text: `⚡ POWER SPIKE! ${champ.name} atingiu o Nível 6 e liberou sua Habilidade Suprema (Ultimate)!`,
+            time: this._formatTime()
+          });
+        } else if (champ.level === 11) {
+          champ.ultimateRank = 2;
+          this.onEvent({
+            type: "level_up",
+            side: side,
+            icon: "⚡",
+            text: `⚡ POWER SPIKE! ${champ.name} atingiu o Nível 11 (Ultimate Nível 2)!`,
+            time: this._formatTime()
+          });
+        } else if (champ.level === 16) {
+          champ.ultimateRank = 3;
+          this.onEvent({
+            type: "level_up",
+            side: side,
+            icon: "🔥",
+            text: `🔥 PICO SUPREMO! ${champ.name} atingiu o Nível 16 (Ultimate Nível Máximo)! Força destrutiva habilitada!`,
+            time: this._formatTime()
+          });
+        }
+      } else {
+        champ.xpForNextLevel = needed;
+        break;
+      }
+    }
+  }
+
+  _awardTeamXp(side, amount) {
+    if (!amount || amount <= 0) return;
+    const roster = side === "blue" ? this.blueRosterState : this.redRosterState;
+    Object.values(roster).forEach(c => {
+      if (c.alive) {
+        this._addChampionXp(c, amount, side);
+      }
+    });
   }
 
   _updateOrganicTactics() {
@@ -950,6 +1019,14 @@ export class MatchSimulator {
           c.goldEarned = Math.round((c.goldEarned || 500) + goldGain);
           c.goldCurrent = Math.round((c.goldCurrent || 0) + goldGain);
           c.csPerMin = parseFloat(((c.cs || 0) / Math.max(1, this.gameSeconds / 60)).toFixed(1));
+
+          // Concessão Realista de Experiência (XP) da Rota (Tropas colidem a partir dos 90s)
+          if (this.gameSeconds >= 90) {
+            let xpRate = 10.5; // Solo Lanes (Top & Mid): Nível 6 aos ~05:20
+            if (role === "adc" || role === "support") xpRate = 6.8; // Duo Lane compartilha XP: Nível 6 aos ~06:30
+            else if (role === "jungle") xpRate = 2.0; // Caçador tem presença passiva mínima na rota
+            this._addChampionXp(c, xpRate * deltaSeconds, isBlueTeam ? "blue" : "red");
+          }
 
           // Marca comemorativa e educativa de farm (50, 100, 150, 200, 250, 300 CS)
           const currentCs = c.cs;
@@ -4008,17 +4085,24 @@ export class MatchSimulator {
     killer.goldEarned = (killer.goldEarned || 500) + 300;
     killer.goldCurrent = (killer.goldCurrent || 0) + 300;
 
-    // Assistências dos aliados vivos do assassino (150g divididos igualmente)
+    // Concessão de XP por Abate (baseado no nível da vítima)
+    const victimLevel = victim.level || 1;
+    const killXp = 160 + (victimLevel * 25);
+    this._addChampionXp(killer, killXp, killerSide);
+
+    // Assistências dos aliados vivos do assassino (150g divididos igualmente + XP de assistência)
     const assistCandidates = Object.values(killerRoster).filter(c => c.id !== killer.id && c.alive);
     if (assistCandidates.length > 0) {
       const assistCount = Math.min(assistCandidates.length, Math.floor(Math.random() * 3) + 1);
       killerScore.assists = (killerScore.assists || 0) + assistCount;
       const splitGold = Math.round(150 / Math.max(1, assistCount));
+      const splitXp = Math.round((80 + victimLevel * 15) / Math.max(1, assistCount));
       assistCandidates.slice(0, assistCount).forEach(assister => {
         assister.assists = (assister.assists || 0) + 1;
         assister.goldEarned = (assister.goldEarned || 500) + splitGold;
         assister.goldCurrent = (assister.goldCurrent || 0) + splitGold;
         assister.damageDealt = (assister.damageDealt || 0) + Math.floor(lethalDmg * 0.35);
+        this._addChampionXp(assister, splitXp, killerSide);
       });
     }
 
@@ -7723,8 +7807,10 @@ export class MatchSimulator {
       if (!bJg || !bJg.alive || !rJg || !rJg.alive) return false;
       const bMidAlive = bMid && bMid.alive;
       const rMidAlive = rMid && rMid.alive;
-      const bPower = (bJg.stats?.combat || 75) + (bMidAlive ? 8 : 0) + (bJg.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
-      const rPower = (rJg.stats?.combat || 75) + (rMidAlive ? 8 : 0) + (rJg.items?.length || 0) * 8 + (Math.random() * 20);
+      const bLevelPower = ((bJg.level || 1) * 4) + ((bJg.ultimateRank || 0) * 12);
+      const rLevelPower = ((rJg.level || 1) * 4) + ((rJg.ultimateRank || 0) * 12);
+      const bPower = (bJg.stats?.combat || 75) + (bMidAlive ? 8 : 0) + (bJg.items?.length || 0) * 8 + bLevelPower + tacticBonus + (Math.random() * 20);
+      const rPower = (rJg.stats?.combat || 75) + (rMidAlive ? 8 : 0) + (rJg.items?.length || 0) * 8 + rLevelPower + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         this._recordKill("blue", "red", "jungle", "jungle", "Disputa na Selva", `🌲 DISPUTA NO RIO! ${bJg.name} garantiu o Golpear no Aronguejo e abateu ${rJg.name} na disputa por visão!`);
         this._applyTeamBuff("blue", {
@@ -7778,11 +7864,15 @@ export class MatchSimulator {
         }
       }
 
-      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
-      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
+      const bLevelPower = ((bTop.level || 1) * 5) + ((bTop.ultimateRank || 0) * 12);
+      const rLevelPower = ((rTop.level || 1) * 5) + ((rTop.ultimateRank || 0) * 12);
+      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + bLevelPower + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
           this._recordKill("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
+        } else if ((bTop.ultimateRank || 0) > (rTop.ultimateRank || 0)) {
+          this._recordKill("blue", "red", "top", "top", "Power Spike de Ultimate", `⚡ POWER SPIKE LETAL NO TOPO! ${bTop.name} usou a vantagem da Habilidade Suprema e destruiu ${rTop.name}!`);
         } else {
           this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
         }
@@ -7798,6 +7888,8 @@ export class MatchSimulator {
           this._recordKill("red", "blue", "top", "top", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bTop.name} tentou forçar trocas em desvantagem de matchup contra ${rTop.name} e foi solado!`);
         } else if (blueOverextended && rJg && rJg.alive) {
           this._recordKill("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
+        } else if ((rTop.ultimateRank || 0) > (bTop.ultimateRank || 0)) {
+          this._recordKill("red", "blue", "top", "top", "Power Spike Inimigo", `🔴 POWER SPIKE RIVAL NO TOPO! ${rTop.name} atingiu a Ultimate primeiro e executou ${bTop.name}!`);
         } else {
           this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
         }
@@ -7843,11 +7935,15 @@ export class MatchSimulator {
         }
       }
 
-      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
-      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
+      const bLevelPower = ((bMid.level || 1) * 5) + ((bMid.ultimateRank || 0) * 12);
+      const rLevelPower = ((rMid.level || 1) * 5) + ((rMid.ultimateRank || 0) * 12);
+      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + bLevelPower + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
           this._recordKill("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
+        } else if ((bMid.ultimateRank || 0) > (rMid.ultimateRank || 0)) {
+          this._recordKill("blue", "red", "mid", "mid", "Burst de Ultimate", `⚡ COMBO SUPREMO NO MID! Com vantagem de Ultimate Nível 6, ${bMid.name} explodiu ${rMid.name} num combo letal!`);
         } else {
           const isGank = bJg && bJg.alive && Math.random() < 0.35;
           const kRole = isGank ? "jungle" : "mid";
@@ -7868,6 +7964,8 @@ export class MatchSimulator {
           this._recordKill("red", "blue", "mid", "mid", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bMid.name} tentou forçar trocas agressivas contra ${rMid.name} em desvantagem de matchup e foi explodido!`);
         } else if (blueOverextended && rJg && rJg.alive) {
           this._recordKill("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
+        } else if ((rMid.ultimateRank || 0) > (bMid.ultimateRank || 0)) {
+          this._recordKill("red", "blue", "mid", "mid", "Burst Rival de Ultimate", `🔴 OUTPLAY NO MID! ${rMid.name} atingiu a Ultimate primeiro e evaporou a barra de vida de ${bMid.name}!`);
         } else {
           const isGank = rJg && rJg.alive && Math.random() < 0.35;
           const kRole = isGank ? "jungle" : "mid";
@@ -7921,13 +8019,17 @@ export class MatchSimulator {
         }
       }
 
-      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
-      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
+      const bLevelPower = ((bAdc.level || 1) * 4.5) + (bSuppAlive ? (bSupp.level || 1) * 2 : 0) + ((bAdc.ultimateRank || 0) * 10) + (bSuppAlive ? (bSupp.ultimateRank || 0) * 6 : 0);
+      const rLevelPower = ((rAdc.level || 1) * 4.5) + (rSuppAlive ? (rSupp.level || 1) * 2 : 0) + ((rAdc.ultimateRank || 0) * 10) + (rSuppAlive ? (rSupp.ultimateRank || 0) * 6 : 0);
+      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + bLevelPower + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
         if (redOverextended && bJg && bJg.alive) {
           this._recordKill("blue", "red", "jungle", victimRole, "Punição sob a Torre", `🏹 PUNIÇÃO SOB A TORRE NO BOT! A dupla adversária tentava pressionar e ${bJg.name} fechou a pinça pelas costas eliminando ${victimName}!`);
+        } else if ((bAdc.ultimateRank || 0) > (rAdc.ultimateRank || 0)) {
+          this._recordKill("blue", "red", "adc", victimRole, "Power Spike no Bot", `🏹 ENGAGE COM ULTIMATE! Com vantagem de Ultimate Nível 6 na bot lane, seu time atropelou a dupla rival e abateu ${victimName}!`);
         } else {
           this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
         }
@@ -7944,7 +8046,9 @@ export class MatchSimulator {
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
           this._recordKill("red", "blue", "adc", victimRole, "Punição de Matchup no Bot", `⚠️ PRESSÃO AGRESSIVA PUNIDA! A bot lane tentou forçar trocas em desvantagem de matchup e ${rAdc.name} garantiu a eliminação de ${victimName}!`);
         } else if (blueOverextended && rJg && rJg.alive) {
-          this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco fatal de ${rJg.name}!`);
+          this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco letal de ${rJg.name}!`);
+        } else if ((rAdc.ultimateRank || 0) > (bAdc.ultimateRank || 0)) {
+          this._recordKill("red", "blue", "adc", victimRole, "Power Spike Inimigo no Bot", `🔴 ULTIMATE INIMIGA LETAL! A bot lane rival conectou o combo supremo de Nível 6 e abateu ${victimName}!`);
         } else {
           this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
         }
@@ -8776,6 +8880,7 @@ export class MatchSimulator {
               bJg.goldCurrent = (bJg.goldCurrent || 0) + bCamp.gold;
               bJg.cs = (bJg.cs || 0) + bCamp.cs;
               this.blueScore.gold += bCamp.gold;
+              this._addChampionXp(bJg, bCamp.xp || 150, "blue");
 
               if (bCamp.campType === "buff" || bCamp.campType === "scuttle") {
                 const jgNick = bJg.proPlayer?.nick || bJg.name;
@@ -8845,6 +8950,7 @@ export class MatchSimulator {
               rJg.goldCurrent = (rJg.goldCurrent || 0) + rCamp.gold;
               rJg.cs = (rJg.cs || 0) + rCamp.cs;
               this.redScore.gold += rCamp.gold;
+              this._addChampionXp(rJg, rCamp.xp || 150, "red");
 
               if (rCamp.campType === "buff" || rCamp.campType === "scuttle") {
                 const jgNick = rJg.proPlayer?.nick || rJg.name;
