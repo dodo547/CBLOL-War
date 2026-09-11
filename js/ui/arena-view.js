@@ -273,38 +273,38 @@ export class ArenaView {
   _renderSummonersRiftSvg(state) {
     const MAP_COORDS = {
       blue: {
-        top_inhib: { x: 162, y: 517 },
+        top_inhib: { x: 170, y: 528 },
         top_t3: { x: 154, y: 464 },
-        top_t2: { x: 196, y: 389 },
-        top_t1: { x: 213, y: 205 },
-        mid_inhib: { x: 265, y: 547 },
-        mid_t3: { x: 298, y: 522 },
-        mid_t2: { x: 399, y: 458 },
-        mid_t1: { x: 430, y: 388 },
-        bot_inhib: { x: 277, y: 658 },
-        bot_t3: { x: 326, y: 654 },
-        bot_t2: { x: 467, y: 626 },
-        bot_t1: { x: 672, y: 624 },
-        nexus_t1: { x: 189, y: 579 },
-        nexus_t2: { x: 212, y: 601 },
-        nexus: { x: 170, y: 610 }
+        top_t2: { x: 198, y: 389 },
+        top_t1: { x: 216, y: 208 },
+        mid_inhib: { x: 286, y: 560 },
+        mid_t3: { x: 322, y: 524 },
+        mid_t2: { x: 398, y: 460 },
+        mid_t1: { x: 430, y: 395 },
+        bot_inhib: { x: 298, y: 672 },
+        bot_t3: { x: 356, y: 654 },
+        bot_t2: { x: 484, y: 636 },
+        bot_t1: { x: 690, y: 656 },
+        nexus_t1: { x: 202, y: 582 },
+        nexus_t2: { x: 226, y: 612 },
+        nexus: { x: 188, y: 630 }
       },
       red: {
-        top_t1: { x: 325, y: 69 },
-        top_t2: { x: 516, y: 97 },
-        top_t3: { x: 666, y: 90 },
-        top_inhib: { x: 690, y: 86 },
-        mid_t1: { x: 574, y: 301 },
-        mid_t2: { x: 624, y: 239 },
-        mid_t3: { x: 696, y: 186 },
-        mid_inhib: { x: 703, y: 162 },
-        bot_t1: { x: 842, y: 492 },
-        bot_t2: { x: 803, y: 327 },
-        bot_t3: { x: 835, y: 219 },
-        bot_inhib: { x: 811, y: 192 },
-        nexus_t1: { x: 759, y: 94 },
-        nexus_t2: { x: 776, y: 129 },
-        nexus: { x: 782, y: 105 }
+        top_t1: { x: 338, y: 84 },
+        top_t2: { x: 525, y: 116 },
+        top_t3: { x: 660, y: 92 },
+        top_inhib: { x: 692, y: 88 },
+        mid_t1: { x: 597, y: 292 },
+        mid_t2: { x: 626, y: 240 },
+        mid_t3: { x: 692, y: 190 },
+        mid_inhib: { x: 718, y: 172 },
+        bot_t1: { x: 864, y: 484 },
+        bot_t2: { x: 804, y: 328 },
+        bot_t3: { x: 836, y: 222 },
+        bot_inhib: { x: 812, y: 198 },
+        nexus_t1: { x: 768, y: 122 },
+        nexus_t2: { x: 794, y: 152 },
+        nexus: { x: 812, y: 116 }
       }
     };
 
@@ -372,7 +372,7 @@ export class ArenaView {
           <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
           <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
-        <g id="clash-mid" class="minion-clash-wave" transform="translate(502, 344)">
+        <g id="clash-mid" class="minion-clash-wave" transform="translate(514, 344)">
           <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
           <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
           <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
