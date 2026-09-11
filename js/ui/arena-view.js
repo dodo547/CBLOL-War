@@ -82,7 +82,7 @@ export class ArenaView {
             <span class="tactics-group-title">🎯 Postura da Equipe:</span>
             <div class="tactics-buttons-container" id="tactics-buttons-container">
               <button class="tactic-btn ${this.sim.playerTactics === 'balanced' ? 'active' : ''}" data-tactic="balanced" title="Equilibrada: controle de rotas, farm e visão padrão">⚖️ Equilibrada</button>
-              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: força lutas e emboscadas (+Dano, -Defesa)">⚔️ Agressiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: pressão e lutas (+Dano em matchups favoráveis. CUIDADO: em desvantagem ou rota acampada pelo caçador rival, causa mortes solo e ganks punidores!)">⚔️ Agressiva</button>
               <button class="tactic-btn ${this.sim.playerTactics === 'defense' ? 'active' : ''}" data-tactic="defense" title="Defensiva: joga sob as torres e absorve pressão (+Armadura, -Push)">🛡️ Defensiva</button>
               <button class="tactic-btn ${this.sim.playerTactics === 'split' ? 'active' : ''}" data-tactic="split" title="Split Push: foca em derreter torres e puxar rotas laterais (+Push, -Dano TF)">🏰 Split Push</button>
             </div>
@@ -578,7 +578,10 @@ export class ArenaView {
                 <strong class="player-nick-highlight">${m.playerNick || m.name}</strong>
                 ${m.playerNick ? `<span class="champ-sub-name">${m.name}</span>` : ''}
               </div>
-              <div class="champ-role-tag">${role.toUpperCase()}</div>
+              <div class="champ-meta-tags">
+                <span class="champ-role-tag">${role.toUpperCase()}</span>
+                <span class="champ-matchup-slot" id="matchup-slot-${side}-${role}"></span>
+              </div>
             </div>
           </div>
           ${this._renderChampItems(m.items)}
@@ -838,12 +841,15 @@ export class ArenaView {
     }
 
     // Atualiza status e itens dos campeões
-    this._updateRosterUI(state.blue.roster, "blue");
-    this._updateRosterUI(state.red.roster, "red");
+    this._updateRosterUI(state.blue.roster, "blue", state);
+    this._updateRosterUI(state.red.roster, "red", state);
   }
 
-  _updateRosterUI(rosterState, side) {
+  _updateRosterUI(rosterState, side, fullState = null) {
     const roles = ["top", "jungle", "mid", "adc", "support"];
+    const laneMatchups = (fullState && fullState.laneMatchups) || (this.matchSim && this.matchSim.laneMatchups) || {};
+    const campedLane = (fullState && fullState.redJungleCampLane) || (this.matchSim && this.matchSim.redJungleCampLane) || null;
+
     roles.forEach(role => {
       const m = rosterState[role];
       if (!m) return;
@@ -851,6 +857,37 @@ export class ArenaView {
       if (row) {
         if (!m.alive) row.classList.add("dead");
         else row.classList.remove("dead");
+
+        // Atualiza matchup tags e alerta de foco do caçador rival
+        const slot = row.querySelector(`#matchup-slot-${side}-${role}`);
+        if (slot) {
+          const laneKey = (role === "adc" || role === "support") ? "bot" : role;
+          const matchup = laneMatchups[laneKey];
+          const isCamped = (campedLane === laneKey);
+
+          let badgesHtml = "";
+          if (side === "blue") {
+            if (matchup) {
+              if (matchup.advantageSide === "blue") {
+                badgesHtml += `<span class="matchup-tag adv" title="${matchup.desc}">⚔️ Vantagem</span>`;
+              } else if (matchup.advantageSide === "red") {
+                badgesHtml += `<span class="matchup-tag disadv" title="${matchup.desc}">⚠️ Desvantagem</span>`;
+              } else {
+                badgesHtml += `<span class="matchup-tag neutral" title="${matchup.desc}">⚖️ Parelho</span>`;
+              }
+            }
+            if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="camp-target-tag" title="Alvo preferencial do Caçador Rival! Cuidado redobrado ao forçar pressão!">🎯 Marcado</span>`;
+            }
+          } else if (side === "red") {
+            if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="camp-helper-tag" title="Rota prioritária de gank e emboscada">🌲 Foco Gank</span>`;
+            }
+          }
+          if (slot.innerHTML !== badgesHtml) {
+            slot.innerHTML = badgesHtml;
+          }
+        }
 
         // Atualiza bandeja de itens (apenas quando houver alteração para evitar DOM thrashing)
         const tray = row.querySelector(".champ-items-tray");
@@ -1548,6 +1585,18 @@ export class ArenaView {
         `;
       }
 
+      const targetLane = decisionData.meta?.targetLane;
+      const campedLane = liveState.redJungleCampLane || (this.matchSim && this.matchSim.redJungleCampLane);
+      const isTargetCamped = targetLane && (targetLane === campedLane);
+      let campWarningBanner = "";
+      if (isTargetCamped) {
+        campWarningBanner = `
+          <div class="decision-camp-warning-banner">
+            ⚠️ <strong>ALERTA DE CAÇADOR ADVERSÁRIO:</strong> O Caçador rival está acampando nesta rota! Forçar jogadas agressivas ou ignorar controle de visão tem penalidade severa de sucesso e alto risco de contra-gank letal.
+          </div>
+        `;
+      }
+
       statusBar.innerHTML = `
         <div class="decision-status-row">
           <div class="decision-team-stat blue-side">
@@ -1575,6 +1624,7 @@ export class ArenaView {
             </div>
           </div>
         </div>
+        ${campWarningBanner}
         ${scoutingHtml}
         <div class="decision-advice-pill">${advice}</div>
       `;

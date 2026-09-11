@@ -4297,12 +4297,20 @@ class MatchSimulator {
     this.incidentHistory = []; // Registro dos últimos tipos para garantir variedade contínua
     this._farmMilestones = {}; // Registro de marcos comemorativos e educativos de CS (50, 100, 150, 200...)
 
+    // Sistema de Matchups de Campeões e Rota Marcada pelo Caçador Rival
+    this.laneMatchups = {};
+    this.redJungleCampLane = null; // 'top', 'mid', ou 'bot'
+    this.nextJungleCampUpdateAt = 165; // Primeira rotação aos 02:45
+
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
     this.objectiveBountiesActive = false;
 
     // Estados dos campeões e pro players
     this.blueRosterState = this._initRosterState(this.blueTeam.roster, this.blueTeam);
     this.redRosterState = this._initRosterState(this.redTeam.roster || this.redTeam.defaultRoster, this.redTeam);
+
+    this._initLaneMatchups();
+    this._updateRedJungleCampTarget(true);
 
     this._normalizeTeamStats();
   }
@@ -4438,6 +4446,229 @@ class MatchSimulator {
     };
 
     return structures;
+  }
+
+  _initLaneMatchups() {
+    this.laneMatchups = {
+      top: this._evaluateChampionMatchup(this.blueRosterState?.top, this.redRosterState?.top, "top"),
+      mid: this._evaluateChampionMatchup(this.blueRosterState?.mid, this.redRosterState?.mid, "mid"),
+      bot: this._evaluateChampionMatchup(this.blueRosterState?.adc, this.redRosterState?.adc, "bot", this.blueRosterState?.support, this.redRosterState?.support),
+      jungle: this._evaluateChampionMatchup(this.blueRosterState?.jungle, this.redRosterState?.jungle, "jungle")
+    };
+  }
+
+  _evaluateChampionMatchup(bMember, rMember, lane, bSuppMember = null, rSuppMember = null) {
+    if (!bMember || !rMember) {
+      return { score: 0, advantageSide: "neutral", label: "⚖️ Parelho", desc: "Rota equilibrada sem counter direto." };
+    }
+
+    const bChamp = getChampionById(bMember.id);
+    const rChamp = getChampionById(rMember.id);
+    const bName = bChamp ? bChamp.name : (bMember.name || "Campeão Azul");
+    const rName = rChamp ? rChamp.name : (rMember.name || "Campeão Vermelho");
+    const bId = bChamp ? bChamp.id : bMember.id;
+    const rId = rChamp ? rChamp.id : rMember.id;
+
+    // Tabela detalhada de Counters autênticos de League of Legends
+    const COUNTER_MAP = {
+      // TOP
+      "Fiora": ["Chogath", "DrMundo", "Malphite", "Sion", "Ornn", "Maokai", "Shen", "KSante", "Poppy", "Nasus", "Garen"],
+      "Malphite": ["Jax", "Tryndamere", "Irelia", "Yasuo", "Yone", "Fiora", "Quinn"],
+      "Darius": ["Garen", "Sett", "Sion", "Shen", "Nasus", "Chogath", "Maokai", "Camille"],
+      "Teemo": ["Darius", "Garen", "Sett", "Nasus", "Illaoi", "Mordekaiser", "Singed"],
+      "Quinn": ["Darius", "Garen", "Renekton", "Sett", "Illaoi"],
+      "Jax": ["Camille", "Fiora", "Irelia", "Tryndamere", "Gwen", "MasterYi"],
+      "Poppy": ["Riven", "Irelia", "Yasuo", "Camille", "Aatrox", "LeeSin"],
+      "Renekton": ["Yasuo", "Irelia", "Riven", "Katarina"],
+      "Gwen": ["Sion", "Chogath", "DrMundo", "Ornn", "Malphite", "Maokai"],
+      "Irelia": ["Gnar", "Teemo", "Quinn", "Kennen", "Jayce"],
+      "Aatrox": ["Sion", "Chogath", "DrMundo", "Sett"],
+      "Olaf": ["Mordekaiser", "Malphite", "Maokai", "Shen"],
+
+      // MID
+      "Zed": ["Lux", "Velkoz", "Xerath", "Veigar", "Syndra", "TwistedFate", "Orianna", "Hwei", "AurelionSol"],
+      "Talon": ["Lux", "Velkoz", "Xerath", "Veigar", "Syndra", "TwistedFate", "Kassadin"],
+      "Galio": ["Zed", "Katarina", "Akali", "LeBlanc", "Fizz", "Ahri", "Sylas"],
+      "Malzahar": ["Zed", "Yasuo", "Yone", "Katarina", "Akali", "LeBlanc"],
+      "Lissandra": ["Zed", "LeBlanc", "Akali", "Katarina", "Yasuo"],
+      "Syndra": ["Annie", "Ryze", "Cassiopeia", "Heimerdinger", "Malzahar"],
+      "Orianna": ["Ryze", "Annie", "Cassiopeia", "Galio"],
+      "Yasuo": ["Lux", "Ahri", "Syndra", "TwistedFate", "Velkoz", "Xerath", "Zoe"],
+      "Vex": ["Yasuo", "Yone", "Katarina", "Akali", "LeBlanc", "Irelia", "Ahri"],
+      "Kassadin": ["Ryze", "Cassiopeia", "Viktor", "Anivia", "Azir"],
+      "Ahri": ["Xerath", "Velkoz", "Lux", "Hwei"],
+
+      // BOT (ADC)
+      "Draven": ["Jinx", "KogMaw", "Twitch", "Zeri", "Smolder", "Vayne", "Ezreal"],
+      "Lucian": ["Jinx", "KogMaw", "Twitch", "Aphelios", "Varus"],
+      "Samira": ["Jinx", "Aphelios", "Varus", "Ashe", "MissFortune"],
+      "Caitlyn": ["Vayne", "KaiSa", "Samira", "Lucian", "Kalista"],
+      "Sivir": ["Caitlyn", "Jhin", "Blitzcrank", "Thresh", "Morgana"],
+      "Tristana": ["Jinx", "Twitch", "KogMaw", "Vayne"],
+      "Ashe": ["Vayne", "KaiSa", "Kalista", "Samira"],
+      "Jinx": ["Aphelios", "Varus", "Ashe"],
+
+      // SUPPORT
+      "Morgana": ["Thresh", "Blitzcrank", "Nautilus", "Leona", "Pyke", "Rell", "Alistar"],
+      "Leona": ["Sona", "Soraka", "Nami", "Yuumi", "Milio", "Lulu", "Janna"],
+      "Nautilus": ["Sona", "Soraka", "Nami", "Yuumi", "Milio", "Lulu"],
+      "Blitzcrank": ["Sona", "Soraka", "Nami", "Yuumi", "Senna", "Lux"],
+      "Thresh": ["Sona", "Soraka", "Yuumi", "Milio"],
+      "Janna": ["Leona", "Alistar", "Rell", "Nautilus", "Rakan"],
+      "Braum": ["Ezreal", "MissFortune", "Lucian", "Ornn", "Ashe"],
+      "Lulu": ["Zed", "KhaZix", "Rengar", "MasterYi", "Leona"],
+
+      // JUNGLE
+      "LeeSin": ["Karthus", "Shyvana", "MasterYi", "Evelynn", "Fiddlesticks", "Lillia"],
+      "Elise": ["Karthus", "MasterYi", "Shyvana", "Amumu"],
+      "XinZhao": ["MasterYi", "Karthus", "Evelynn", "Lillia"],
+      "JarvanIV": ["Karthus", "Fiddlesticks", "Evelynn", "MasterYi"],
+      "Rammus": ["MasterYi", "BelVeth", "Graves", "Nocturne", "Kindred", "Briar"],
+      "Poppy": ["KhaZix", "Kayn", "Rengar", "LeeSin", "Vi", "JarvanIV"]
+    };
+
+    let score = 0; // Positivo = vantagem Azul; Negativo = vantagem Vermelha (-3.0 a +3.0)
+    let counterLabel = "";
+
+    // 1. Checagem direta de counters cadastrados
+    if (COUNTER_MAP[bId] && COUNTER_MAP[bId].includes(rId)) {
+      score += 2.2;
+      counterLabel = `${bName} é counter direto de ${rName}!`;
+    } else if (COUNTER_MAP[rId] && COUNTER_MAP[rId].includes(bId)) {
+      score -= 2.2;
+      counterLabel = `${rName} é counter direto de ${bName}!`;
+    }
+
+    // 2. Análise de Arquétipos (se não for counter absoluto)
+    const bClass = (bChamp && bChamp.class) || "Fighter";
+    const rClass = (rChamp && rChamp.class) || "Fighter";
+    const bStats = (bChamp && bChamp.stats) || { damage: 75, tank: 75, push: 75 };
+    const rStats = (rChamp && rChamp.stats) || { damage: 75, tank: 75, push: 75 };
+
+    if (bClass === "Assassin" && (rClass === "Mage" || rClass === "Marksman") && rStats.tank <= 65) {
+      score += 1.2;
+      if (!counterLabel) counterLabel = `${bName} tem burst letal contra a fragilidade de ${rName}.`;
+    } else if (rClass === "Assassin" && (bClass === "Mage" || bClass === "Marksman") && bStats.tank <= 65) {
+      score -= 1.2;
+      if (!counterLabel) counterLabel = `${rName} tem pressão de abate em ${bName}.`;
+    } else if (bClass === "Tank" && rClass === "Assassin") {
+      score += 1.3;
+      if (!counterLabel) counterLabel = `${bName} neutraliza o burst de ${rName} com armadura e vida.`;
+    } else if (rClass === "Tank" && bClass === "Assassin") {
+      score -= 1.3;
+      if (!counterLabel) counterLabel = `${rName} resiste facilmente ao burst de ${bName}.`;
+    } else if (bStats.damage >= 88 && rClass === "Tank") {
+      score += 1.0;
+      if (!counterLabel) counterLabel = `${bName} derrete a resistência de ${rName} em lutas prolongadas.`;
+    } else if (rStats.damage >= 88 && bClass === "Tank") {
+      score -= 1.0;
+      if (!counterLabel) counterLabel = `${rName} derrete a linha defensiva de ${bName}.`;
+    }
+
+    // 3. Modificador de Bot Lane (duo 2v2: ADC + Suporte)
+    if (lane === "bot" && bSuppMember && rSuppMember) {
+      const bSuppChamp = getChampionById(bSuppMember.id);
+      const rSuppChamp = getChampionById(rSuppMember.id);
+      const bSuppId = bSuppChamp ? bSuppChamp.id : bSuppMember.id;
+      const rSuppId = rSuppChamp ? rSuppChamp.id : rSuppMember.id;
+      const bSuppName = bSuppChamp ? bSuppChamp.name : (bSuppMember.name || "Suporte Azul");
+      const rSuppName = rSuppChamp ? rSuppChamp.name : (rSuppMember.name || "Suporte Vermelho");
+
+      let suppScore = 0;
+      if (COUNTER_MAP[bSuppId] && COUNTER_MAP[bSuppId].includes(rSuppId)) {
+        suppScore += 2.0;
+        counterLabel += ` A iniciação/proteção de ${bSuppName} anula ${rSuppName}!`;
+      } else if (COUNTER_MAP[rSuppId] && COUNTER_MAP[rSuppId].includes(bSuppId)) {
+        suppScore -= 2.0;
+        counterLabel += ` ${rSuppName} domina a rota 2v2 contra ${bSuppName}!`;
+      }
+      score = Math.max(-3.0, Math.min(3.0, (score * 0.6) + (suppScore * 0.4)));
+    }
+
+    // Clamping final de score
+    score = Math.max(-3.0, Math.min(3.0, Math.round(score * 10) / 10));
+
+    let advantageSide = "neutral";
+    let label = "⚖️ Parelho";
+    let desc = counterLabel || `Duelo parelho e equilibrado entre ${bName} e ${rName}.`;
+
+    if (score >= 0.8) {
+      advantageSide = "blue";
+      label = "⚔️ Vantagem";
+      desc = counterLabel || `${bName} possui vantagem estratégica e melhores trocas contra ${rName}.`;
+    } else if (score <= -0.8) {
+      advantageSide = "red";
+      label = "⚠️ Desvantagem";
+      desc = counterLabel || `${rName} possui vantagem tática ou counter contra ${bName}. Evite forçar trocas cegas!`;
+    }
+
+    return {
+      score,
+      advantageSide,
+      label,
+      desc
+    };
+  }
+
+  _getLaneMatchup(lane) {
+    if (!this.laneMatchups) return { score: 0, advantageSide: "neutral", label: "⚖️ Parelho", desc: "Equilibrado" };
+    if (lane === "top") return this.laneMatchups.top;
+    if (lane === "mid") return this.laneMatchups.mid;
+    if (lane === "bot") return this.laneMatchups.bot;
+    if (lane === "jungle") return this.laneMatchups.jungle;
+    return { score: 0, advantageSide: "neutral", label: "⚖️ Parelho", desc: "Equilibrado" };
+  }
+
+  _updateRedJungleCampTarget(isInitial = false) {
+    const lanes = ["top", "mid", "bot"];
+    const weights = {};
+
+    lanes.forEach(l => {
+      let w = 30;
+      const press = (this.lanePressures && this.lanePressures[l]) || 0;
+      // Se a rota do jogador estiver avançada (overextended), é um ímã irresistível de ganks
+      if (press >= 40) w += 45;
+      else if (press >= 20) w += 28;
+      else if (press <= -30) w -= 15;
+
+      // Se o time vermelho tem vantagem de matchup nessa rota, facilita setup de gank
+      const matchup = this.laneMatchups ? this.laneMatchups[l] : null;
+      if (matchup && matchup.score <= -1.0) w += 25;
+      else if (matchup && matchup.score >= 1.0) w -= 10;
+
+      // Se o jogador está na postura agressiva, o caçador rival explora os flancos abertos
+      if (this.playerTactics === "aggressive") w += 20;
+
+      weights[l] = Math.max(10, w);
+    });
+
+    const totalWeight = weights.top + weights.mid + weights.bot;
+    let roll = Math.random() * totalWeight;
+    let chosenLane = "mid";
+    if (roll < weights.top) {
+      chosenLane = "top";
+    } else if (roll < weights.top + weights.mid) {
+      chosenLane = "mid";
+    } else {
+      chosenLane = "bot";
+    }
+
+    const previousCamp = this.redJungleCampLane;
+    this.redJungleCampLane = chosenLane;
+    this.nextJungleCampUpdateAt = this.gameSeconds + 120 + Math.floor(Math.random() * 60);
+
+    const rJg = this.redRosterState ? this.redRosterState.jungle : null;
+    const laneNames = { top: "Rota Superior (Top)", mid: "Rota do Meio (Mid)", bot: "Rota Inferior (Bot)" };
+    const jgName = rJg ? rJg.name : "O Caçador Rival";
+
+    if (!isInitial && previousCamp !== chosenLane) {
+      this.onEvent({
+        type: "jungle_scout",
+        side: "red",
+        text: `🌲 ALERTA DE SELVA: ${jgName} reposicionou sua rotação e agora está acampando na ${laneNames[chosenLane]}! Cuidado com avanços desprotegidos!`,
+        time: this._formatTime()
+      });
+    }
   }
 
   _initRosterState(roster, team = null) {
@@ -4694,6 +4925,11 @@ class MatchSimulator {
     // Atualiza a postura tática orgânica da equipe conforme a situação do mapa
     this._updateOrganicTactics();
 
+    // Atualiza a rota favorita de gank do caçador rival periodicamente
+    if (this.gameSeconds >= this.nextJungleCampUpdateAt) {
+      this._updateRedJungleCampTarget(false);
+    }
+
     // Contra-ataque orgânico: dispara automaticamente quando a equipe defende a base reunida
     if (this.counterAttackCooldown === 0 && (this.lanePressure <= -30 || (this.redScore.gold - this.blueScore.gold >= 2500 && this.lanePressure <= -15))) {
       const blueAliveCount = Object.values(this.blueRosterState).filter(c => c.alive).length;
@@ -4945,8 +5181,8 @@ class MatchSimulator {
     let tacticPush = 0;
 
     if (this.playerTactics === "aggressive") {
-      tacticDmg = 14;
-      tacticTank = -6;
+      tacticDmg = 6;
+      tacticTank = -8;
     } else if (this.playerTactics === "defense") {
       tacticTank = 16;
       tacticPush = -6;
@@ -5028,17 +5264,47 @@ class MatchSimulator {
         if (this.focusedLane === l) lDelta = Math.round(lDelta * 1.45);
         if (this.playerTactics === "split" && (l === "top" || l === "bot")) lDelta = Math.round(lDelta * 1.35);
         if (this.playerTactics === "split" && l === "mid") lDelta = Math.max(1, Math.round(lDelta * 0.7));
-        this.lanePressures[l] = Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1));
+
+        // Impacto de Matchup e Caçador Rival na postura agressiva
+        if (this.playerTactics === "aggressive") {
+          const m = this._getLaneMatchup(l);
+          const isCamped = (this.redJungleCampLane === l);
+          if ((m && m.score < -0.5) || isCamped) {
+            // Forçar agressividade em desvantagem ou contra acampamento rival NÃO avança; é repelido!
+            lDelta = -Math.max(4, Math.round(pressureDelta * 0.8));
+          } else if (m && m.score > 0.5 && !isCamped) {
+            lDelta = Math.round(lDelta * 1.3);
+          }
+        }
+
+        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + lDelta + (Math.random() * 2 - 1)));
       });
     } else if (diff < -2.0) {
       // Avanço Vermelho
       allLanes.forEach(l => {
-        this.lanePressures[l] = Math.max(-100, (this.lanePressures[l] || 0) - pressureDelta + (Math.random() * 2 - 1));
+        let rDelta = pressureDelta;
+        // Se o time do jogador forçou agressivo em rota com desvantagem ou acampada, o avanço vermelho é amplificado
+        if (this.playerTactics === "aggressive") {
+          const m = this._getLaneMatchup(l);
+          const isCamped = (this.redJungleCampLane === l);
+          if ((m && m.score < -0.5) || isCamped) {
+            rDelta = Math.round(rDelta * 1.4);
+          }
+        }
+        this.lanePressures[l] = Math.max(-100, (this.lanePressures[l] || 0) - rDelta + (Math.random() * 2 - 1));
       });
     } else {
-      // Flutuação natural na zona do rio
+      // Flutuação natural na zona do rio com respeito a matchups
       allLanes.forEach(l => {
-        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + (Math.random() * 4 - 2)));
+        let naturalShift = Math.random() * 4 - 2;
+        if (this.playerTactics === "aggressive") {
+          const m = this._getLaneMatchup(l);
+          const isCamped = (this.redJungleCampLane === l);
+          if ((m && m.score < -0.5) || isCamped) {
+            naturalShift -= 3;
+          }
+        }
+        this.lanePressures[l] = Math.max(-100, Math.min(100, (this.lanePressures[l] || 0) + naturalShift));
       });
     }
     this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
@@ -5111,18 +5377,18 @@ class MatchSimulator {
     const rStat = (this.redTeam.stats && (this.redTeam.stats[statType] || this.redTeam.stats.combat)) || 75;
     const statDiff = bStat - rStat;
 
-    // 1. Ouro: Cada 500g de vantagem/desvantagem altera em ±2.0% (até ±20%)
+    // 1. Ouro: Cada 600g de vantagem/desvantagem altera em ±1.5% (até ±15%)
     const goldLead = this.blueScore.gold - this.redScore.gold;
-    const goldModifier = Math.min(20, Math.max(-20, Math.round((goldLead / 500) * 2.0)));
+    const goldModifier = Math.min(15, Math.max(-15, Math.round((goldLead / 600) * 1.5)));
 
-    // 2. Abates (Kills): Diferença de kills impacta diretamente o moral e força de combate
+    // 2. Abates (Kills): Diferença de kills impacta o moral e controle de espaço
     const killDiff = (this.blueScore.kills || 0) - (this.redScore.kills || 0);
-    const killModifier = Math.min(12, Math.max(-12, killDiff * 1.5));
+    const killModifier = Math.min(10, Math.max(-10, Math.round(killDiff * 1.2)));
 
-    // 3. Campeões Vivos: Superioridade numérica imediata (crítico em lutas de objetivos)
+    // 3. Campeões Vivos: Superioridade numérica imediata
     const blueAlive = Object.values(this.blueRosterState).filter(c => c.alive).length;
     const redAlive = Object.values(this.redRosterState).filter(c => c.alive).length;
-    const aliveModifier = (blueAlive - redAlive) * 12;
+    const aliveModifier = (blueAlive - redAlive) * 10;
 
     // 4. Se a jogada exige função específica viva (ex: jungle no smite)
     let rolePenalty = 0;
@@ -5135,60 +5401,88 @@ class MatchSimulator {
 
     // 5. Torres e Pressão territorial
     const towerDiff = (this.blueScore.towers || 0) - (this.redScore.towers || 0);
-    const towerModifier = Math.min(8, Math.max(-8, towerDiff * 2));
+    const towerModifier = Math.min(6, Math.max(-6, Math.round(towerDiff * 1.5)));
 
     // 6. Itens Lendários Completos
     const blueTotalItems = Object.values(this.blueRosterState).reduce((acc, c) => acc + (c.items ? c.items.length : 0), 0);
     const redTotalItems = Object.values(this.redRosterState).reduce((acc, c) => acc + (c.items ? c.items.length : 0), 0);
-    const itemModifier = Math.min(10, Math.max(-10, Math.round((blueTotalItems - redTotalItems) * 2)));
+    const itemModifier = Math.min(8, Math.max(-8, Math.round((blueTotalItems - redTotalItems) * 1.5)));
 
-    // 7. Atributos da Organização (diferença real de composição e upgrades)
-    const statModifier = Math.min(10, Math.max(-10, Math.round(statDiff * 0.35)));
+    // 7. Atributos da Organização
+    const statModifier = Math.min(8, Math.max(-8, Math.round(statDiff * 0.25)));
 
     // 8. Buffs Ativos e Efeitos Táticos
     const bBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers("blue") : { bonusCombat: 0 };
     const rBuffs = this._getTeamBuffModifiers ? this._getTeamBuffModifiers("red") : { bonusCombat: 0 };
-    const buffModifier = Math.min(15, Math.max(-15, Math.round((bBuffs.bonusCombat || 0) - (rBuffs.bonusCombat || 0))));
+    const buffModifier = Math.min(12, Math.max(-12, Math.round((bBuffs.bonusCombat || 0) - (rBuffs.bonusCombat || 0))));
 
-    // Atenuação de penalidades cumulativas quando em desvantagem (Mecânica Anti-Snowball):
-    // No League competitivo, opções de Macro Seguro (Cross-map, visão defensiva, ceder objetivo)
-    // funcionam de maneira consistente mesmo quando o time está atrás.
+    // Atenuação de penalidades cumulativas quando em desvantagem
     let gameDeficitModifiers = goldModifier + killModifier + towerModifier + itemModifier;
     if (gameDeficitModifiers < 0) {
-      // Amortece a soma total de penalidades acumuladas para no máximo -12%
       gameDeficitModifiers = Math.max(-12, gameDeficitModifiers);
     }
 
-    // 9. Sinergia da Postura Tática com a decisão tomada
-    let tacticModifier = 0;
-    if (this.playerTactics === "aggressive" && (statType === "damage" || complexity === "tactical")) {
-      tacticModifier = 6;
-    } else if (this.playerTactics === "defense" && (statType === "tank" || complexity === "simple")) {
-      tacticModifier = 6;
-    } else if (this.playerTactics === "split" && (statType === "push" || complexity === "complex")) {
-      tacticModifier = 8;
+    // 9. Matchup de Campeão e Alvo de Gank do Caçador Adversário
+    let matchupModifier = 0;
+    let campModifier = 0;
+    const targetLane = context.targetLane;
+    if (targetLane && targetLane !== "all") {
+      const matchup = this._getLaneMatchup(targetLane);
+      if (matchup) {
+        matchupModifier = Math.min(12, Math.max(-12, Math.round(matchup.score * 4)));
+      }
+      if (this.redJungleCampLane && this.redJungleCampLane === targetLane) {
+        campModifier = -12; // Caçador rival acampando nesta rota prejudica severamente jogadas forçadas
+      }
     }
 
-    // Dificuldade progressiva justa: times em fases avançadas leem jogadas melhor
+    // 10. Sinergia da Postura Tática com Matchup e Alvo de Gank
+    let tacticModifier = 0;
+    if (this.playerTactics === "aggressive") {
+      // Se a rota tem matchup desfavorável ou está acampada pelo caçador adversário, agressividade cega é severamente punida!
+      if (matchupModifier < -2 || campModifier < 0) {
+        tacticModifier = -14;
+      } else if (matchupModifier > 2 && campModifier === 0) {
+        tacticModifier = 6;
+      } else {
+        tacticModifier = 0;
+      }
+    } else if (this.playerTactics === "defense") {
+      // Jogar defensivo neutraliza a desvantagem de matchup e o camping rival
+      if (matchupModifier < 0 || campModifier < 0) {
+        tacticModifier = 8;
+      } else if (statType === "tank" || complexity === "simple") {
+        tacticModifier = 5;
+      }
+    } else if (this.playerTactics === "split") {
+      if (statType === "push" || complexity === "complex") {
+        tacticModifier = 6;
+      }
+    }
+
+    // Dificuldade progressiva justa
     const roundPenalty = [0, -2, -3, -5][this.roundIndex] || 0;
 
-    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + buffModifier + rolePenalty + roundPenalty + tacticModifier;
+    const rawChance = baseChance + gameDeficitModifiers + aliveModifier + statModifier + buffModifier + rolePenalty + roundPenalty + matchupModifier + campModifier + tacticModifier;
 
-    // Pisos adaptados por fase (preserva possibilidade de virada, mas exige precisão no topo)
-    const simpleFloors = [68, 65, 62, 58];
-    const tacticalFloors = [48, 45, 42, 38];
-    const complexFloors = [35, 32, 28, 25];
+    // Pisos e Tetos Realistas Competitivos (evita auto-vitórias infladas de 85%+):
+    // Simple (seguro/farm/ceder): 45% a 76%
+    // Tactical (lutas 5v5/contestar): 35% a 66%
+    // Complex (dives/all-in/invasão): 20% a 50%
+    const simpleFloors = [50, 48, 46, 45];
+    const tacticalFloors = [38, 36, 35, 35];
+    const complexFloors = [24, 22, 20, 20];
 
-    const sFloor = simpleFloors[this.roundIndex] || 60;
-    const tFloor = tacticalFloors[this.roundIndex] || 40;
-    const cFloor = complexFloors[this.roundIndex] || 25;
+    const sFloor = simpleFloors[this.roundIndex] || 48;
+    const tFloor = tacticalFloors[this.roundIndex] || 36;
+    const cFloor = complexFloors[this.roundIndex] || 22;
 
     if (complexity === "simple") {
-      return Math.max(sFloor, Math.min(92, Math.round(rawChance)));
+      return Math.max(sFloor, Math.min(76, Math.round(rawChance)));
     } else if (complexity === "complex") {
-      return Math.max(cFloor, Math.min(75, Math.round(rawChance)));
+      return Math.max(cFloor, Math.min(50, Math.round(rawChance)));
     } else {
-      return Math.max(tFloor, Math.min(85, Math.round(rawChance)));
+      return Math.max(tFloor, Math.min(66, Math.round(rawChance)));
     }
   }
 
@@ -6077,9 +6371,19 @@ class MatchSimulator {
 
     if (type === "top_lane") {
       const isEarly = phase === "early";
-      const probFreeze = this._calculateSuccessProbability(78, "simple", "combat");
-      const probCrash = this._calculateSuccessProbability(68, "tactical", "push");
-      const probDive = this._calculateSuccessProbability(58, "complex", "damage");
+      const probFreeze = this._calculateSuccessProbability(78, "simple", "combat", { targetLane: "top" });
+      const probCrash = this._calculateSuccessProbability(68, "tactical", "push", { targetLane: "top" });
+      const probDive = this._calculateSuccessProbability(58, "complex", "damage", { targetLane: "top" });
+
+      const topMatchup = this._getLaneMatchup("top");
+      const isTopCamped = (this.redJungleCampLane === "top");
+      let enemyScoutAction = `${rTop} jogando em volta da onda de minions • ${rJg} observado no quadrante superior do mapa.`;
+      if (isTopCamped) {
+        enemyScoutAction = `⚠️ ALERTA DE SELVA: ${rJg} acampa na Rota Superior! • ${enemyScoutAction}`;
+      }
+      if (topMatchup && topMatchup.advantageSide !== "neutral") {
+        enemyScoutAction += ` [Matchup: ${topMatchup.label} - ${topMatchup.desc}]`;
+      }
 
       return {
         id: `dynamic_top_${this.gameSeconds}`,
@@ -6091,7 +6395,7 @@ class MatchSimulator {
           : `${bTop} está isolado empurrando a rota lateral. Qual será o objetivo estratégico no Topo?`,
         scouting: {
           intelTag: "📡 RADAR DA ROTA SUPERIOR (TOP)",
-          enemyAction: `${rTop} jogando em volta da onda de minions • ${rJg} observado no quadrante superior do mapa.`
+          enemyAction: enemyScoutAction
         },
         options: [
           {
@@ -6144,9 +6448,19 @@ class MatchSimulator {
     }
 
     if (type === "jungle_river") {
-      const probScuttle = this._calculateSuccessProbability(75, "simple", "combat");
-      const probInvade = this._calculateSuccessProbability(68, "tactical", "utility");
-      const probGank = this._calculateSuccessProbability(62, "complex", "damage");
+      const probScuttle = this._calculateSuccessProbability(75, "simple", "combat", { targetLane: "jungle" });
+      const probInvade = this._calculateSuccessProbability(68, "tactical", "utility", { targetLane: "jungle" });
+      const probGank = this._calculateSuccessProbability(62, "complex", "damage", { targetLane: "jungle" });
+
+      const jgMatchup = this._getLaneMatchup("jungle");
+      let enemyScoutAction = `${rJg} patrulhando a entrada do rio • Disputa tensa pelo controle de sentinelas e visão de covil.`;
+      if (this.redJungleCampLane) {
+        const laneNames = { top: "Rota Superior", mid: "Rota Central", bot: "Rota Inferior" };
+        enemyScoutAction = `⚠️ RADAR: ${rJg} focado em acampar na ${laneNames[this.redJungleCampLane] || this.redJungleCampLane}! • ${enemyScoutAction}`;
+      }
+      if (jgMatchup && jgMatchup.advantageSide !== "neutral") {
+        enemyScoutAction += ` [Duelo na Selva: ${jgMatchup.label} - ${jgMatchup.desc}]`;
+      }
 
       return {
         id: `dynamic_jungle_${this.gameSeconds}`,
@@ -6156,7 +6470,7 @@ class MatchSimulator {
         subtitle: `${bJg} detectou o caçador rival ${rJg} disputando o controle do rio e dos acampamentos neutros.`,
         scouting: {
           intelTag: "📡 TELEMETRIA DA SELVA & RIO",
-          enemyAction: `${rJg} patrulhando a entrada do rio • Disputa tensa pelo controle de sentinelas e visão de covil.`
+          enemyAction: enemyScoutAction
         },
         options: [
           {
@@ -6209,9 +6523,19 @@ class MatchSimulator {
     }
 
     if (type === "mid_lane") {
-      const probRoam = this._calculateSuccessProbability(68, "tactical", "damage");
-      const probSiege = this._calculateSuccessProbability(76, "simple", "push");
-      const probBurst = this._calculateSuccessProbability(60, "complex", "combat");
+      const probRoam = this._calculateSuccessProbability(68, "tactical", "damage", { targetLane: "mid" });
+      const probSiege = this._calculateSuccessProbability(76, "simple", "push", { targetLane: "mid" });
+      const probBurst = this._calculateSuccessProbability(60, "complex", "combat", { targetLane: "mid" });
+
+      const midMatchup = this._getLaneMatchup("mid");
+      const isMidCamped = (this.redJungleCampLane === "mid");
+      let enemyScoutAction = `${rMid} sob a torre limpando tropas • Rotas laterais vulneráveis a rotações rápidas pelo rio.`;
+      if (isMidCamped) {
+        enemyScoutAction = `⚠️ ALERTA DE SELVA: ${rJg} acampa na Rota do Meio! • ${enemyScoutAction}`;
+      }
+      if (midMatchup && midMatchup.advantageSide !== "neutral") {
+        enemyScoutAction += ` [Matchup: ${midMatchup.label} - ${midMatchup.desc}]`;
+      }
 
       return {
         id: `dynamic_mid_${this.gameSeconds}`,
@@ -6221,7 +6545,7 @@ class MatchSimulator {
         subtitle: `${bMid} limpou as tropas no centro do mapa e abriu janela decisiva para ditar o ritmo contra ${rMid}.`,
         scouting: {
           intelTag: "📡 RADAR CENTRAL (MID)",
-          enemyAction: `${rMid} sob a torre limpando tropas • Rotas laterais vulneráveis a rotações rápidas pelo rio.`
+          enemyAction: enemyScoutAction
         },
         options: [
           {
@@ -6274,9 +6598,19 @@ class MatchSimulator {
     }
 
     if (type === "bot_lane") {
-      const probAllin = this._calculateSuccessProbability(64, "complex", "combat");
-      const probDragon = this._calculateSuccessProbability(75, "simple", "utility");
-      const probPlates = this._calculateSuccessProbability(70, "tactical", "push");
+      const probAllin = this._calculateSuccessProbability(64, "complex", "combat", { targetLane: "bot" });
+      const probDragon = this._calculateSuccessProbability(75, "simple", "utility", { targetLane: "bot" });
+      const probPlates = this._calculateSuccessProbability(70, "tactical", "push", { targetLane: "bot" });
+
+      const botMatchup = this._getLaneMatchup("bot");
+      const isBotCamped = (this.redJungleCampLane === "bot");
+      let enemyScoutAction = `${rAdc} e ${rSupp} trocando dano na linha de frente • Covil do Dragão desprotegido no rio inferior.`;
+      if (isBotCamped) {
+        enemyScoutAction = `⚠️ ALERTA DE SELVA: ${rJg} acampa na Rota Inferior (Bot)! • ${enemyScoutAction}`;
+      }
+      if (botMatchup && botMatchup.advantageSide !== "neutral") {
+        enemyScoutAction += ` [Matchup 2v2: ${botMatchup.label} - ${botMatchup.desc}]`;
+      }
 
       return {
         id: `dynamic_bot_${this.gameSeconds}`,
@@ -6286,7 +6620,7 @@ class MatchSimulator {
         subtitle: `${bAdc} e ${bSupp} engajaram em trocas intensas na Rota Inferior contra ${rAdc} e ${rSupp}.`,
         scouting: {
           intelTag: "📡 RADAR DA ROTA INFERIOR (BOT)",
-          enemyAction: `${rAdc} e ${rSupp} trocando dano na linha de frente • Covil do Dragão desprotegido no rio inferior.`
+          enemyAction: enemyScoutAction
         },
         options: [
           {
@@ -6542,9 +6876,19 @@ class MatchSimulator {
       const allyName = targetLane === "top" ? bTop : (targetLane === "mid" ? bMid : `${bAdc} e ${bSupp}`);
       const rivalName = targetLane === "top" ? rTop : (targetLane === "mid" ? rMid : `${rAdc} e ${rSupp}`);
 
-      const probRetreat = this._calculateSuccessProbability(80, "simple", "utility");
-      const probGreed = this._calculateSuccessProbability(62, "tactical", "push");
-      const probTurn = this._calculateSuccessProbability(48, "complex", "combat");
+      const isCamped = (this.redJungleCampLane === targetLane);
+      const laneMatchup = this._getLaneMatchup(targetLane);
+      let enemyScoutAction = `${rJg} aproximando-se pelas costas • ${rivalName} segurando a rota aguardando a pinça sob a torre.`;
+      if (isCamped) {
+        enemyScoutAction = `⚠️ ROTA MARCADA: ${rJg} elegeu esta rota como alvo preferencial de camp! • ${enemyScoutAction}`;
+      }
+      if (laneMatchup && laneMatchup.advantageSide !== "neutral") {
+        enemyScoutAction += ` [${laneMatchup.label}: ${laneMatchup.desc}]`;
+      }
+
+      const probRetreat = this._calculateSuccessProbability(80, "simple", "utility", { targetLane });
+      const probGreed = this._calculateSuccessProbability(62, "tactical", "push", { targetLane });
+      const probTurn = this._calculateSuccessProbability(48, "complex", "combat", { targetLane });
 
       return {
         id: `dynamic_overextend_${this.gameSeconds}`,
@@ -6554,7 +6898,7 @@ class MatchSimulator {
         subtitle: `${allyName} empurrou as tropas até a torre inimiga! Mas o caçador adversário ${rJg} sumiu da fumaça e prepara um flanco fatal pelas costas!`,
         scouting: {
           intelTag: `📡 ALERTA DE FLANCO NA ${laneName}`,
-          enemyAction: `${rJg} aproximando-se pelas costas • ${rivalName} segurando a rota aguardando a pinça sob a torre.`
+          enemyAction: enemyScoutAction
         },
         options: [
           {
@@ -6607,9 +6951,9 @@ class MatchSimulator {
     }
 
     if (type === "split_vs_group_dilemma") {
-      const probGroup = this._calculateSuccessProbability(72, "simple", "combat");
-      const probSplit = this._calculateSuccessProbability(62, "tactical", "push");
-      const probTpFlank = this._calculateSuccessProbability(52, "complex", "macro");
+      const probGroup = this._calculateSuccessProbability(72, "simple", "combat", { targetLane: "mid" });
+      const probSplit = this._calculateSuccessProbability(62, "tactical", "push", { targetLane: "top" });
+      const probTpFlank = this._calculateSuccessProbability(52, "complex", "macro", { targetLane: "top" });
 
       return {
         id: `dynamic_split_vs_group_${this.gameSeconds}`,
@@ -10046,8 +10390,27 @@ class MatchSimulator {
       const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
       const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
 
-      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
-      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
+      const matchup = this._getLaneMatchup("top");
+      const isCamped = (this.redJungleCampLane === "top");
+      let laneTacticBonus = 0;
+      let rCampBonus = (isCamped && rJg && rJg.alive) ? 24 : 0;
+      const matchupPowerMod = Math.round((matchup ? matchup.score : 0) * 8);
+
+      if (this.playerTactics === "aggressive") {
+        if ((matchup && matchup.score < -0.5) || isCamped) {
+          laneTacticBonus = -16;
+          rCampBonus += 12;
+        } else if (matchup && matchup.score > 0.5 && !isCamped) {
+          laneTacticBonus = 12;
+        }
+      } else if (this.playerTactics === "defense") {
+        if ((matchup && matchup.score < 0) || isCamped) {
+          laneTacticBonus = 10;
+        }
+      }
+
+      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
           this._recordKill("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
@@ -10060,7 +10423,11 @@ class MatchSimulator {
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
-        if (blueOverextended && rJg && rJg.alive) {
+        if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", "top", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Topo e puniu a agressividade cega de ${bTop.name}!`);
+        } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
+          this._recordKill("red", "blue", "top", "top", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bTop.name} tentou forçar trocas em desvantagem de matchup contra ${rTop.name} e foi solado!`);
+        } else if (blueOverextended && rJg && rJg.alive) {
           this._recordKill("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
         } else {
           this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
@@ -10088,8 +10455,27 @@ class MatchSimulator {
       const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
       const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
 
-      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
-      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
+      const matchup = this._getLaneMatchup("mid");
+      const isCamped = (this.redJungleCampLane === "mid");
+      let laneTacticBonus = 0;
+      let rCampBonus = (isCamped && rJg && rJg.alive) ? 24 : 0;
+      const matchupPowerMod = Math.round((matchup ? matchup.score : 0) * 8);
+
+      if (this.playerTactics === "aggressive") {
+        if ((matchup && matchup.score < -0.5) || isCamped) {
+          laneTacticBonus = -16;
+          rCampBonus += 12;
+        } else if (matchup && matchup.score > 0.5 && !isCamped) {
+          laneTacticBonus = 12;
+        }
+      } else if (this.playerTactics === "defense") {
+        if ((matchup && matchup.score < 0) || isCamped) {
+          laneTacticBonus = 10;
+        }
+      }
+
+      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
           this._recordKill("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
@@ -10107,7 +10493,11 @@ class MatchSimulator {
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
-        if (blueOverextended && rJg && rJg.alive) {
+        if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", "mid", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Mid e puniu a agressividade forçada de ${bMid.name}!`);
+        } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
+          this._recordKill("red", "blue", "mid", "mid", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bMid.name} tentou forçar trocas agressivas contra ${rMid.name} em desvantagem de matchup e foi explodido!`);
+        } else if (blueOverextended && rJg && rJg.alive) {
           this._recordKill("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
         } else {
           const isGank = rJg && rJg.alive && Math.random() < 0.35;
@@ -10143,8 +10533,27 @@ class MatchSimulator {
       const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
       const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
 
-      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
-      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
+      const matchup = this._getLaneMatchup("bot");
+      const isCamped = (this.redJungleCampLane === "bot");
+      let laneTacticBonus = 0;
+      let rCampBonus = (isCamped && rJg && rJg.alive) ? 24 : 0;
+      const matchupPowerMod = Math.round((matchup ? matchup.score : 0) * 8);
+
+      if (this.playerTactics === "aggressive") {
+        if ((matchup && matchup.score < -0.5) || isCamped) {
+          laneTacticBonus = -16;
+          rCampBonus += 12;
+        } else if (matchup && matchup.score > 0.5 && !isCamped) {
+          laneTacticBonus = 12;
+        }
+      } else if (this.playerTactics === "defense") {
+        if ((matchup && matchup.score < 0) || isCamped) {
+          laneTacticBonus = 10;
+        }
+      }
+
+      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + laneTacticBonus + matchupPowerMod + bGankBonus + (Math.random() * 20);
+      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
@@ -10161,7 +10570,11 @@ class MatchSimulator {
       } else if (rPower > bPower + 8.5) {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
-        if (blueOverextended && rJg && rJg.alive) {
+        if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", victimRole, "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava na Bot Lane e puniu o avanço agressivo eliminando ${victimName}!`);
+        } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
+          this._recordKill("red", "blue", "adc", victimRole, "Punição de Matchup no Bot", `⚠️ PRESSÃO AGRESSIVA PUNIDA! A bot lane tentou forçar trocas em desvantagem de matchup e ${rAdc.name} garantiu a eliminação de ${victimName}!`);
+        } else if (blueOverextended && rJg && rJg.alive) {
           this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco fatal de ${rJg.name}!`);
         } else {
           this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
@@ -10791,6 +11204,8 @@ class MatchSimulator {
         bot: Math.round(this.lanePressures ? this.lanePressures.bot : 0)
       },
       focusedLane: this.focusedLane,
+      laneMatchups: this.laneMatchups,
+      redJungleCampLane: this.redJungleCampLane,
       playerTactics: this.playerTactics,
       tacticsLabel: this.tacticsLabel || "⚖️ Controle de Rotas",
       counterAttackCooldown: this.counterAttackCooldown,
@@ -12410,7 +12825,7 @@ class ArenaView {
             <span class="tactics-group-title">🎯 Postura da Equipe:</span>
             <div class="tactics-buttons-container" id="tactics-buttons-container">
               <button class="tactic-btn ${this.sim.playerTactics === 'balanced' ? 'active' : ''}" data-tactic="balanced" title="Equilibrada: controle de rotas, farm e visão padrão">⚖️ Equilibrada</button>
-              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: força lutas e emboscadas (+Dano, -Defesa)">⚔️ Agressiva</button>
+              <button class="tactic-btn ${this.sim.playerTactics === 'aggressive' ? 'active' : ''}" data-tactic="aggressive" title="Agressiva: pressão e lutas (+Dano em matchups favoráveis. CUIDADO: em desvantagem ou rota acampada pelo caçador rival, causa mortes solo e ganks punidores!)">⚔️ Agressiva</button>
               <button class="tactic-btn ${this.sim.playerTactics === 'defense' ? 'active' : ''}" data-tactic="defense" title="Defensiva: joga sob as torres e absorve pressão (+Armadura, -Push)">🛡️ Defensiva</button>
               <button class="tactic-btn ${this.sim.playerTactics === 'split' ? 'active' : ''}" data-tactic="split" title="Split Push: foca em derreter torres e puxar rotas laterais (+Push, -Dano TF)">🏰 Split Push</button>
             </div>
@@ -12906,7 +13321,10 @@ class ArenaView {
                 <strong class="player-nick-highlight">${m.playerNick || m.name}</strong>
                 ${m.playerNick ? `<span class="champ-sub-name">${m.name}</span>` : ''}
               </div>
-              <div class="champ-role-tag">${role.toUpperCase()}</div>
+              <div class="champ-meta-tags">
+                <span class="champ-role-tag">${role.toUpperCase()}</span>
+                <span class="champ-matchup-slot" id="matchup-slot-${side}-${role}"></span>
+              </div>
             </div>
           </div>
           ${this._renderChampItems(m.items)}
@@ -13166,12 +13584,15 @@ class ArenaView {
     }
 
     // Atualiza status e itens dos campeões
-    this._updateRosterUI(state.blue.roster, "blue");
-    this._updateRosterUI(state.red.roster, "red");
+    this._updateRosterUI(state.blue.roster, "blue", state);
+    this._updateRosterUI(state.red.roster, "red", state);
   }
 
-  _updateRosterUI(rosterState, side) {
+  _updateRosterUI(rosterState, side, fullState = null) {
     const roles = ["top", "jungle", "mid", "adc", "support"];
+    const laneMatchups = (fullState && fullState.laneMatchups) || (this.matchSim && this.matchSim.laneMatchups) || {};
+    const campedLane = (fullState && fullState.redJungleCampLane) || (this.matchSim && this.matchSim.redJungleCampLane) || null;
+
     roles.forEach(role => {
       const m = rosterState[role];
       if (!m) return;
@@ -13179,6 +13600,37 @@ class ArenaView {
       if (row) {
         if (!m.alive) row.classList.add("dead");
         else row.classList.remove("dead");
+
+        // Atualiza matchup tags e alerta de foco do caçador rival
+        const slot = row.querySelector(`#matchup-slot-${side}-${role}`);
+        if (slot) {
+          const laneKey = (role === "adc" || role === "support") ? "bot" : role;
+          const matchup = laneMatchups[laneKey];
+          const isCamped = (campedLane === laneKey);
+
+          let badgesHtml = "";
+          if (side === "blue") {
+            if (matchup) {
+              if (matchup.advantageSide === "blue") {
+                badgesHtml += `<span class="matchup-tag adv" title="${matchup.desc}">⚔️ Vantagem</span>`;
+              } else if (matchup.advantageSide === "red") {
+                badgesHtml += `<span class="matchup-tag disadv" title="${matchup.desc}">⚠️ Desvantagem</span>`;
+              } else {
+                badgesHtml += `<span class="matchup-tag neutral" title="${matchup.desc}">⚖️ Parelho</span>`;
+              }
+            }
+            if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="camp-target-tag" title="Alvo preferencial do Caçador Rival! Cuidado redobrado ao forçar pressão!">🎯 Marcado</span>`;
+            }
+          } else if (side === "red") {
+            if (isCamped && (role === "top" || role === "mid" || role === "adc")) {
+              badgesHtml += `<span class="camp-helper-tag" title="Rota prioritária de gank e emboscada">🌲 Foco Gank</span>`;
+            }
+          }
+          if (slot.innerHTML !== badgesHtml) {
+            slot.innerHTML = badgesHtml;
+          }
+        }
 
         // Atualiza bandeja de itens (apenas quando houver alteração para evitar DOM thrashing)
         const tray = row.querySelector(".champ-items-tray");
@@ -13876,6 +14328,18 @@ class ArenaView {
         `;
       }
 
+      const targetLane = decisionData.meta?.targetLane;
+      const campedLane = liveState.redJungleCampLane || (this.matchSim && this.matchSim.redJungleCampLane);
+      const isTargetCamped = targetLane && (targetLane === campedLane);
+      let campWarningBanner = "";
+      if (isTargetCamped) {
+        campWarningBanner = `
+          <div class="decision-camp-warning-banner">
+            ⚠️ <strong>ALERTA DE CAÇADOR ADVERSÁRIO:</strong> O Caçador rival está acampando nesta rota! Forçar jogadas agressivas ou ignorar controle de visão tem penalidade severa de sucesso e alto risco de contra-gank letal.
+          </div>
+        `;
+      }
+
       statusBar.innerHTML = `
         <div class="decision-status-row">
           <div class="decision-team-stat blue-side">
@@ -13903,6 +14367,7 @@ class ArenaView {
             </div>
           </div>
         </div>
+        ${campWarningBanner}
         ${scoutingHtml}
         <div class="decision-advice-pill">${advice}</div>
       `;
