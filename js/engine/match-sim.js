@@ -1453,6 +1453,12 @@ export class MatchSimulator {
       this._nextRedJgRotationAt = this.gameSeconds + 75 + Math.floor(Math.random() * 45);
     }
 
+    // Follow-up narrativo de decisão tática: impacto real visível ~40-70s após a escolha
+    if (this._decisionFollowUpAt && this.gameSeconds >= this._decisionFollowUpAt) {
+      this._triggerDecisionFollowUp();
+      this._decisionFollowUpAt = null;
+    }
+
     // Auxílio e foco de gank do Caçador Aliado (Blue JG) na rota escolhida
     if (this.blueJungleCampLane) {
       const targetRole = this.blueJungleCampLane === "bot" ? "adc" : this.blueJungleCampLane;
@@ -4572,6 +4578,11 @@ export class MatchSimulator {
     const dec = this.activeDecision;
     this.activeDecision = null;
     this.lastDecisionSec = this.gameSeconds;
+
+    // Agenda follow-up event 40-70s depois para mostrar o impacto real da decisão
+    this._decisionFollowUpAt = this.gameSeconds + 40 + Math.floor(Math.random() * 30);
+    this._lastDecisionChoiceId = choiceId;
+    this._lastDecisionId = dec.id;
 
     let result = null;
     try {
@@ -8479,6 +8490,106 @@ export class MatchSimulator {
     return true;
   }
 
+  _triggerDecisionFollowUp() {
+    const choiceId = this._lastDecisionChoiceId;
+    const decisionId = this._lastDecisionId;
+    if (!choiceId) return;
+
+    const goldLead = this.blueScore.gold - this.redScore.gold;
+    const isAhead = goldLead >= 1000;
+    const isBehind = goldLead <= -1000;
+    const blueName = this.blueTeam?.name || "Seu Time";
+    const redName = this.redTeam?.name || "CBLOL";
+    const bJgName = this.blueRosterState?.jungle ? (this.blueRosterState.jungle.proPlayer?.nick || this.blueRosterState.jungle.name) : "Caçador";
+    const focusedLane = this.blueJungleCampLane;
+    const laneLabel = { top: "Topo", mid: "Meio", bot: "Bot" }[focusedLane] || "Rota";
+
+    let followUpText = null;
+    let followUpIcon = "📋";
+
+    // Follow-ups contextuais baseados na decisão e estado atual do jogo
+    if (choiceId === "rush_baron" || choiceId === "baron_rush") {
+      if (isAhead) {
+        followUpText = `🐍 A decisão de rushear o Baron rendeu frutos! ${blueName} converteu a vantagem e o buff já está a caminho de todas as rotas!`;
+        followUpIcon = "🐍";
+        this._applyTeamBuff("blue", { id: "baron_follow_bonus", name: "Momentum do Baron", icon: "🐍", bonusCombat: 8, duration: 90 });
+      } else {
+        followUpText = `⚠️ O rush de Baron sem vantagem custou caro — ${redName} fez o smite steal e inverteu a situação! Decisão arriscada demais.`;
+        followUpIcon = "⚠️";
+        this._awardTeamGold("red", 600);
+      }
+    } else if (choiceId === "defend_base" || choiceId === "turtle") {
+      followUpText = `🛡️ A decisão de defender valeu a pena! ${blueName} segurou a pressão na torre e o ${redName} ficou sem o objetivo. Boa leitura de mapa!`;
+      followUpIcon = "🛡️";
+      this._applyTeamBuff("blue", { id: "def_followup", name: "Resistência Defensiva", icon: "🛡️", bonusCombat: 5, duration: 60 });
+    } else if (choiceId === "jg_camp_top" || choiceId === "focus_top") {
+      const bTop = this.blueRosterState?.top;
+      const topName = bTop ? (bTop.proPlayer?.nick || bTop.name) : "Top Laner";
+      if (isAhead || (focusedLane === "top")) {
+        followUpText = `⬆️ Foco no Topo confirmado! ${topName} dominou com o apoio do caçador e a rota superior agora é território do ${blueName}!`;
+        followUpIcon = "⬆️";
+        if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 15);
+      } else {
+        followUpText = `⚠️ O foco no Topo abriu espaço no Bot — ${redName} aproveitou e avançou dois drakes enquanto a atenção estava no norte!`;
+        followUpIcon = "⚠️";
+        this._awardTeamGold("red", 300);
+      }
+    } else if (choiceId === "jg_camp_mid" || choiceId === "focus_mid") {
+      const bMid = this.blueRosterState?.mid;
+      const midName = bMid ? (bMid.proPlayer?.nick || bMid.name) : "Mid Laner";
+      followUpText = `🔮 ${midName} recebeu o suporte do caçador no meio e criou pressão de rotação! Controle do mapa centralizado em ${blueName}.`;
+      followUpIcon = "🔮";
+      if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 15);
+    } else if (choiceId === "jg_camp_bot" || choiceId === "focus_bot") {
+      const bAdc = this.blueRosterState?.adc;
+      const adcName = bAdc ? (bAdc.proPlayer?.nick || bAdc.name) : "ADC";
+      if (isAhead) {
+        followUpText = `🏹 ${adcName} snowballou com o suporte do caçador! Bot Lane dominante agora garante prioridade de Dragão para ${blueName}!`;
+        followUpIcon = "🏹";
+        if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 15);
+      } else {
+        followUpText = `🏹 Investimento no Bot! ${adcName} converteu o gank em ouro e agora ${blueName} tem prioridade para o próximo Dragão!`;
+        followUpIcon = "🏹";
+        if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 10);
+      }
+    } else if (decisionId === "baron" || decisionId === "dragon" || decisionId === "herald") {
+      const objectiveNames = { baron: "Baron Na'Shor", dragon: "Dragão", herald: "Arauto do Vale" };
+      const objName = objectiveNames[decisionId] || "objetivo";
+      const r = Math.random();
+      if (r < 0.5) {
+        followUpText = `🎯 A decisão sobre o ${objName} gerou uma janela de pressão! ${blueName} aproveitou o controle de mapa para avançar na ${laneLabel || "rota prioritária"}.`;
+        followUpIcon = "🎯";
+      } else {
+        followUpText = `📋 Consequência da decisão: ${blueName} ajustou o posicionamento após o ${objName} e o mapa está sendo controlado com mais eficiência.`;
+        followUpIcon = "📋";
+      }
+    } else if (choiceId === "clash_tp_flank") {
+      followUpText = `🌀 O Teleporte de flanco foi DEVASTADOR! A decisão de chegar pela lateral pegou o ${redName} completamente de surpresa!`;
+      followUpIcon = "🌀";
+      this._applyTeamBuff("blue", { id: "tp_momentum", name: "Momentum do Flanco", icon: "🌀", bonusCombat: 12, duration: 60 });
+    } else {
+      // Follow-up genérico mas contextual
+      const genericOptions = [
+        isAhead ? `📈 ${blueName} está convertendo decisões em vantagem! A liderança de ouro aumentou para ${(goldLead / 1000).toFixed(1)}k.`
+                : isBehind ? `⚠️ Mesmo em desvantagem, ${blueName} mantém a pressão tática — a virada ainda é possível.`
+                : `📊 Decisão neutra convertida: ${blueName} e ${redName} seguem em equilíbrio. O próximo objetivo vai decidir a partida.`,
+        `🧭 A escolha feita há pouco se mostrou ${Math.random() < 0.6 ? "acertada" : "questionável"} — o ${Math.random() < 0.5 ? blueName : redName} soube ler melhor o momento.`,
+        `🔄 Consequência direta da decisão: ${bJgName} reposicionou a rotação e o mapa está sendo dividido de forma mais eficiente agora.`
+      ];
+      followUpText = genericOptions[Math.floor(Math.random() * genericOptions.length)];
+    }
+
+    if (followUpText) {
+      this.onEvent({
+        type: "decision_followup",
+        side: "blue",
+        icon: followUpIcon,
+        text: followUpText,
+        time: this._formatTime()
+      });
+    }
+  }
+
   _triggerLaneSkirmish() {
     const zones = ["top", "mid", "bot", "jungle"];
     let lane;
@@ -8807,17 +8918,105 @@ export class MatchSimulator {
       }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // FASE A — INICIAÇÃO: 4 tipos de engajamento como em campeonatos reais
+    // ─────────────────────────────────────────────────────────────────────
+    const winnerJg = winnerRoster["jungle"];
+    const winnerTop = winnerRoster["top"];
+    const loserAdc = loserRoster["adc"];
+    const loserMid = loserRoster["mid"];
+
+    let initiationType = "normal";
+    let initiationEvent = null;
+    const bJgName = winnerJg ? (winnerJg.proPlayer?.nick || winnerJg.name) : "Caçador";
+    const bTopName = winnerTop ? (winnerTop.proPlayer?.nick || winnerTop.name) : "Top Laner";
+
+    if (!isForcedCounter && killsCount >= 2) {
+      const rand = Math.random();
+      if (rand < 0.28 && winnerJg && winnerJg.alive) {
+        initiationType = "flank";
+        const targetName = loserAdc?.alive ? (loserAdc.proPlayer?.nick || loserAdc.name) : (loserMid?.proPlayer?.nick || loserMid?.name || "carry");
+        initiationEvent = {
+          type: "teamfight_start", side: winnerSide, icon: "🎯",
+          text: `🎯 FLANCO LETAL! ${bJgName} teleportou pela lateral e abriu o engage direto em ${targetName}! O time segue!`,
+          time: this._formatTime()
+        };
+      } else if (rand < 0.52 && winnerTop && winnerTop.alive) {
+        initiationType = "dive";
+        initiationEvent = {
+          type: "teamfight_start", side: winnerSide, icon: "💥",
+          text: `💥 DIVE LETAL! ${bTopName} avançou e mergulhou direto na backline inimiga! A luta está aberta!`,
+          time: this._formatTime()
+        };
+      } else if (rand < 0.74) {
+        initiationType = "poke";
+        const midName = winnerRoster["mid"] ? (winnerRoster["mid"].proPlayer?.nick || winnerRoster["mid"].name) : "Mago";
+        initiationEvent = {
+          type: "teamfight_start", side: winnerSide, icon: "🔮",
+          text: `🔮 POKE + TEAMFIGHT! ${midName} acertou a habilidade que deixou a carry adversária no vermelho — o time foi tudo!`,
+          time: this._formatTime()
+        };
+      } else {
+        initiationType = "forced";
+        initiationEvent = {
+          type: "teamfight_start", side: winnerSide, icon: "⚔️",
+          text: `⚔️ TEAMFIGHT FORÇADA! O time avançou em conjunto e encurralou o adversário sem saída!`,
+          time: this._formatTime()
+        };
+      }
+      if (initiationEvent) this.onEvent(initiationEvent);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // FASE B — RESOLUÇÃO: priorizar carries em flanks/dives, tanks por último
+    // ─────────────────────────────────────────────────────────────────────
+    const carryRoles = ["adc", "mid"];
+    let orderedVictimRoles = [...aliveVictimRoles];
+    if (initiationType === "flank" || initiationType === "dive") {
+      orderedVictimRoles.sort((a, b) => {
+        const aScore = carryRoles.includes(a) ? -1 : 1;
+        const bScore = carryRoles.includes(b) ? -1 : 1;
+        return aScore - bScore;
+      });
+    }
+
     for (let i = 0; i < killsCount; i++) {
-      if (aliveVictimRoles.length === 0) break;
+      if (orderedVictimRoles.length === 0) break;
 
-      const victimRoleIndex = Math.floor(Math.random() * aliveVictimRoles.length);
-      const victimRole = aliveVictimRoles.splice(victimRoleIndex, 1)[0];
+      // Clutch play: 15% de chance de um alvo escapar com vida baixíssima
+      const canClutch = orderedVictimRoles.length > 1 && Math.random() < 0.15;
+      if (canClutch) {
+        const savedRole = orderedVictimRoles.shift();
+        const savedChamp = loserRoster[savedRole];
+        if (savedChamp && savedChamp.alive) {
+          const savedName = savedChamp.proPlayer?.nick || savedChamp.name;
+          savedChamp.hpPct = Math.floor(Math.random() * 8) + 2;
+          savedChamp.recallState = "recalling";
+          savedChamp.recallEndsAt = this.gameSeconds + 6;
+          savedChamp.travelingBackUntil = this.gameSeconds + 20;
+          this.onEvent({
+            type: "clutch_play", side: loserSide, icon: "😱",
+            text: `😱 CLUTCH ABSURDO! ${savedName} sobreviveu COM ${savedChamp.hpPct}% DE VIDA e conseguiu escapar! A torcida enlouquece!`,
+            time: this._formatTime()
+          });
+          continue;
+        }
+      }
 
-      // Sorteia quem do time vencedor pegou o abate
+      const victimRole = orderedVictimRoles.shift();
+      if (!victimRole) break;
+
       const aliveKillerRoles = Object.keys(winnerRoster).filter(r => winnerRoster[r].alive);
-      const killerRole = aliveKillerRoles.length > 0
-        ? aliveKillerRoles[Math.floor(Math.random() * aliveKillerRoles.length)]
-        : "mid";
+      let killerRole;
+      if (initiationType === "flank" && aliveKillerRoles.includes("jungle")) {
+        killerRole = "jungle";
+      } else if (initiationType === "poke" && aliveKillerRoles.includes("mid")) {
+        killerRole = "mid";
+      } else {
+        killerRole = aliveKillerRoles.length > 0
+          ? aliveKillerRoles[Math.floor(Math.random() * aliveKillerRoles.length)]
+          : "mid";
+      }
 
       const killerObj = winnerRoster[killerRole];
       const victimObj = loserRoster[victimRole];
@@ -8829,7 +9028,7 @@ export class MatchSimulator {
       this._recordKill(winnerSide, loserSide, killerRole, victimRole, null, customTxt);
     }
 
-    // Troca de abates (Trade Kill): Em ~20% dos confrontos equilibrados o time perdedor revida e leva um abate
+    // Troca de abates: ~20% de chance do time perdedor revidar
     const loserAliveAfter = Object.keys(loserRoster).filter(r => loserRoster[r].alive);
     const winnerAliveAfter = Object.keys(winnerRoster).filter(r => winnerRoster[r].alive);
     if (!isForcedCounter && loserAliveAfter.length > 0 && winnerAliveAfter.length > 0 && Math.random() < 0.20) {
@@ -8843,7 +9042,7 @@ export class MatchSimulator {
       this._recordKill(loserSide, winnerSide, tradeKillerRole, tradeVictimRole, null, tTxt);
     }
 
-    // O time com vantagem numérica golpeia a estrutura na rota com maior pressão
+    // Cerco pós-luta na rota de maior pressão
     const enemyStructures = winnerSide === "blue" ? this.redStructures : this.blueStructures;
     let chosenLane = "mid";
     if (winnerSide === "blue" && this.focusedLane) {
@@ -8859,16 +9058,74 @@ export class MatchSimulator {
     }
     const siegeIntensity = this.gameSeconds >= 2280 ? 1.7 : (this.gameSeconds >= 1980 ? 1.5 : (this.gameSeconds >= 1500 ? 1.35 : 1.2));
     this._damageNextStructure(winnerSide, enemyStructures, margin, isForcedCounter, siegeIntensity, chosenLane);
+
+    // FASE C — TRANSIÇÃO PÓS-TEAMFIGHT
+    this._triggerPostFightTransition(winnerSide, loserSide, killsCount, chosenLane);
+  }
+
+  _triggerPostFightTransition(winnerSide, loserSide, killsCount, chosenLane) {
+    const winnerName = winnerSide === "blue" ? (this.blueTeam?.name || "Seu Time") : (this.redTeam?.name || "CBLOL");
+    const loserName = loserSide === "blue" ? (this.blueTeam?.name || "Seu Time") : (this.redTeam?.name || "CBLOL");
+    const laneLabel = { top: "Rota Superior", mid: "Rota do Meio", bot: "Rota Inferior" }[chosenLane] || "Rota";
+    const deathTimer = `${15 + Math.floor(this.gameSeconds / 45)}s`;
+
+    let transitionText;
+    if (killsCount >= 4) {
+      const options = [
+        `🏆 ${winnerName} VARRE O MAPA! Todos de volta à base — o nexus está na mira!`,
+        `👑 Campo livre! ${loserName} precisa de ${deathTimer} para renascer — tempo suficiente para destruir a ${laneLabel}!`,
+        `💀 Extermínio total! ${winnerName} avança sem resistência pela ${laneLabel}. A torcida está de pé!`
+      ];
+      transitionText = options[Math.floor(Math.random() * options.length)];
+    } else if (killsCount >= 2) {
+      const options = [
+        `📋 ${winnerName} converte! Time recua para base enquanto o adversário ressurge — compra de itens decisivos é agora.`,
+        `⚔️ ${winnerName} empurra a ${laneLabel} com superioridade numérica enquanto ${loserName} aguarda os ressurgimentos.`,
+        `🌊 Com ${killsCount} abates, ${winnerName} planta sentinelas profundas no campo adversário e prepara o próximo objetivo.`
+      ];
+      transitionText = options[Math.floor(Math.random() * options.length)];
+    } else {
+      const options = [
+        `📍 ${winnerName} controla a visão na ${laneLabel} e prepara o próximo objetivo.`,
+        `🔄 Após o abate, ambas as equipes reposicionam — o ritmo vai acelerar agora.`,
+        `🎯 ${winnerName} converte o abate em pressão. ${loserName} jogará com um a menos por ${deathTimer}.`
+      ];
+      transitionText = options[Math.floor(Math.random() * options.length)];
+    }
+
+    this.onEvent({
+      type: "post_fight", side: winnerSide, icon: "📋",
+      text: transitionText,
+      time: this._formatTime()
+    });
   }
 
   _triggerSkirmishEqual() {
     this.combatCooldown = Math.max(this.combatCooldown, 25);
+
+    const gameMin = Math.floor(this.gameSeconds / 60);
+    const blueName = this.blueTeam?.name || "Time Azul";
+    const redName = this.redTeam?.name || "CBLOL";
+    const bJgName = this.blueRosterState?.jungle ? (this.blueRosterState.jungle.proPlayer?.nick || this.blueRosterState.jungle.name) : "Caçador";
+    const rJgName = this.redRosterState?.jungle ? (this.redRosterState.jungle.proPlayer?.nick || this.redRosterState.jungle.name) : "Caçador Rival";
+    const bMidName = this.blueRosterState?.mid ? (this.blueRosterState.mid.proPlayer?.nick || this.blueRosterState.mid.name) : "Mid";
+    const rMidName = this.redRosterState?.mid ? (this.redRosterState.mid.proPlayer?.nick || this.redRosterState.mid.name) : "Mid Rival";
+
     const texts = [
-      "⚔️ Disputa de rota equilibrada! Tropas limpas e equipes reposicionam.",
-      "🛡️ Troca cautelosa de dano pelo rio sem abates.",
-      "⚡ Controle de visão no rio disputado; suportes protegem suas linhas.",
-      "💥 Luta tensa! Habilidades trocadas, mas as defesas permanecem sólidas."
+      `⚔️ Troca de habilidades no rio sem abates! ${bJgName} e ${rJgName} mediram forças e recuaram — ninguém morreu desta vez.`,
+      `🛡️ ${blueName} e ${redName} contestaram o mesmo espaço mas as barreiras impediram abates — troca neutra.`,
+      `🔥 ${bMidName} acertou o poke perfeito mas ${rMidName} respondeu com Barreira antes de recuar. Pressão sem morte.`,
+      `🌊 Rio contestado sem vencedor! Os suportes dos dois times plantaram sentinelas e ninguém arriscou o engage final.`,
+      `⚡ ${bJgName} tentou o flanco mas as sentinelas do ${redName} revelaram a aproximação a tempo. Gank cancelado.`,
+      `💨 Trocas à distância sem decisão! Ambas as equipes usaram o poke mas nenhuma conseguiu finalizar.`,
+      `🏰 Onda de tropas enorme empurra a torre mas as defesas aguentam — cerco sem torre destruída.`,
+      `🎯 ${gameMin}m — Equilíbrio! Ambas as equipes têm os mesmos recursos e nenhuma ousa forçar o 5v5.`,
+      `🌲 Disputas simultâneas em rotas diferentes: sem luta decisiva, apenas posicionamento e visão trocados.`,
+      `💬 Os casters estão em silêncio — o mapa está completamente estabilizado enquanto ambas equipes resetam.`,
+      `🧊 Stalemate! ${blueName} e ${redName} se observam pela névoa de guerra, esperando o primeiro erro.`,
+      `⏱️ ${gameMin}m — A partida entra num compasso de espera. O próximo spawn de objetivo vai romper o equilíbrio.`
     ];
+
     this.onEvent({
       type: "skirmish",
       side: "neutral",
