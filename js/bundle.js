@@ -4295,6 +4295,7 @@ class MatchSimulator {
     // Sistema de Decisões Táticas de Rotas Individuais e Momentos Dinâmicos
     this.nextDynamicIncidentAt = 210; // Primeiro incidente dinâmico aos 03:30 (após level 1)
     this.incidentHistory = []; // Registro dos últimos tipos para garantir variedade contínua
+    this._farmMilestones = {}; // Registro de marcos comemorativos e educativos de CS (50, 100, 150, 200...)
 
     // Mecânica de Virada (Comeback Mechanics) - Recompensas de Objetivos
     this.objectiveBountiesActive = false;
@@ -4734,6 +4735,32 @@ class MatchSimulator {
 
           c.cs = (c.cs || 0) + csGain;
           c.goldEarned = (c.goldEarned || 500) + goldGain;
+
+          // Marca comemorativa e educativa de farm (50, 100, 150, 200, 250, 300 CS)
+          const currentCs = c.cs;
+          const milestones = [50, 100, 150, 200, 250, 300];
+          const isBlue = (rosterState === this.blueRosterState);
+          const champKey = `${isBlue ? 'blue' : 'red'}_${role}`;
+          if (!this._farmMilestones[champKey]) this._farmMilestones[champKey] = {};
+
+          for (const mVal of milestones) {
+            if (currentCs >= mVal && !this._farmMilestones[champKey][mVal]) {
+              this._farmMilestones[champKey][mVal] = true;
+              if (isBlue || mVal >= 100) {
+                const gameMin = Math.max(1, this.gameSeconds / 60);
+                const rate = (currentCs / gameMin).toFixed(1);
+                const approxGold = Math.round(mVal * 18.5);
+                const killEq = (mVal / 16.5).toFixed(1);
+                this.onEvent({
+                  type: "farm_milestone",
+                  side: isBlue ? "blue" : "red",
+                  text: `🌾 MARCA DE FARM: ${c.name} atingiu ${mVal} CS aos ${this._formatTime()} (${rate} CS/min)! Acumulou ~${approxGold.toLocaleString()} de Ouro em tropas — equivalente a ~${killEq} abates em ouro seguro!`,
+                  time: this._formatTime()
+                });
+              }
+              break;
+            }
+          }
         });
       };
       updateFarm(this.blueRosterState);
@@ -6005,6 +6032,17 @@ class MatchSimulator {
     if (isBehind) candidateTypes.push("situational_comeback");
     if (phase !== "early" && !isAhead && !isBehind) candidateTypes.push("situational_clash");
 
+    // Candidato: Risco de Gank sob a Torre se alguma rota estiver pressionando debaixo da torre inimiga
+    const hasOverextendedLane = ["top", "mid", "bot"].some(l => (this.lanePressures[l] || 0) >= 26);
+    if (hasOverextendedLane) {
+      candidateTypes.push("overextend_gank_threat");
+    }
+
+    // Candidato: Dilema Macro de Agrupar 5v5 vs Split Push no mid/late game
+    if (phase !== "early") {
+      candidateTypes.push("split_vs_group_dilemma");
+    }
+
     // Filtra para garantir variedade (evita o mesmo tipo nos últimos 2 incidentes)
     const recentHistory = this.incidentHistory.slice(-2);
     let eligiblePool = candidateTypes.filter(t => !recentHistory.includes(t));
@@ -6430,10 +6468,10 @@ class MatchSimulator {
       };
     }
 
-    // situational_clash (balanced / late game)
-    const probTP = this._calculateSuccessProbability(65, "complex", "combat");
-    const probF2B = this._calculateSuccessProbability(75, "simple", "combat");
-    const probPoke = this._calculateSuccessProbability(70, "tactical", "damage");
+    if (type === "situational_clash") {
+      const probTP = this._calculateSuccessProbability(65, "complex", "combat");
+      const probF2B = this._calculateSuccessProbability(75, "simple", "combat");
+      const probPoke = this._calculateSuccessProbability(70, "tactical", "damage");
 
     return {
       id: `dynamic_clash_${this.gameSeconds}`,
@@ -6495,6 +6533,216 @@ class MatchSimulator {
     };
   }
 
+    if (type === "overextend_gank_threat") {
+      const lanes = ["top", "mid", "bot"];
+      lanes.sort((a, b) => (this.lanePressures[b] || 0) - (this.lanePressures[a] || 0));
+      const targetLane = lanes[0] || "mid";
+      const laneName = targetLane === "top" ? "ROTA SUPERIOR" : (targetLane === "mid" ? "ROTA DO MEIO" : "ROTA INFERIOR");
+      const laneIcon = targetLane === "top" ? "🏔️" : (targetLane === "mid" ? "⚡" : "🏹");
+      const allyName = targetLane === "top" ? bTop : (targetLane === "mid" ? bMid : `${bAdc} e ${bSupp}`);
+      const rivalName = targetLane === "top" ? rTop : (targetLane === "mid" ? rMid : `${rAdc} e ${rSupp}`);
+
+      const probRetreat = this._calculateSuccessProbability(80, "simple", "utility");
+      const probGreed = this._calculateSuccessProbability(62, "tactical", "push");
+      const probTurn = this._calculateSuccessProbability(48, "complex", "combat");
+
+      return {
+        id: `dynamic_overextend_${this.gameSeconds}`,
+        meta: { targetLane },
+        badge: `⚠️ PERIGO DE GANK • ${timeStr}`,
+        title: `${laneIcon} ${laneName}: OPRESSÃO SOB A TORRE & RISCO DE GANK!`,
+        subtitle: `${allyName} empurrou as tropas até a torre inimiga! Mas o caçador adversário ${rJg} sumiu da fumaça e prepara um flanco fatal pelas costas!`,
+        scouting: {
+          intelTag: `📡 ALERTA DE FLANCO NA ${laneName}`,
+          enemyAction: `${rJg} aproximando-se pelas costas • ${rivalName} segurando a rota aguardando a pinça sob a torre.`
+        },
+        options: [
+          {
+            id: "overextend_retreat",
+            icon: "🛡️",
+            zone: targetLane,
+            zoneLabel: `${laneIcon} ${laneName}`,
+            name: "Recuo Tático & Sentinela Defensiva",
+            complexity: "simple",
+            complexityLabel: "🟢 Opção Segura",
+            probability: probRetreat,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: `Gank Frustrado de ${rJg} + Onda Resetada (+180g Farm)`,
+            failureConsequence: "Gasta um feitiço de invocador defensivo sem morrer",
+            desc: `Resetar a onda de tropas, plantar sentinela no rio e recuar com segurança, frustrando a emboscada do caçador adversário.`
+          },
+          {
+            id: "overextend_greed_plates",
+            icon: "🔨",
+            zone: targetLane,
+            zoneLabel: `${laneIcon} ${laneName}`,
+            name: "Arrancar Barricada & Flash de Fuga",
+            complexity: "tactical",
+            complexityLabel: "🟡 Ganância & Reflexo",
+            probability: probGreed,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Ouro de Barricada (+350g) + Fuga no Limite",
+            failureConsequence: `A pinça inimiga fecha rápido demais e ${rJg} garante o abate`,
+            desc: `Desferir golpes extras para coletar o ouro de placas da torre e queimar o Flash imediatamente na aproximação do caçador.`
+          },
+          {
+            id: "overextend_all_in_dive",
+            icon: "💥",
+            zone: targetLane,
+            zoneLabel: `${laneIcon} ${laneName}`,
+            name: "All-in no Dive 2v1 / 2v2 (Paz Nunca Foi Opção)",
+            complexity: "complex",
+            complexityLabel: "🔴 All-In Insano",
+            probability: probTurn,
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "Double Kill Lendário (+600g) + Torre Derrubada",
+            failureConsequence: "Morte sob a torre e Shutdown concedido ao adversário",
+            desc: `Em vez de fugir, forçar um dive implacável sob a torre para eliminar o defensor antes da chegada do caçador!`
+          }
+        ]
+      };
+    }
+
+    if (type === "split_vs_group_dilemma") {
+      const probGroup = this._calculateSuccessProbability(72, "simple", "combat");
+      const probSplit = this._calculateSuccessProbability(62, "tactical", "push");
+      const probTpFlank = this._calculateSuccessProbability(52, "complex", "macro");
+
+      return {
+        id: `dynamic_split_vs_group_${this.gameSeconds}`,
+        meta: {},
+        badge: `⚔️ DILEMA MACRO • ${timeStr}`,
+        title: "⚔️ MACRO: 5v5 NO OBJETIVO OU SPLIT PUSH NA ROTA LATERAL?",
+        subtitle: `O time adversário começou a se reunir em peso para disputar o objetivo no rio! Qual posicionamento sua equipe adotará?`,
+        scouting: {
+          intelTag: "📡 RADAR DE POSICIONAMENTO GLOBAL",
+          enemyAction: `5 jogadores adversários agrupados contestando o rio • Torres laterais opostas desprotegidas.`
+        },
+        options: [
+          {
+            id: "macro_group_5v5",
+            icon: "🛡️",
+            zone: "jungle",
+            zoneLabel: "🌲 RIO & COVIL",
+            name: "Agrupar os 5 Jogadores para a Disputa Coletiva",
+            complexity: "simple",
+            complexityLabel: "🟢 Agrupamento Clássico",
+            probability: probGroup,
+            risk: "Baixo Risco",
+            riskClass: "low",
+            reward: "Vitória Coletiva na Luta (+500g) + Objetivo Assegurado",
+            failureConsequence: "Luta disputada no rio com recursos e vidas trocadas",
+            desc: `Unir os 5 campeões na boca do covil, garantindo controle de grupo e choque em bloco pela disputa do monstro neutro.`
+          },
+          {
+            id: "macro_split_pressure",
+            icon: "🏔️",
+            zone: "top",
+            zoneLabel: "🏔️ ROTA LATERAL",
+            name: `Manter Split Push com ${bTop} na Rota Oposta`,
+            complexity: "tactical",
+            complexityLabel: "🟡 Troca Cruzada de Mapa",
+            probability: probSplit,
+            risk: "Médio Risco",
+            riskClass: "medium",
+            reward: "Torre T2/Inibidor Oposto Destruído (+650g) + Pressão Permanente",
+            failureConsequence: "Adversário força engage 5v4 veloz no covil antes da queda da torre",
+            desc: `4 jogadores atrasam o adversário no rio com habilidades de longo alcance enquanto ${bTop} derrete as torres na rota contrária!`
+          },
+          {
+            id: "macro_split_tp_flank",
+            icon: "⚡",
+            zone: "mid",
+            zoneLabel: "⚡ FLANCO GLOBAL",
+            name: `Isca de Split & Flanco com Teleporte (Armadilha 5v3)`,
+            complexity: "complex",
+            complexityLabel: "🔴 Macro Lendário",
+            probability: probTpFlank,
+            risk: "Alto Risco",
+            riskClass: "high",
+            reward: "Massacre 5v3 pelas Costas (+700g) + Barão/Dragão Garantido",
+            failureConsequence: "Teleporte interrompido por controle de grupo ou tempo de canalização",
+            desc: `${bTop} atrai 2 defensores para a rota lateral e imediatamente usa o Teleporte em sentinela profunda nas costas do time rival!`
+          }
+        ]
+      };
+    }
+
+    return null;
+  }
+
+  _buildPostTowerDecision(target, lane) {
+    const timeStr = this._formatTime();
+    const laneName = lane === "top" ? "ROTA SUPERIOR" : (lane === "bot" ? "ROTA INFERIOR" : "ROTA DO MEIO");
+    const laneIcon = lane === "top" ? "🏔️" : (lane === "bot" ? "🏹" : "⚡");
+
+    const probSwap = this._calculateSuccessProbability(75, "simple", "macro");
+    const probInvade = this._calculateSuccessProbability(66, "tactical", "utility");
+    const probShoveT2 = this._calculateSuccessProbability(52, "complex", "push");
+
+    return {
+      id: `post_tower_${this.gameSeconds}`,
+      meta: { lane, targetId: target.id },
+      badge: `🏰 TORRE DERRUBADA • ${timeStr}`,
+      title: `🏰 TORRE DERRUBADA: TRANSIÇÃO DE MAPA!`,
+      subtitle: `A ${target.name} ruiu! O mapa se abriu e as defesas do CBLOL ficaram vulneráveis. Qual transição tática imediata executar?`,
+      scouting: {
+        intelTag: "📡 MAPA ABERTO • RECONHECIMENTO",
+        enemyAction: "Defesas adversárias recuando desorganizadas • Selva do quadrante exposta sem proteção de torre."
+      },
+      options: [
+        {
+          id: "tower_lane_swap",
+          icon: "⚡",
+          zone: "mid",
+          zoneLabel: "⚡ ROTA DO MEIO",
+          name: "Inversão de Rotas (Lane Swap: Rotação para o Meio)",
+          complexity: "simple",
+          complexityLabel: "🟢 Rotação de Livro",
+          probability: probSwap,
+          risk: "Baixo Risco",
+          riskClass: "low",
+          reward: "Pressão na T1 Central (+350g) + Controle Permanente do Rio",
+          failureConsequence: "Adversário espelha a rotação e limpa as tropas sob a torre",
+          desc: "Rotacionar imediatamente para a Rota do Meio para aplicar cerco e derrubar a T1 Mid, abrindo o controle dos dois lados do rio."
+        },
+        {
+          id: "tower_deep_invade",
+          icon: "🌲",
+          zone: "jungle",
+          zoneLabel: "🌲 SELVA ADVERSÁRIA",
+          name: "Invasão Profunda da Selva Exposta",
+          complexity: "tactical",
+          complexityLabel: "🟡 Saque Estratégico",
+          probability: probInvade,
+          risk: "Médio Risco",
+          riskClass: "medium",
+          reward: "Saque de Buffs (+350g) + Buff de Visão Profunda (+10 Combate)",
+          failureConsequence: "Campos já estavam limpos e time adversário se reagrupa",
+          desc: "Aproveitar o vazio territorial para invadir o quadrante da selva inimiga, roubar buffs e plantar sentinelas na fumaça."
+        },
+        {
+          id: "tower_shove_t2",
+          icon: "🔨",
+          zone: lane,
+          zoneLabel: `${laneIcon} ${laneName}`,
+          name: "Avanço Ganancioso na T2 (Cerco Agressivo)",
+          complexity: "complex",
+          complexityLabel: "🔴 Avanço Ousado",
+          probability: probShoveT2,
+          risk: "Alto Risco",
+          riskClass: "high",
+          reward: "Demolição Massiva da T2 (+450g) + Rota até o Inibidor Escancarada",
+          failureConsequence: "Colapso de 3 jogadores rivais abate o campeão isolado",
+          desc: "Manter o embalo das tropas na mesma rota avançando até a Torre Tier 2 para tentar derrubá-la precocemente."
+        }
+      ]
+    };
+  }
+
   _triggerTacticalDecision(decisionData) {
     if (this.speed >= 50) {
       this._autoResolveTacticalDecision(decisionData);
@@ -6548,6 +6796,8 @@ class MatchSimulator {
         result = this._resolveElderDecision(opt.id, isSuccess, roll, opt.probability);
       } else if (dec.id && dec.id.startsWith("dynamic_")) {
         result = this._resolveDynamicIncidentDecision(opt.id, dec, isSuccess, roll, opt.probability);
+      } else if (dec.id && dec.id.startsWith("post_tower_")) {
+        result = this._resolvePostTowerDecision(opt.id, dec, isSuccess, roll, opt.probability);
       }
     } catch (err) {
       console.error("Erro ao resolver decisão tática:", err);
@@ -8879,12 +9129,327 @@ class MatchSimulator {
       }
     }
 
+    // Resolvendo Escolhas de Overextend sob a Torre
+    if (choiceId === "overextend_retreat") {
+      const lane = (dec.meta && dec.meta.targetLane) || "mid";
+      this.lanePressures[lane] = 10;
+      this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+      if (isSuccess) {
+        this._awardTeamGold("blue", 180);
+        this.onEvent({
+          type: "tactical_retreat",
+          side: "blue",
+          text: `🛡️ RECUO TÁTICO PERFEITO! Sua rota desarmou a emboscada de ${rJg?.name || 'Caçador Rival'}, resetou a onda e garantiu +180g de farm seguro!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "GANK FRUSTRADO COM SUCESSO!",
+          subtitle: `Recuo Inteligente (${prob}% chance)`,
+          text: `Sua rota leu o sumiço do caçador rival no minimapa, recuou antes do flanco e garantiu +180g de ouro limpo em farm sem risco!`
+        };
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "red",
+          text: `⚠️ A rota precisou gastar um feitiço de invocador defensivo para escapar do gank.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "FUGA NO LIMITE",
+          subtitle: `Feitiço Gasto (${prob}% chance)`,
+          text: `O caçador rival apareceu antes do recuo completo, forçando o gasto de um feitiço defensivo, mas todos sobreviveram!`
+        };
+      }
+    }
+
+    if (choiceId === "overextend_greed_plates") {
+      const lane = (dec.meta && dec.meta.targetLane) || "mid";
+      if (isSuccess) {
+        this._damageNextStructure("blue", this.redStructures, 22, false, 1.4, lane);
+        this._awardTeamGold("blue", 350);
+        this.lanePressures[lane] = 0;
+        this.onEvent({
+          type: "turret_plate",
+          side: "blue",
+          text: `🔨 BARRICADA ARRANCADA! Sua rota faturou +350g na torre e queimou o Flash milimétrico para escapar da pinça!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "BARRICADA SAQUEADA & FUGA ÉPICA!",
+          subtitle: `Ganância Recompensada (${prob}% chance)`,
+          text: `Sua rota arrancou o ouro da torre (+350g) e acionou o Flash no milésimo exato da chegada de ${rJg?.name || 'Caçador Rival'}, escapando com vida!`
+        };
+      } else {
+        const victimRole = lane === "bot" ? "adc" : lane;
+        const victimChamp = this.blueRosterState[victimRole] || bMid;
+        if (victimChamp && rJg) {
+          this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR! A ganância sob a torre cobrou o preço: ${rJg.name} fechou o flanco e abateu ${victimChamp.name}!`);
+        }
+        this.lanePressures[lane] = Math.max(-100, (this.lanePressures[lane] || 0) - 25);
+        this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+        return {
+          success: false, roll, probability: prob,
+          title: "GANK PUNIDOR FATAL!",
+          subtitle: `Ganância Punida (${prob}% chance)`,
+          text: `O caçador adversário foi veloz demais! Antes do Flash ser acionado, o colapso sob a torre eliminou o campeão aliado.`
+        };
+      }
+    }
+
+    if (choiceId === "overextend_all_in_dive") {
+      const lane = (dec.meta && dec.meta.targetLane) || "mid";
+      const targetRole = lane === "bot" ? "adc" : lane;
+      const targetChamp = this.blueRosterState[targetRole] || bMid;
+      const rivalChamp = this.redRosterState[targetRole] || rMid;
+      if (isSuccess) {
+        if (targetChamp && rivalChamp) {
+          this._recordKill("blue", "red", targetRole, targetRole, "Dive Heroico", `⚡ DIVE ESPETACULAR! ${targetChamp.name} mergulhou sob a torre, esquivou do gank e eliminou ${rivalChamp.name}!`);
+        }
+        this._damageNextStructure("blue", this.redStructures, 28, false, 1.6, lane);
+        this._awardTeamGold("blue", 600);
+        this.lanePressures[lane] = Math.min(100, (this.lanePressures[lane] || 0) + 35);
+        this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+        return {
+          success: true, roll, probability: prob,
+          title: "OUTPLAY INSANO SOB A TORRE!",
+          subtitle: `Dive Vitorioso (${prob}% chance)`,
+          text: `Jogada lendária! Em vez de recuar, sua equipe mergulhou sob a torre, eliminou o rival, sobreviveu ao gank (+600g) e demoliu a estrutura!`
+        };
+      } else {
+        if (targetChamp && rJg) {
+          this._recordKill("red", "blue", "jungle", targetRole, "Dive Fracassado", `🔴 DIVE FRACASSADO! A agressão sob a torre deu errado e ${rJg.name} garantiu o abate!`);
+        }
+        this.lanePressures[lane] = Math.max(-100, (this.lanePressures[lane] || 0) - 30);
+        this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+        return {
+          success: false, roll, probability: prob,
+          title: "DIVE FRACASSADO SOB A TORRE",
+          subtitle: `Colapso Rival (${prob}% chance)`,
+          text: `A torre somada à chegada do caçador rival causaram dano excessivo. O aliado foi abatido concedendo ouro de shutdown.`
+        };
+      }
+    }
+
+    // Resolvendo Dilema Macro: 5v5 vs Split Push
+    if (choiceId === "macro_group_5v5") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 500);
+        this.lanePressure = Math.min(100, this.lanePressure + 20);
+        if (bMid && rMid) {
+          this._recordKill("blue", "red", "mid", "mid", "Disputa Coletiva 5v5", `⚡ TEAMFIGHT MASSIVA 5v5! A formação unida derreteu a linha de frente rival e ${bMid.name} abateu ${rMid.name}!`);
+        }
+        this._damageNextStructure("blue", this.redStructures, 25, false, 1.5);
+        return {
+          success: true, roll, probability: prob,
+          title: "VITÓRIA BRILHANTE NA TEAMFIGHT 5v5!",
+          subtitle: `Formação Coletiva Impecável (${prob}% chance)`,
+          text: `Os 5 campeões lutaram em bloco! A linha de frente absorveu o engage e os carregadores limparam a luta (+500g e avanço nas estruturas)!`
+        };
+      } else {
+        this.onEvent({
+          type: "skirmish",
+          side: "neutral",
+          text: `🛡️ Choque parelho no covil! Ambas as equipes trocaram dano pesado e recuaram para reagrupar.`,
+          time: this._formatTime()
+        });
+        return {
+          success: false, roll, probability: prob,
+          title: "DISPUTA EQUILIBRADA NO COVIL",
+          subtitle: `Luta Parelha (${prob}% chance)`,
+          text: `Ambos os times trocaram recursos pesados e ninguém conseguiu o ace limpo, forçando um recuo geral.`
+        };
+      }
+    }
+
+    if (choiceId === "macro_split_pressure") {
+      this.setLaneFocus("top");
+      if (isSuccess) {
+        this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 50);
+        this.lanePressure = Math.min(100, this.lanePressure + 18);
+        this._damageNextStructure("blue", this.redStructures, 38, false, 2.0, "top");
+        this._awardTeamGold("blue", 650);
+        this.onEvent({
+          type: "split_push",
+          side: "blue",
+          text: `🏔️ SPLIT PUSH DEVASTADOR! Enquanto 4 seguravam o CBLOL no covil, ${bTop?.name || 'Top Laner'} destruiu as defesas laterais (+650g)!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "JOGADA CRUZADA (CROSS-MAP) PERFEITA!",
+          subtitle: `Torre Lateral Destruída (${prob}% chance)`,
+          text: `Enquanto o CBLOL perdia tempo no covil, seu Top Laner avançou sozinho, demoliu a torre T2/Inibidor oposto (+650g) e abriu a base inimiga!`
+        };
+      } else {
+        if (bAdc && rMid) {
+          this._recordKill("red", "blue", "mid", "adc", "Engage 5v4 no Rio", `🔴 ENGAGE 5v4 RIVAL! O CBLOL acelerou o combate no rio aproveitando a vantagem numérica e abateu ${bAdc.name}!`);
+        }
+        this.lanePressure = Math.max(-100, this.lanePressure - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "ENGAGE RIVAL 5v4 NO RIO",
+          subtitle: `Superioridade Numérica Rival (${prob}% chance)`,
+          text: `O adversário não hesitou: iniciou um combate veloz de 5 contra 4 no rio antes que o split na rota lateral conseguisse derrubar a torre.`
+        };
+      }
+    }
+
+    if (choiceId === "macro_split_tp_flank") {
+      if (isSuccess) {
+        if (bTop && rAdc) {
+          this._recordKill("blue", "red", "top", "adc", "Flanco de Teleporte", `⚡ FLANCO LENDÁRIO DE TELEPORTE! ${bTop.name} teleportou nas costas do CBLOL e deletou ${rAdc.name}!`);
+        }
+        this._awardTeamGold("blue", 700);
+        this.lanePressure = Math.min(100, this.lanePressure + 25);
+        this._damageNextStructure("blue", this.redStructures, 30, false, 1.8);
+        this._applyTeamBuff("blue", {
+          id: "tp_flank_buff",
+          name: "Flanco Perfeito",
+          icon: "⚡",
+          bonusCombat: 12,
+          duration: 180
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "ARMADILHA DE MACRO 5v3 IMPECÁVEL!",
+          subtitle: `Flanco de Teleporte Mortal (${prob}% chance)`,
+          text: `Jogada magistral! O Top Laner atraiu 2 adversários para a rota lateral e usou o Teleporte nas costas dos outros 3 no rio, conquistando um massacre (+700g)!`
+        };
+      } else {
+        this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 20);
+        return {
+          success: false, roll, probability: prob,
+          title: "TELEPORTE INTERROMPIDO",
+          subtitle: `Leitura Rival (${prob}% chance)`,
+          text: `O adversário previu a armadilha, cancelou a canalização do Teleporte com atordoamento ou limpou a sentinela a tempo.`
+        };
+      }
+    }
+
     // Padrão fallback
     return {
       success: isSuccess, roll, probability: prob,
       title: isSuccess ? "JOGADA BEM-SUCEDIDA!" : "JOGADA DEFENDIDA",
       subtitle: `${prob}% chance`,
       text: isSuccess ? "Sua equipe executou o plano tático com sucesso e colheu vantagens no Rift!" : "O adversário conseguiu responder à investida e conteve os danos."
+    };
+  }
+
+  _resolvePostTowerDecision(choiceId, dec, isSuccess, roll, prob) {
+    const lane = (dec.meta && dec.meta.lane) || "mid";
+    const bMid = this.blueRosterState.mid;
+    const rMid = this.redRosterState.mid;
+    const bTop = this.blueRosterState.top;
+    const bJg = this.blueRosterState.jungle;
+    const rJg = this.redRosterState.jungle;
+
+    if (choiceId === "tower_lane_swap") {
+      this.setLaneFocus("mid");
+      if (isSuccess) {
+        this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 35);
+        this.lanePressure = Math.min(100, this.lanePressure + 15);
+        this._damageNextStructure("blue", this.redStructures, 24, false, 1.4, "mid");
+        this._awardTeamGold("blue", 350);
+        this.onEvent({
+          type: "lane_swap",
+          side: "blue",
+          text: `⚡ INVERSÃO DE ROTAS IMPECÁVEL! Sua equipe rotacionou para a Rota do Meio, colocou as tropas na T1 central e faturou +350g!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "INVERSÃO DE ROTAS (LANE SWAP) PERFEITA!",
+          subtitle: `Transição de Rotação (${prob}% chance)`,
+          text: `A equipe que derrubou a torre lateral migrou imediatamente para o meio, exerceu pressão na T1 central (+350g) e abriu a visão do Rio!`
+        };
+      } else {
+        this.lanePressures.mid = 0;
+        return {
+          success: false, roll, probability: prob,
+          title: "DEFESA CENTRAL RIVAL",
+          subtitle: `Espelhamento Rival (${prob}% chance)`,
+          text: `O CBLOL espelhou a rotação a tempo e conseguiu limpar as tropas antes do dano direto à torre do meio.`
+        };
+      }
+    }
+
+    if (choiceId === "tower_deep_invade") {
+      if (isSuccess) {
+        this._awardTeamGold("blue", 350);
+        this.lanePressure = Math.min(100, this.lanePressure + 10);
+        this._applyTeamBuff("blue", {
+          id: "deep_vision",
+          name: "Visão Profunda",
+          icon: "👁️",
+          bonusCombat: 10,
+          duration: 200
+        });
+        this.onEvent({
+          type: "jungle_invade",
+          side: "blue",
+          text: `🌲 SAQUE TOTAL DA SELVA INIMIGA! Aproveitando a torre caída, sua equipe roubou o buff adversário (+350g) e garantiu Visão Profunda!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "INVASÃO PROFUNDA VITORIOSA!",
+          subtitle: `Saque de Território (${prob}% chance)`,
+          text: `Sua equipe invadiu o quadrante da selva rival agora desprotegido, roubou buffs e campos neutros (+350g) e plantou sentinelas profundas (+10 Combate)!`
+        };
+      } else {
+        this._awardTeamGold("blue", 120);
+        return {
+          success: false, roll, probability: prob,
+          title: "SELVA JÁ ESTAVA LIMPA",
+          subtitle: `Campos Neutros Vazios (${prob}% chance)`,
+          text: `O caçador rival já havia farmado a maior parte dos monstros neutros, gerando apenas vantagens marginais (+120g).`
+        };
+      }
+    }
+
+    if (choiceId === "tower_shove_t2") {
+      if (isSuccess) {
+        this.lanePressures[lane] = Math.min(100, (this.lanePressures[lane] || 0) + 40);
+        this.lanePressure = Math.min(100, this.lanePressure + 16);
+        this._damageNextStructure("blue", this.redStructures, 32, false, 1.8, lane);
+        this._awardTeamGold("blue", 450);
+        this.onEvent({
+          type: "turret_damage",
+          side: "blue",
+          text: `🔨 CERCO AGRESSIVO NA T2! O embalo das tropas derrubou as defesas da Torre Tier 2 (+450g)!`,
+          time: this._formatTime()
+        });
+        return {
+          success: true, roll, probability: prob,
+          title: "CERCO DEVASTADOR NA TORRE T2!",
+          subtitle: `Demolição Agressiva (${prob}% chance)`,
+          text: `O avanço não parou! As tropas colidiram direto na Torre Tier 2 adversária, arrancando grande fatia de vida (+450g) e abrindo a rota do inibidor!`
+        };
+      } else {
+        const victimRole = lane === "bot" ? "adc" : (lane === "top" ? "top" : "mid");
+        const victimChamp = this.blueRosterState[victimRole] || bTop;
+        if (victimChamp && rJg) {
+          this._recordKill("red", "blue", "jungle", victimRole, "Colapso na T2", `🔴 COLAPSO NA T2! O avanço ganancioso sem visão foi punido: ${rJg.name} reuniu 3 jogadores e abateu ${victimChamp.name}!`);
+        }
+        this.lanePressures[lane] = Math.max(-100, (this.lanePressures[lane] || 0) - 25);
+        this.lanePressure = Math.round((this.lanePressures.top + this.lanePressures.mid + this.lanePressures.bot) / 3);
+        return {
+          success: false, roll, probability: prob,
+          title: "COLAPSO DO CBLOL NA T2",
+          subtitle: `Avanço Ganancioso Punido (${prob}% chance)`,
+          text: `O avanço excessivo sem cobertura das outras rotas permitiu que o CBLOL colapsasse em 3 jogadores e abatesse o aliado mais adiantado.`
+        };
+      }
+    }
+
+    return {
+      success: isSuccess, roll, probability: prob,
+      title: isSuccess ? "TRANSIÇÃO CONCLUÍDA!" : "RESPOSTA RIVAL",
+      subtitle: `${prob}% chance`,
+      text: isSuccess ? "Sua equipe aproveitou a queda da estrutura para ampliar a vantagem territorial!" : "O adversário se reorganizou e impediu o efeito bola de neve."
     };
   }
 
@@ -9475,17 +10040,31 @@ class MatchSimulator {
       }
     } else if (lane === "top") {
       if (!bTop || !bTop.alive || !rTop || !rTop.alive) return false;
-      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
-      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + (Math.random() * 20);
+      const topPress = (this.lanePressures && this.lanePressures.top) || 0;
+      const blueOverextended = topPress >= 28;
+      const redOverextended = topPress <= -28;
+      const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
+      const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
+
+      const bPower = (bTop.stats?.combat || 75) + (bTop.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
+      const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
-        this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
+        if (redOverextended && bJg && bJg.alive) {
+          this._recordKill("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
+        } else {
+          this._recordKill("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
+        }
         if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
         this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "top");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
-        this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
+        if (blueOverextended && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
+        } else {
+          this._recordKill("red", "blue", "top", "top", "Solo Kill no Top", `🔴 SOLO KILL NO TOPO! ${rTop.name} aproveitou o avanço rival e abateu ${bTop.name}!`);
+        }
         if (this.lanePressures) this.lanePressures.top = Math.max(-100, (this.lanePressures.top || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
         this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "top");
@@ -9503,27 +10082,41 @@ class MatchSimulator {
       }
     } else if (lane === "mid") {
       if (!bMid || !bMid.alive || !rMid || !rMid.alive) return false;
-      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
-      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + (Math.random() * 20);
+      const midPress = (this.lanePressures && this.lanePressures.mid) || 0;
+      const blueOverextended = midPress >= 28;
+      const redOverextended = midPress <= -28;
+      const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
+      const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
+
+      const bPower = (bMid.stats?.combat || 75) + (bMid.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
+      const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
-        const isGank = bJg && bJg.alive && Math.random() < 0.35;
-        const kRole = isGank ? "jungle" : "mid";
-        const kTxt = isGank
-          ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
-          : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
-        this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        if (redOverextended && bJg && bJg.alive) {
+          this._recordKill("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
+        } else {
+          const isGank = bJg && bJg.alive && Math.random() < 0.35;
+          const kRole = isGank ? "jungle" : "mid";
+          const kTxt = isGank
+            ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
+            : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
+          this._recordKill("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        }
         if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
         this.lanePressure = Math.min(100, this.lanePressure + 8);
         this._damageNextStructure("blue", this.redStructures, 10, false, 0.85, "mid");
         this.combatCooldown = 60;
         return true;
       } else if (rPower > bPower + 8.5) {
-        const isGank = rJg && rJg.alive && Math.random() < 0.35;
-        const kRole = isGank ? "jungle" : "mid";
-        const kTxt = isGank
-          ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
-          : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
-        this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        if (blueOverextended && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
+        } else {
+          const isGank = rJg && rJg.alive && Math.random() < 0.35;
+          const kRole = isGank ? "jungle" : "mid";
+          const kTxt = isGank
+            ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
+            : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
+          this._recordKill("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
+        }
         if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
         this.lanePressure = Math.max(-100, this.lanePressure - 8);
         this._damageNextStructure("red", this.blueStructures, 10, false, 0.85, "mid");
@@ -9544,12 +10137,22 @@ class MatchSimulator {
       if (!bAdc || !bAdc.alive || !rAdc || !rAdc.alive) return false;
       const bSuppAlive = bSupp && bSupp.alive;
       const rSuppAlive = rSupp && rSupp.alive;
-      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + (Math.random() * 20);
-      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + (Math.random() * 20);
+      const botPress = (this.lanePressures && this.lanePressures.bot) || 0;
+      const blueOverextended = botPress >= 28;
+      const redOverextended = botPress <= -28;
+      const rGankBonus = (blueOverextended && rJg && rJg.alive) ? 22 : 0;
+      const bGankBonus = (redOverextended && bJg && bJg.alive) ? 22 : 0;
+
+      const bPower = (bAdc.stats?.combat || 75) + (bSuppAlive ? (bSupp.stats?.combat || 70) * 0.4 : 0) + (bAdc.items?.length || 0) * 8 + tacticBonus + bGankBonus + (Math.random() * 20);
+      const rPower = (rAdc.stats?.combat || 75) + (rSuppAlive ? (rSupp.stats?.combat || 70) * 0.4 : 0) + (rAdc.items?.length || 0) * 8 + rGankBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         const victimRole = rSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.redRosterState[victimRole].name;
-        this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
+        if (redOverextended && bJg && bJg.alive) {
+          this._recordKill("blue", "red", "jungle", victimRole, "Punição sob a Torre", `🏹 PUNIÇÃO SOB A TORRE NO BOT! A dupla adversária tentava pressionar e ${bJg.name} fechou a pinça pelas costas eliminando ${victimName}!`);
+        } else {
+          this._recordKill("blue", "red", "adc", victimRole, "All-In no Bot", `🏹 ALL-IN LETAL NA ROTA INFERIOR! ${bAdc.name} acertou os disparos críticos e abateu ${victimName}!`);
+        }
         if (this.lanePressures) this.lanePressures.bot = Math.min(100, (this.lanePressures.bot || 0) + 20);
         this.lanePressure = Math.min(100, this.lanePressure + 10);
         this._damageNextStructure("blue", this.redStructures, 12, false, 0.9, "bot");
@@ -9558,7 +10161,11 @@ class MatchSimulator {
       } else if (rPower > bPower + 8.5) {
         const victimRole = bSuppAlive && Math.random() < 0.5 ? "support" : "adc";
         const victimName = this.blueRosterState[victimRole].name;
-        this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
+        if (blueOverextended && rJg && rJg.alive) {
+          this._recordKill("red", "blue", "jungle", victimRole, "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO BOT! A bot lane estava colocando o adversário sob a torre sem sentinela no rio e tomou um flanco fatal de ${rJg.name}!`);
+        } else {
+          this._recordKill("red", "blue", "adc", victimRole, "All-In no Bot", `🔴 PRESSÃO NO BOT! ${rAdc.name} conquistou o abate sobre ${victimName}!`);
+        }
         if (this.lanePressures) this.lanePressures.bot = Math.max(-100, (this.lanePressures.bot || 0) - 20);
         this.lanePressure = Math.max(-100, this.lanePressure - 10);
         this._damageNextStructure("red", this.blueStructures, 12, false, 0.9, "bot");
@@ -9760,6 +10367,15 @@ class MatchSimulator {
           text: `🏰 A ${target.name} ${attackerSide === "blue" ? "Vermelha" : "Azul"} foi DESTRUÍDA!`,
           time: this._formatTime()
         });
+      }
+
+      // Acontecimentos e Transições Táticas ao Derrubar Torre
+      if (attackerSide === "blue" && !this.activeDecision && !this.isFinished) {
+        const lane = target.lane || "mid";
+        const postTowerDecision = this._buildPostTowerDecision(target, lane);
+        if (postTowerDecision) {
+          this._triggerTacticalDecision(postTowerDecision);
+        }
       }
     }
 
@@ -11860,13 +12476,22 @@ class ArenaView {
           </div>
         </div>
 
+        <!-- BANNER EDUCATIVO DE FARM: VALOR DE LAST HITS -->
+        <div class="farm-edu-tip-bar" title="Dica Profissional: 15 a 18 tropas (CS) equivalem a 300 de ouro (o mesmo valor de 1 abate de campeão). Farmar com consistência é o caminho mais seguro para a vitória!">
+          <span class="farm-edu-badge">🌾 VALOR DO FARM</span>
+          <span class="farm-edu-text"><strong>~18 Tropas (CS) ≈ 1 Abate (300g)</strong> • Ouro constante de farm garante itens sem se expor a ganks!</span>
+        </div>
+
         <!-- PAINEL CENTRAL DE TRANSMISSÃO ESPORTS: ESCALAÇÃO AZUL | KILLFEED AO VIVO | ESCALAÇÃO VERMELHA -->
         <div class="arena-broadcast-center">
           <!-- Coluna 1: Escalação Azul -->
           <div class="lineup-box blue-side-panel">
             <div class="lineup-title blue">
               <span>🔵 Escalação ${state.blue.name}</span>
-              <span class="lineup-kda-header">K / D / A</span>
+              <div class="lineup-stat-headers">
+                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-kda-header">K / D / A</span>
+              </div>
             </div>
             <div id="blue-roster-status" class="roster-status-list">
               ${this._renderRosterRows(state.blue.roster, "blue")}
@@ -11897,7 +12522,10 @@ class ArenaView {
           <div class="lineup-box red-side-panel">
             <div class="lineup-title red">
               <span>🔴 Escalação ${state.red.name}</span>
-              <span class="lineup-kda-header">K / D / A</span>
+              <div class="lineup-stat-headers">
+                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-kda-header">K / D / A</span>
+              </div>
             </div>
             <div id="red-roster-status" class="roster-status-list">
               ${this._renderRosterRows(state.red.roster, "red")}
@@ -12282,6 +12910,11 @@ class ArenaView {
             </div>
           </div>
           ${this._renderChampItems(m.items)}
+          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 18.5).toLocaleString()}g em tropas (~${((m.cs || 0) / 16.5).toFixed(1)} abates em ouro seguro!)">
+            <span class="cs-icon">🌾</span>
+            <span class="cs-count">${m.cs || 0}</span>
+            <span class="cs-rate">(0.0)</span>
+          </div>
           <div class="champ-kda" id="kda-${side}-${role}">
             ${m.kills} / ${m.deaths} / ${m.assists}
           </div>
@@ -12567,6 +13200,16 @@ class ArenaView {
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
       if (kdaEl) {
         kdaEl.textContent = `${m.kills} / ${m.deaths} / ${m.assists}`;
+      }
+      const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
+      if (farmEl) {
+        const gameMin = Math.max(1, (this.matchSim?.gameSeconds || 60) / 60);
+        const cs = m.cs || 0;
+        const rate = (cs / gameMin).toFixed(1);
+        const approxGold = Math.round(cs * 18.5);
+        const killEq = (cs / 16.5).toFixed(1);
+        farmEl.innerHTML = `<span class="cs-icon">🌾</span><span class="cs-count">${cs}</span> <span class="cs-rate">(${rate})</span>`;
+        farmEl.title = `Farm: ${cs} tropas (${rate} CS/min) • ~${approxGold.toLocaleString()}g em tropas (~${killEq} abates em ouro seguro!)`;
       }
     });
   }

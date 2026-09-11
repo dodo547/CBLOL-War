@@ -148,13 +148,22 @@ export class ArenaView {
           </div>
         </div>
 
+        <!-- BANNER EDUCATIVO DE FARM: VALOR DE LAST HITS -->
+        <div class="farm-edu-tip-bar" title="Dica Profissional: 15 a 18 tropas (CS) equivalem a 300 de ouro (o mesmo valor de 1 abate de campeão). Farmar com consistência é o caminho mais seguro para a vitória!">
+          <span class="farm-edu-badge">🌾 VALOR DO FARM</span>
+          <span class="farm-edu-text"><strong>~18 Tropas (CS) ≈ 1 Abate (300g)</strong> • Ouro constante de farm garante itens sem se expor a ganks!</span>
+        </div>
+
         <!-- PAINEL CENTRAL DE TRANSMISSÃO ESPORTS: ESCALAÇÃO AZUL | KILLFEED AO VIVO | ESCALAÇÃO VERMELHA -->
         <div class="arena-broadcast-center">
           <!-- Coluna 1: Escalação Azul -->
           <div class="lineup-box blue-side-panel">
             <div class="lineup-title blue">
               <span>🔵 Escalação ${state.blue.name}</span>
-              <span class="lineup-kda-header">K / D / A</span>
+              <div class="lineup-stat-headers">
+                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-kda-header">K / D / A</span>
+              </div>
             </div>
             <div id="blue-roster-status" class="roster-status-list">
               ${this._renderRosterRows(state.blue.roster, "blue")}
@@ -185,7 +194,10 @@ export class ArenaView {
           <div class="lineup-box red-side-panel">
             <div class="lineup-title red">
               <span>🔴 Escalação ${state.red.name}</span>
-              <span class="lineup-kda-header">K / D / A</span>
+              <div class="lineup-stat-headers">
+                <span class="lineup-farm-header" title="Tropas abatidas (CS) e média por minuto">🌾 FARM</span>
+                <span class="lineup-kda-header">K / D / A</span>
+              </div>
             </div>
             <div id="red-roster-status" class="roster-status-list">
               ${this._renderRosterRows(state.red.roster, "red")}
@@ -570,6 +582,11 @@ export class ArenaView {
             </div>
           </div>
           ${this._renderChampItems(m.items)}
+          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 18.5).toLocaleString()}g em tropas (~${((m.cs || 0) / 16.5).toFixed(1)} abates em ouro seguro!)">
+            <span class="cs-icon">🌾</span>
+            <span class="cs-count">${m.cs || 0}</span>
+            <span class="cs-rate">(0.0)</span>
+          </div>
           <div class="champ-kda" id="kda-${side}-${role}">
             ${m.kills} / ${m.deaths} / ${m.assists}
           </div>
@@ -855,6 +872,16 @@ export class ArenaView {
       const kdaEl = this.containerEl.querySelector(`#kda-${side}-${role}`);
       if (kdaEl) {
         kdaEl.textContent = `${m.kills} / ${m.deaths} / ${m.assists}`;
+      }
+      const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
+      if (farmEl) {
+        const gameMin = Math.max(1, (this.matchSim?.gameSeconds || 60) / 60);
+        const cs = m.cs || 0;
+        const rate = (cs / gameMin).toFixed(1);
+        const approxGold = Math.round(cs * 18.5);
+        const killEq = (cs / 16.5).toFixed(1);
+        farmEl.innerHTML = `<span class="cs-icon">🌾</span><span class="cs-count">${cs}</span> <span class="cs-rate">(${rate})</span>`;
+        farmEl.title = `Farm: ${cs} tropas (${rate} CS/min) • ~${approxGold.toLocaleString()}g em tropas (~${killEq} abates em ouro seguro!)`;
       }
     });
   }
