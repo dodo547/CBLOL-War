@@ -364,16 +364,16 @@ export class ArenaView {
         <path d="M 80 320 Q 250 360 440 480 T 650 680 Q 750 820 910 680 L 930 760 Q 730 890 560 720 T 360 520 Q 200 400 70 410 Z" fill="url(#river-grad)" stroke="#0ac8b9" stroke-opacity="0.35" stroke-width="3" />
         <path d="M 100 360 Q 280 390 480 510 T 700 700 L 880 720" fill="none" stroke="#005a82" stroke-width="6" opacity="0.65" />
 
-        <!-- Covil do Barão Nashor (Top River) -->
-        <g class="pit-marker baron-pit" transform="translate(330, 330)">
+        <!-- Covil do Barão Nashor (Parte Superior do Rio / Top River) -->
+        <g class="pit-marker baron-pit" id="pit-baron" transform="translate(320, 310)" data-pit="baron">
           <path d="M -30 -30 A 42 42 0 1 1 30 30 L 15 15 A 24 24 0 1 0 -15 -15 Z" fill="#200d2c" stroke="#9333ea" stroke-width="2.5" />
           <circle r="22" fill="#3b0764" />
           <text text-anchor="middle" dominant-baseline="central" font-size="16">👾</text>
           <text text-anchor="middle" y="44" fill="#d8b4fe" font-size="11" font-weight="900" letter-spacing="1">BARÃO</text>
         </g>
 
-        <!-- Covil do Dragão Elemental (Bot River) -->
-        <g class="pit-marker dragon-pit" transform="translate(670, 670)">
+        <!-- Covil do Dragão Elemental (Parte Inferior do Rio / Bot River) -->
+        <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(730, 750)" data-pit="dragon">
           <path d="M 30 30 A 42 42 0 1 1 -30 -30 L -15 -15 A 24 24 0 1 0 15 15 Z" fill="#301206" stroke="#ea580c" stroke-width="2.5" />
           <circle r="22" fill="#7c2d12" />
           <text text-anchor="middle" dominant-baseline="central" font-size="16">🐲</text>
@@ -1862,6 +1862,54 @@ export class ArenaView {
           void halo.offsetWidth;
           halo.classList.add("ping-pulse");
         }
+      });
+    });
+
+    this.containerEl.querySelectorAll(".pit-marker").forEach(pit => {
+      pit.addEventListener("mouseenter", () => {
+        const isBaron = pit.dataset.pit === "baron";
+        const title = isBaron ? "👾 Covil do Barão Na'Shor" : "🐲 Covil do Dragão Elemental";
+        const loc = isBaron ? "Parte Superior do Rio (Top River)" : "Parte Inferior do Rio (Bot River)";
+        const desc = isBaron ? "Buff Mão do Barão: Super Cerco, bônus adaptativo e fortalecimento de tropas." : "Buff Elemental: Bônus cumulativo de dano, armadura ou regeneração.";
+        const spawn = isBaron ? "Surge aos 20:00 (Respawn 6 min)" : "Surge aos 05:00 (Respawn 5 min)";
+
+        tooltip.innerHTML = `
+          <div class="tip-header">
+            <span class="tip-team ${isBaron ? 'red' : 'blue'}">👑 OBJETIVO ÉPICO</span>
+            <div class="tip-name">${title}</div>
+          </div>
+          <div class="tip-body">
+            <div class="tip-detail-row">
+              <span>Localização:</span>
+              <strong>${loc}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Cronograma:</span>
+              <strong>${spawn}</strong>
+            </div>
+            <div class="tip-detail-row">
+              <span>Recompensa:</span>
+              <span style="color:#f0e6d2; font-size:11px;">${desc}</span>
+            </div>
+          </div>
+        `;
+        tooltip.style.display = "block";
+      });
+
+      pit.addEventListener("mousemove", (e) => {
+        const rect = svgContainer.getBoundingClientRect();
+        const x = Math.min(rect.width - 220, Math.max(10, e.clientX - rect.left + 16));
+        const y = Math.min(rect.height - 140, Math.max(10, e.clientY - rect.top + 16));
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+      });
+
+      pit.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      pit.addEventListener("click", () => {
+        sound.playClick();
       });
     });
   }
