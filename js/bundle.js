@@ -4700,7 +4700,13 @@ class MatchSimulator {
         damageDealt: 0,
         damageTaken: 0,
         goldEarned: 500, // Ouro inicial de partida
+        goldCurrent: 500, // Ouro líquido na carteira individual
         cs: 0,
+        csPerMin: 0.0,
+        travelingBackUntil: 0, // Tempo de volta da base para a rota
+        laneGoldDiff: 0, // Diferença de ouro contra o rival direto
+        isMvp: false, // Destaque de carregador mais forte
+        nextItem: null, // Próximo item em foco na loja
         turrets: 0,
         alive: true,
         respawnAt: 0,
@@ -4721,6 +4727,7 @@ class MatchSimulator {
     const split = Math.round(amount / 5);
     Object.values(roster).forEach(c => {
       c.goldEarned = (c.goldEarned || 500) + split;
+      c.goldCurrent = (c.goldCurrent || 0) + split;
     });
     this._syncTeamGold();
   }
@@ -4941,55 +4948,93 @@ class MatchSimulator {
     // CS e ouro por minion wave distribuído realisticamente entre os campeões vivos
     if (this.gameSeconds >= 90) {
       const roles = ["top", "jungle", "mid", "adc", "support"];
-      const updateFarm = (rosterState) => {
+      const updateFarm = (rosterState, isBlueTeam) => {
         roles.forEach(role => {
           const c = rosterState[role];
-          if (!c || !c.alive) return;
+          if (!c) return;
 
-          // Renda passiva e farm oficial calibrados de Summoner's Rift
-          // Base passiva de ~20g a cada 15s (2.04g/s com descontos de mortes e recalls)
-          let goldGain = 20;
+          const oppRoster = isBlueTeam ? this.redRosterState : this.blueRosterState;
+          const opp = oppRoster[role];
+
+          // Verifica se o campeão está ativo na rota (vivo e não em trânsito da base)
+          const isDead = !c.alive;
+          const isWalkingBack = (this.gameSeconds < (c.travelingBackUntil || 0));
+
+          if (isDead || isWalkingBack) {
+            // CAMPEÃO AUSENTE DA ROTA (MORTO OU RETORNANDO DA BASE):
+            // Perda irreversível de tropas! A onda bate na torre e as tropas morrem.
+            // Se o adversário estiver vivo e a rota tiver pressão favorável ao rival, ocorre crash sob a torre:
+            const laneKey = (role === "adc" || role === "support") ? "bot" : role;
+            const lanePress = (this.lanePressures && this.lanePressures[laneKey] !== undefined)
+              ? (isBlueTeam ? this.lanePressures[laneKey] : -this.lanePressures[laneKey])
+              : 0;
+
+            if (opp && opp.alive && lanePress < -10) {
+              if (Math.random() < 0.35 && this.gameSeconds <= 840) {
+                const oppSide = isBlueTeam ? "red" : "blue";
+                const structList = isBlueTeam ? this.blueStructures : this.redStructures;
+                const t1 = structList.find(s => s.id === `${laneKey}_t1`);
+                if (t1 && !t1.destroyed && t1.plates > 0) {
+                  t1.plates--;
+                  opp.goldEarned = (opp.goldEarned || 500) + 125;
+                  opp.goldCurrent = (opp.goldCurrent || 0) + 125;
+                  this.onEvent({
+                    type: "tower_plate",
+                    side: oppSide,
+                    text: `🛡️ BARRICADA COLETADA! Com ${c.name} fora da rota, ${opp.name} destruiu 1 placa da ${t1.name} (+125g)!`,
+                    time: this._formatTime()
+                  });
+                }
+              }
+            }
+            return; // Ausente da rota: 0 CS nesta onda!
+          }
+
+          // Renda passiva oficial de Summoner's Rift (~20.4g / 10s = ~30.6g / 15s)
+          let goldGain = 24;
           let csGain = 0;
 
+          // Taxa de CS de Alto Nível Competitivo (CBLOL / Pro Play):
+          // Mid & ADC: 8.8 a 10.4 CS/min (~2 a 3 CS por tick de 15s)
+          // Top: 7.8 a 9.4 CS/min (~2 CS médios por tick)
+          // Jungle: 5.8 a 7.2 CS/min (~1 a 2 monstros de selva/aronguejo por tick)
+          // Support: 1.0 a 1.8 CS/min (apoio esporádico + tributo de ouro do item de suporte)
           if (role === "mid" || role === "adc") {
-            // Rotas dos Carregadores: 7 a 8.5 CS/min (1 a 2 CS por tick @ 18g médio)
-            csGain = Math.random() < 0.75 ? 2 : 1;
-            goldGain += csGain * 18; // ~38g a 56g por tick (~152g a 224g/min)
+            csGain = Math.random() < 0.35 ? 3 : 2;
+            goldGain += csGain * 21;
           } else if (role === "top") {
-            // Rota Solo Top: 6 a 8 CS/min
-            csGain = Math.random() < 0.6 ? 2 : 1;
-            goldGain += csGain * 18; // ~38g a 56g por tick
+            csGain = Math.random() < 0.20 ? 3 : (Math.random() < 0.82 ? 2 : 1);
+            goldGain += csGain * 21;
           } else if (role === "jungle") {
-            // Selva: monstros de campos e aronguejo (~4 a 5 CS/min)
-            csGain = Math.random() < 0.55 ? 1 : (Math.random() < 0.25 ? 2 : 0);
-            goldGain += 22; // ~42g por tick (~168g/min)
+            csGain = Math.random() < 0.65 ? 2 : 1;
+            goldGain += 32; // Ouro de campos da selva
           } else if (role === "support") {
-            // Suporte: item de suporte (World Atlas/Tribute) gera tributo passivo (~8g por tick)
-            csGain = Math.random() < 0.08 ? 1 : 0;
-            goldGain += 8; // ~28g por tick (~112g/min)
+            csGain = Math.random() < 0.35 ? 1 : 0;
+            goldGain += 26; // Renda passiva do item de suporte
           }
 
           c.cs = (c.cs || 0) + csGain;
           c.goldEarned = (c.goldEarned || 500) + goldGain;
+          c.goldCurrent = (c.goldCurrent || 0) + goldGain;
+          c.csPerMin = parseFloat((c.cs / Math.max(1, this.gameSeconds / 60)).toFixed(1));
 
           // Marca comemorativa e educativa de farm (50, 100, 150, 200, 250, 300 CS)
           const currentCs = c.cs;
           const milestones = [50, 100, 150, 200, 250, 300];
-          const isBlue = (rosterState === this.blueRosterState);
-          const champKey = `${isBlue ? 'blue' : 'red'}_${role}`;
+          const champKey = `${isBlueTeam ? 'blue' : 'red'}_${role}`;
           if (!this._farmMilestones[champKey]) this._farmMilestones[champKey] = {};
 
           for (const mVal of milestones) {
             if (currentCs >= mVal && !this._farmMilestones[champKey][mVal]) {
               this._farmMilestones[champKey][mVal] = true;
-              if (isBlue || mVal >= 100) {
+              if (isBlueTeam || mVal >= 100) {
                 const gameMin = Math.max(1, this.gameSeconds / 60);
                 const rate = (currentCs / gameMin).toFixed(1);
-                const approxGold = Math.round(mVal * 18.5);
-                const killEq = (mVal / 16.5).toFixed(1);
+                const approxGold = Math.round(mVal * 21);
+                const killEq = (mVal / 15).toFixed(1);
                 this.onEvent({
                   type: "farm_milestone",
-                  side: isBlue ? "blue" : "red",
+                  side: isBlueTeam ? "blue" : "red",
                   text: `🌾 MARCA DE FARM: ${c.name} atingiu ${mVal} CS aos ${this._formatTime()} (${rate} CS/min)! Acumulou ~${approxGold.toLocaleString()} de Ouro em tropas — equivalente a ~${killEq} abates em ouro seguro!`,
                   time: this._formatTime()
                 });
@@ -4999,8 +5044,8 @@ class MatchSimulator {
           }
         });
       };
-      updateFarm(this.blueRosterState);
-      updateFarm(this.redRosterState);
+      updateFarm(this.blueRosterState, true);
+      updateFarm(this.redRosterState, false);
     }
 
     // Sincroniza o placar da equipe com o ouro real somado dos campeões
@@ -5029,7 +5074,7 @@ class MatchSimulator {
       });
     }
 
-    // Checa conclusão de itens lendários nos campeões
+    // Checa conclusão e compra de itens da loja nos campeões
     this._checkItemMilestones();
 
     // Rola simulação de pressão de rota e combate tático
@@ -5040,56 +5085,109 @@ class MatchSimulator {
   }
 
   _checkItemMilestones() {
-    const itemThresholds = [3200, 6400, 9600, 12800];
-
     const checkSide = (side, rosterState, teamObj) => {
       const roles = ["top", "jungle", "mid", "adc", "support"];
       roles.forEach(role => {
         const member = rosterState[role];
         if (!member) return;
         if (!member.items) member.items = [];
+        if (member.items.length >= 4) return;
 
-        itemThresholds.forEach((threshold, idx) => {
-          if ((member.goldEarned || 500) >= threshold && member.items.length <= idx) {
-            const champ = getChampionById(member.id);
-            const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
-            const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
-            const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
-            const item = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
-            if (item) {
-              member.items.push(item);
+        const champ = getChampionById(member.id);
+        const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
+        const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
+        const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
+        const nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+        if (!nextItem) return;
 
-              // Aplica bônus do item ao time
-              if (item.stats && teamObj.stats) {
-                Object.keys(item.stats).forEach(stat => {
-                  if (teamObj.stats[stat] !== undefined) {
-                    teamObj.stats[stat] += Math.round(item.stats[stat] / 4);
-                  }
-                });
+        member.nextItem = nextItem;
+        const itemCost = nextItem.cost || 3000;
+
+        // Compra quando tem o valor completo na carteira individual (power spike atingido)
+        const canBuyNow = (member.goldCurrent || 0) >= itemCost;
+
+        if (canBuyNow) {
+          member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - itemCost);
+          member.items.push(nextItem);
+
+          // Aplica bônus do item ao time
+          if (nextItem.stats && teamObj.stats) {
+            Object.keys(nextItem.stats).forEach(stat => {
+              if (teamObj.stats[stat] !== undefined) {
+                teamObj.stats[stat] += Math.round(nextItem.stats[stat] / 4);
               }
-
-              this.onItemPurchased({
-                side,
-                champion: member,
-                item
-              });
-
-              this.onEvent({
-                type: "item",
-                side,
-                championName: member.name,
-                itemName: item.name,
-                text: `🛒 ${member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) completou ${item.name}!`,
-                time: this._formatTime()
-              });
-            }
+            });
           }
-        });
+
+          this.onItemPurchased({
+            side,
+            champion: member,
+            item: nextItem
+          });
+
+          this.onEvent({
+            type: "item",
+            side,
+            championName: member.name,
+            itemName: nextItem.name,
+            text: `🛒 ${member.playerNick || member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) comprou ${nextItem.name} (${itemCost.toLocaleString()}g)!`,
+            time: this._formatTime()
+          });
+
+          // Atualiza o próximo item pretendido
+          member.nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+        }
       });
     };
 
     checkSide("blue", this.blueRosterState, this.blueTeam);
     checkSide("red", this.redRosterState, this.redTeam);
+
+    this._updateIndividualLeadsAndMvp();
+  }
+
+  _updateIndividualLeadsAndMvp() {
+    const roles = ["top", "jungle", "mid", "adc", "support"];
+    let bestBlueScore = -1;
+    let bestBlueRole = null;
+    let bestRedScore = -1;
+    let bestRedRole = null;
+
+    roles.forEach(role => {
+      const b = this.blueRosterState[role];
+      const r = this.redRosterState[role];
+      if (b && r) {
+        b.laneGoldDiff = (b.goldEarned || 500) - (r.goldEarned || 500);
+        r.laneGoldDiff = -b.laneGoldDiff;
+      }
+      if (b) {
+        const bScore = ((b.items ? b.items.length : 0) * 2500) + (b.goldEarned || 500) + ((b.kills || 0) * 450) + ((b.damageDealt || 0) * 0.05);
+        b.combatScore = bScore;
+        b.isMvp = false;
+        if (bScore > bestBlueScore) {
+          bestBlueScore = bScore;
+          bestBlueRole = role;
+        }
+      }
+      if (r) {
+        const rScore = ((r.items ? r.items.length : 0) * 2500) + (r.goldEarned || 500) + ((r.kills || 0) * 450) + ((r.damageDealt || 0) * 0.05);
+        r.combatScore = rScore;
+        r.isMvp = false;
+        if (rScore > bestRedScore) {
+          bestRedScore = rScore;
+          bestRedRole = role;
+        }
+      }
+    });
+
+    if (bestBlueRole && this.blueRosterState[bestBlueRole]) {
+      this.blueRosterState[bestBlueRole].isMvp = true;
+      this.blueMvpRole = bestBlueRole;
+    }
+    if (bestRedRole && this.redRosterState[bestRedRole]) {
+      this.redRosterState[bestRedRole].isMvp = true;
+      this.redMvpRole = bestRedRole;
+    }
   }
 
   _checkRespawns() {
@@ -5231,12 +5329,40 @@ class MatchSimulator {
     const rUtilStat = (rStats && (rStats.utility || rStats.macro)) || 75;
     const rScaleStat = (rStats && (rStats.scaling || rStats.combat)) || 75;
 
+    // Poder derivado dos itens concluídos pelos campeões vivos
+    let blueItemPower = 0;
+    Object.values(this.blueRosterState).forEach(c => {
+      if (c.alive && c.items) blueItemPower += c.items.length * 3.5;
+    });
+    let redItemPower = 0;
+    Object.values(this.redRosterState).forEach(c => {
+      if (c.alive && c.items) redItemPower += c.items.length * 3.5;
+    });
+
+    // Bônus do Carregador Mais Forte (👑 MVP / 4-Protect-1):
+    let blueMvpBonus = 0;
+    const blueMvp = this.blueMvpRole ? this.blueRosterState[this.blueMvpRole] : null;
+    if (blueMvp && blueMvp.alive) {
+      blueMvpBonus = Math.min(14, (blueMvp.items ? blueMvp.items.length * 2.5 : 0) + Math.max(0, (blueMvp.laneGoldDiff || 0) * 0.003));
+      if (this.playerTactics === "protect_carry") {
+        blueMvpBonus += 10;
+      }
+    }
+
+    let redMvpBonus = 0;
+    const redMvp = this.redMvpRole ? this.redRosterState[this.redMvpRole] : null;
+    if (redMvp && redMvp.alive) {
+      redMvpBonus = Math.min(14, (redMvp.items ? redMvp.items.length * 2.5 : 0) + Math.max(0, (redMvp.laneGoldDiff || 0) * 0.003));
+    }
+
     let blueBasePower = ((bDmgStat + tacticDmg) * 0.28 +
                          (bTankStat + tacticTank) * 0.24 +
                          (bUtilStat) * 0.20 +
                          (bScaleStat) * scalingFactor +
                          blueGoldBonus +
                          blueDefendingBonus +
+                         blueItemPower +
+                         blueMvpBonus +
                          (blueHasBaron ? 16 : 0) +
                          (this.blueSuperMinions ? 12 : 0)) * blueManpowerMod;
 
@@ -5246,6 +5372,8 @@ class MatchSimulator {
                          (rScaleStat) * scalingFactor +
                          redGoldBonus +
                          redDefendingBonus +
+                         redItemPower +
+                         redMvpBonus +
                          (redHasBaron ? 16 : 0) +
                          (this.redSuperMinions ? 12 : 0)) * redManpowerMod;
 
@@ -7177,8 +7305,9 @@ class MatchSimulator {
     killer.damageDealt = (killer.damageDealt || 0) + lethalDmg;
     victim.damageTaken = (victim.damageTaken || 0) + lethalDmg;
     killer.goldEarned = (killer.goldEarned || 500) + 300;
+    killer.goldCurrent = (killer.goldCurrent || 0) + 300;
 
-    // Assistências dos aliados vivos do assassino
+    // Assistências dos aliados vivos do assassino (150g divididos igualmente)
     const assistCandidates = Object.values(killerRoster).filter(c => c.id !== killer.id && c.alive);
     if (assistCandidates.length > 0) {
       const assistCount = Math.min(assistCandidates.length, Math.floor(Math.random() * 3) + 1);
@@ -7187,12 +7316,15 @@ class MatchSimulator {
       assistCandidates.slice(0, assistCount).forEach(assister => {
         assister.assists = (assister.assists || 0) + 1;
         assister.goldEarned = (assister.goldEarned || 500) + splitGold;
+        assister.goldCurrent = (assister.goldCurrent || 0) + splitGold;
         assister.damageDealt = (assister.damageDealt || 0) + Math.floor(lethalDmg * 0.35);
       });
     }
 
     const deathTimer = 15 + Math.floor(this.gameSeconds / 45);
     victim.respawnAt = this.gameSeconds + deathTimer;
+    // Tempo de retorno da base para a rota após renascer (14 segundos)
+    victim.travelingBackUntil = victim.respawnAt + 14;
 
     // 1. Sistema Aprimorado de Super Shutdown / Bounties (Viradas Competitivas do CBLOL)
     let bountyGold = 0;
@@ -7211,9 +7343,13 @@ class MatchSimulator {
       bountyGold = bounty;
       killerScore.gold += bounty;
       killer.goldEarned = (killer.goldEarned || 500) + bounty;
+      killer.goldCurrent = (killer.goldCurrent || 0) + bounty;
       victim.streak = 0;
     }
     killer.streak = (killer.streak || 0) + 1;
+
+    this._updateIndividualLeadsAndMvp();
+    this._syncTeamGold();
 
     // 2. Sistema de Multikill (Double Kill, Triple, Quadra, PENTAKILL)
     // Janela de 30 segundos de simulação para encadear abates
@@ -9428,18 +9564,19 @@ class MatchSimulator {
     }
 
     if (choiceId === "clash_front_to_back") {
+      const bCarry = (this.blueMvpRole && this.blueRosterState[this.blueMvpRole]) ? this.blueRosterState[this.blueMvpRole] : bAdc;
       if (isSuccess) {
-        if (bAdc && rTop) {
-          this._recordKill("blue", "red", "adc", "top", "Luta Front-to-Back", `🏹 LINHA DE FRENTE DERRETIDA! ${bAdc.name} bateu com proteção total e abateu ${rTop.name}!`);
+        if (bCarry && rTop) {
+          this._recordKill("blue", "red", bCarry.role || "adc", "top", "Jogar pelo Carregador", `👑 CARREGADOR HABILITADO! ${bCarry.name} bateu com proteção total e abateu ${rTop.name}!`);
         }
         this._damageNextStructure("blue", this.redStructures, 30, false, 1.7);
         this._awardTeamGold("blue", 500);
         this.lanePressure = Math.min(100, this.lanePressure + 20);
         return {
           success: true, roll, probability: prob,
-          title: "LUTA FRONT-TO-BACK IMPECÁVEL!",
-          subtitle: `Formação Fechada (${prob}% chance)`,
-          text: `Disciplina absoluta! Sua equipe protegeu os carregadores, triturou a linha de frente inimiga (+500g) e conquistou o avanço no rio!`
+          title: "FORMAÇÃO 4-PROTECT-1 IMPECÁVEL!",
+          subtitle: `Carregador Habilitado (${prob}% chance)`,
+          text: `Disciplina exemplar! Sua equipe formou a barreira protetora perfeita em volta de ${bCarry?.name || 'seu carregador'}, permitindo que causasse dano contínuo e derretesse o CBLOL (+500g)!`
         };
       } else {
         this.lanePressure = Math.max(-100, this.lanePressure - 15);
@@ -11223,7 +11360,8 @@ class MatchSimulator {
         superMinions: this.blueSuperMinions,
         hasBaron: this.gameSeconds < this.blueBaronUntil,
         buffs: this._getActiveBuffs("blue"),
-        roster: this.blueRosterState
+        roster: this.blueRosterState,
+        mvpRole: this.blueMvpRole
       },
       red: {
         name: this.redTeam.name,
@@ -11234,7 +11372,8 @@ class MatchSimulator {
         superMinions: this.redSuperMinions,
         hasBaron: this.gameSeconds < this.redBaronUntil,
         buffs: this._getActiveBuffs("red"),
-        roster: this.redRosterState
+        roster: this.redRosterState,
+        mvpRole: this.redMvpRole
       }
     };
   }
@@ -13273,6 +13412,14 @@ class ArenaView {
     return labels[id] || id.toUpperCase();
   }
 
+  _formatGold(val) {
+    if (val === undefined || val === null) return "0g";
+    if (val >= 1000) {
+      return (val / 1000).toFixed(1) + "k";
+    }
+    return val + "g";
+  }
+
   _renderChampItems(items) {
     const slots = [0, 1, 2, 3];
     return `
@@ -13280,9 +13427,9 @@ class ArenaView {
         ${slots.map(idx => {
           const itm = items && items[idx];
           if (itm) {
-            return `<div class="item-slot-icon filled" title="${itm.name} (+${itm.power} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+            return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
           }
-          return `<div class="item-slot-icon empty" title="Espaço vazio de item"></div>`;
+          return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
         }).join('')}
       </div>
     `;
@@ -13320,6 +13467,7 @@ class ArenaView {
                 ${m.isSignature ? '<span class="sig-star" title="Pick de Conforto!">⭐</span>' : ''}
                 <strong class="player-nick-highlight">${m.playerNick || m.name}</strong>
                 ${m.playerNick ? `<span class="champ-sub-name">${m.name}</span>` : ''}
+                <span class="champ-mvp-slot" id="mvp-slot-${side}-${role}">${m.isMvp ? '<span class="champ-mvp-badge" title="👑 MVP da Equipe! Lute ao redor deste carregador!">👑 MVP</span>' : ''}</span>
               </div>
               <div class="champ-meta-tags">
                 <span class="champ-role-tag">${role.toUpperCase()}</span>
@@ -13328,10 +13476,15 @@ class ArenaView {
             </div>
           </div>
           ${this._renderChampItems(m.items)}
-          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 18.5).toLocaleString()}g em tropas (~${((m.cs || 0) / 16.5).toFixed(1)} abates em ouro seguro!)">
+          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 21).toLocaleString()}g em tropas (~${((m.cs || 0) / 15).toFixed(1)} abates em ouro seguro!)">
             <span class="cs-icon">🌾</span>
             <span class="cs-count">${m.cs || 0}</span>
-            <span class="cs-rate">(0.0)</span>
+            <span class="cs-rate">(${m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : '0.0'})</span>
+          </div>
+          <div class="champ-gold-stats" id="gold-${side}-${role}" title="Carteira: ${(m.goldCurrent || 500).toLocaleString()}g | Total Acumulado: ${(m.goldEarned || 500).toLocaleString()}g">
+            <span class="gold-icon">💰</span>
+            <span class="gold-val">${this._formatGold(m.goldEarned || 500)}</span>
+            <span class="gold-diff-pill even" id="gold-diff-${side}-${role}">±0g</span>
           </div>
           <div class="champ-kda" id="kda-${side}-${role}">
             ${m.kills} / ${m.deaths} / ${m.assists}
@@ -13601,6 +13754,15 @@ class ArenaView {
         if (!m.alive) row.classList.add("dead");
         else row.classList.remove("dead");
 
+        // Atualiza destaque de MVP / Carregador
+        const mvpSlot = row.querySelector(`#mvp-slot-${side}-${role}`);
+        if (mvpSlot) {
+          const mvpHtml = m.isMvp ? '<span class="champ-mvp-badge" title="👑 MVP da Equipe! Lute ao redor deste carregador!">👑 MVP</span>' : '';
+          if (mvpSlot.innerHTML !== mvpHtml) {
+            mvpSlot.innerHTML = mvpHtml;
+          }
+        }
+
         // Atualiza matchup tags e alerta de foco do caçador rival
         const slot = row.querySelector(`#matchup-slot-${side}-${role}`);
         if (slot) {
@@ -13642,9 +13804,9 @@ class ArenaView {
             tray.innerHTML = slots.map(idx => {
               const itm = m.items[idx];
               if (itm) {
-                return `<div class="item-slot-icon filled" title="${itm.name} (+${itm.power} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+                return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
               }
-              return `<div class="item-slot-icon empty" title="Espaço vazio de item"></div>`;
+              return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
             }).join('');
           }
         }
@@ -13655,13 +13817,45 @@ class ArenaView {
       }
       const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
       if (farmEl) {
-        const gameMin = Math.max(1, (this.matchSim?.gameSeconds || 60) / 60);
         const cs = m.cs || 0;
-        const rate = (cs / gameMin).toFixed(1);
-        const approxGold = Math.round(cs * 18.5);
-        const killEq = (cs / 16.5).toFixed(1);
+        const rate = m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : ((cs / Math.max(1, (this.matchSim?.gameSeconds || 60) / 60)).toFixed(1));
+        const approxGold = Math.round(cs * 21);
+        const killEq = (cs / 15).toFixed(1);
         farmEl.innerHTML = `<span class="cs-icon">🌾</span><span class="cs-count">${cs}</span> <span class="cs-rate">(${rate})</span>`;
         farmEl.title = `Farm: ${cs} tropas (${rate} CS/min) • ~${approxGold.toLocaleString()}g em tropas (~${killEq} abates em ouro seguro!)`;
+      }
+
+      // Atualiza Ouro Individual e Vantagem de Rota contra Rival Direto
+      const goldEl = this.containerEl.querySelector(`#gold-${side}-${role}`);
+      const diffEl = this.containerEl.querySelector(`#gold-diff-${side}-${role}`);
+      const current = m.goldCurrent || 0;
+      const earned = m.goldEarned || 500;
+      const nextItemInfo = m.nextItem ? `\nPróximo: ${m.nextItem.name} (${(m.nextItem.cost || 3000).toLocaleString()}g) [${Math.min(100, Math.round((current / (m.nextItem.cost || 3000)) * 100))}%]` : '';
+
+      if (goldEl) {
+        const goldValEl = goldEl.querySelector('.gold-val');
+        if (goldValEl) {
+          goldValEl.textContent = this._formatGold(earned);
+        }
+        goldEl.title = `Carteira: ${current.toLocaleString()}g | Total Acumulado: ${earned.toLocaleString()}g${nextItemInfo}`;
+      }
+
+      if (diffEl) {
+        const diff = m.laneGoldDiff || 0;
+        if (diff >= 100) {
+          diffEl.className = "gold-diff-pill lead";
+          diffEl.textContent = `▲ +${diff >= 1000 ? (diff / 1000).toFixed(1) + 'k' : diff + 'g'}`;
+          diffEl.title = `Vantagem de rota: +${diff.toLocaleString()}g sobre o rival direto`;
+        } else if (diff <= -100) {
+          const absDiff = Math.abs(diff);
+          diffEl.className = "gold-diff-pill deficit";
+          diffEl.textContent = `▼ -${absDiff >= 1000 ? (absDiff / 1000).toFixed(1) + 'k' : absDiff + 'g'}`;
+          diffEl.title = `Desvantagem de rota: -${absDiff.toLocaleString()}g em relação ao rival direto`;
+        } else {
+          diffEl.className = "gold-diff-pill even";
+          diffEl.textContent = `±0g`;
+          diffEl.title = `Rota equilibrada em ouro`;
+        }
       }
     });
   }
@@ -14165,7 +14359,7 @@ class ArenaView {
                 </div>
               </div>
               <div class="stats-champ-center">
-                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS</span>
+                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
                 <span class="stats-pill gold-pill">💰 ${goldStr}</span>
               </div>
               <div class="stats-champ-items">

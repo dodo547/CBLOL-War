@@ -530,6 +530,14 @@ export class ArenaView {
     return labels[id] || id.toUpperCase();
   }
 
+  _formatGold(val) {
+    if (val === undefined || val === null) return "0g";
+    if (val >= 1000) {
+      return (val / 1000).toFixed(1) + "k";
+    }
+    return val + "g";
+  }
+
   _renderChampItems(items) {
     const slots = [0, 1, 2, 3];
     return `
@@ -537,9 +545,9 @@ export class ArenaView {
         ${slots.map(idx => {
           const itm = items && items[idx];
           if (itm) {
-            return `<div class="item-slot-icon filled" title="${itm.name} (+${itm.power} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+            return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
           }
-          return `<div class="item-slot-icon empty" title="Espaço vazio de item"></div>`;
+          return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
         }).join('')}
       </div>
     `;
@@ -577,6 +585,7 @@ export class ArenaView {
                 ${m.isSignature ? '<span class="sig-star" title="Pick de Conforto!">⭐</span>' : ''}
                 <strong class="player-nick-highlight">${m.playerNick || m.name}</strong>
                 ${m.playerNick ? `<span class="champ-sub-name">${m.name}</span>` : ''}
+                <span class="champ-mvp-slot" id="mvp-slot-${side}-${role}">${m.isMvp ? '<span class="champ-mvp-badge" title="👑 MVP da Equipe! Lute ao redor deste carregador!">👑 MVP</span>' : ''}</span>
               </div>
               <div class="champ-meta-tags">
                 <span class="champ-role-tag">${role.toUpperCase()}</span>
@@ -585,10 +594,15 @@ export class ArenaView {
             </div>
           </div>
           ${this._renderChampItems(m.items)}
-          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 18.5).toLocaleString()}g em tropas (~${((m.cs || 0) / 16.5).toFixed(1)} abates em ouro seguro!)">
+          <div class="champ-farm-stats" id="farm-${side}-${role}" title="Farm: ${m.cs || 0} tropas • ~${Math.round((m.cs || 0) * 21).toLocaleString()}g em tropas (~${((m.cs || 0) / 15).toFixed(1)} abates em ouro seguro!)">
             <span class="cs-icon">🌾</span>
             <span class="cs-count">${m.cs || 0}</span>
-            <span class="cs-rate">(0.0)</span>
+            <span class="cs-rate">(${m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : '0.0'})</span>
+          </div>
+          <div class="champ-gold-stats" id="gold-${side}-${role}" title="Carteira: ${(m.goldCurrent || 500).toLocaleString()}g | Total Acumulado: ${(m.goldEarned || 500).toLocaleString()}g">
+            <span class="gold-icon">💰</span>
+            <span class="gold-val">${this._formatGold(m.goldEarned || 500)}</span>
+            <span class="gold-diff-pill even" id="gold-diff-${side}-${role}">±0g</span>
           </div>
           <div class="champ-kda" id="kda-${side}-${role}">
             ${m.kills} / ${m.deaths} / ${m.assists}
@@ -858,6 +872,15 @@ export class ArenaView {
         if (!m.alive) row.classList.add("dead");
         else row.classList.remove("dead");
 
+        // Atualiza destaque de MVP / Carregador
+        const mvpSlot = row.querySelector(`#mvp-slot-${side}-${role}`);
+        if (mvpSlot) {
+          const mvpHtml = m.isMvp ? '<span class="champ-mvp-badge" title="👑 MVP da Equipe! Lute ao redor deste carregador!">👑 MVP</span>' : '';
+          if (mvpSlot.innerHTML !== mvpHtml) {
+            mvpSlot.innerHTML = mvpHtml;
+          }
+        }
+
         // Atualiza matchup tags e alerta de foco do caçador rival
         const slot = row.querySelector(`#matchup-slot-${side}-${role}`);
         if (slot) {
@@ -899,9 +922,9 @@ export class ArenaView {
             tray.innerHTML = slots.map(idx => {
               const itm = m.items[idx];
               if (itm) {
-                return `<div class="item-slot-icon filled" title="${itm.name} (+${itm.power} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
+                return `<div class="item-slot-icon filled" title="${itm.name} (${(itm.cost || 3000).toLocaleString()}g) (+${itm.power || 25} Poder)"><img src="${getItemIconUrl(itm.id)}" alt="${itm.name}" /></div>`;
               }
-              return `<div class="item-slot-icon empty" title="Espaço vazio de item"></div>`;
+              return `<div class="item-slot-icon empty" title="Espaço de item"></div>`;
             }).join('');
           }
         }
@@ -912,13 +935,45 @@ export class ArenaView {
       }
       const farmEl = this.containerEl.querySelector(`#farm-${side}-${role}`);
       if (farmEl) {
-        const gameMin = Math.max(1, (this.matchSim?.gameSeconds || 60) / 60);
         const cs = m.cs || 0;
-        const rate = (cs / gameMin).toFixed(1);
-        const approxGold = Math.round(cs * 18.5);
-        const killEq = (cs / 16.5).toFixed(1);
+        const rate = m.csPerMin !== undefined ? m.csPerMin.toFixed(1) : ((cs / Math.max(1, (this.matchSim?.gameSeconds || 60) / 60)).toFixed(1));
+        const approxGold = Math.round(cs * 21);
+        const killEq = (cs / 15).toFixed(1);
         farmEl.innerHTML = `<span class="cs-icon">🌾</span><span class="cs-count">${cs}</span> <span class="cs-rate">(${rate})</span>`;
         farmEl.title = `Farm: ${cs} tropas (${rate} CS/min) • ~${approxGold.toLocaleString()}g em tropas (~${killEq} abates em ouro seguro!)`;
+      }
+
+      // Atualiza Ouro Individual e Vantagem de Rota contra Rival Direto
+      const goldEl = this.containerEl.querySelector(`#gold-${side}-${role}`);
+      const diffEl = this.containerEl.querySelector(`#gold-diff-${side}-${role}`);
+      const current = m.goldCurrent || 0;
+      const earned = m.goldEarned || 500;
+      const nextItemInfo = m.nextItem ? `\nPróximo: ${m.nextItem.name} (${(m.nextItem.cost || 3000).toLocaleString()}g) [${Math.min(100, Math.round((current / (m.nextItem.cost || 3000)) * 100))}%]` : '';
+
+      if (goldEl) {
+        const goldValEl = goldEl.querySelector('.gold-val');
+        if (goldValEl) {
+          goldValEl.textContent = this._formatGold(earned);
+        }
+        goldEl.title = `Carteira: ${current.toLocaleString()}g | Total Acumulado: ${earned.toLocaleString()}g${nextItemInfo}`;
+      }
+
+      if (diffEl) {
+        const diff = m.laneGoldDiff || 0;
+        if (diff >= 100) {
+          diffEl.className = "gold-diff-pill lead";
+          diffEl.textContent = `▲ +${diff >= 1000 ? (diff / 1000).toFixed(1) + 'k' : diff + 'g'}`;
+          diffEl.title = `Vantagem de rota: +${diff.toLocaleString()}g sobre o rival direto`;
+        } else if (diff <= -100) {
+          const absDiff = Math.abs(diff);
+          diffEl.className = "gold-diff-pill deficit";
+          diffEl.textContent = `▼ -${absDiff >= 1000 ? (absDiff / 1000).toFixed(1) + 'k' : absDiff + 'g'}`;
+          diffEl.title = `Desvantagem de rota: -${absDiff.toLocaleString()}g em relação ao rival direto`;
+        } else {
+          diffEl.className = "gold-diff-pill even";
+          diffEl.textContent = `±0g`;
+          diffEl.title = `Rota equilibrada em ouro`;
+        }
       }
     });
   }
@@ -1422,7 +1477,7 @@ export class ArenaView {
                 </div>
               </div>
               <div class="stats-champ-center">
-                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS</span>
+                <span class="stats-pill cs-pill">🌾 ${c.cs || 0} CS (${c.csPerMin !== undefined ? c.csPerMin.toFixed(1) : ((c.cs || 0) / Math.max(1, (summary.gameSeconds || 1200) / 60)).toFixed(1)}/m)</span>
                 <span class="stats-pill gold-pill">💰 ${goldStr}</span>
               </div>
               <div class="stats-champ-items">
