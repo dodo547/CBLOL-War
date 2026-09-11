@@ -10551,38 +10551,38 @@ class ArenaView {
   _renderSummonersRiftSvg(state) {
     const MAP_COORDS = {
       blue: {
-        top_inhib: { x: 120, y: 770 },
-        top_t3: { x: 120, y: 690 },
-        top_t2: { x: 120, y: 530 },
-        top_t1: { x: 120, y: 370 },
-        mid_inhib: { x: 210, y: 790 },
-        mid_t3: { x: 280, y: 720 },
-        mid_t2: { x: 355, y: 645 },
-        mid_t1: { x: 430, y: 570 },
-        bot_inhib: { x: 230, y: 880 },
-        bot_t3: { x: 310, y: 880 },
-        bot_t2: { x: 470, y: 880 },
-        bot_t1: { x: 630, y: 880 },
-        nexus_t1: { x: 150, y: 835 },
-        nexus_t2: { x: 135, y: 850 },
-        nexus: { x: 95, y: 905 }
+        top_inhib: { x: 117, y: 796 },
+        top_t3: { x: 108, y: 738 },
+        top_t2: { x: 124, y: 576 },
+        top_t1: { x: 100, y: 326 },
+        mid_inhib: { x: 229, y: 814 },
+        mid_t3: { x: 278, y: 732 },
+        mid_t2: { x: 345, y: 693 },
+        mid_t1: { x: 401, y: 611 },
+        bot_inhib: { x: 244, y: 917 },
+        bot_t3: { x: 277, y: 917 },
+        bot_t2: { x: 468, y: 919 },
+        bot_t1: { x: 677, y: 931 },
+        nexus_t1: { x: 173, y: 848 },
+        nexus_t2: { x: 146, y: 869 },
+        nexus: { x: 135, y: 880 }
       },
       red: {
-        top_t1: { x: 370, y: 120 },
-        top_t2: { x: 530, y: 120 },
-        top_t3: { x: 690, y: 120 },
-        top_inhib: { x: 770, y: 120 },
-        mid_t1: { x: 570, y: 430 },
-        mid_t2: { x: 645, y: 355 },
-        mid_t3: { x: 720, y: 280 },
-        mid_inhib: { x: 790, y: 210 },
-        bot_t1: { x: 880, y: 630 },
-        bot_t2: { x: 880, y: 470 },
-        bot_t3: { x: 880, y: 310 },
-        bot_inhib: { x: 880, y: 230 },
-        nexus_t1: { x: 850, y: 165 },
-        nexus_t2: { x: 865, y: 150 },
-        nexus: { x: 905, y: 95 }
+        top_t1: { x: 311, y: 109 },
+        top_t2: { x: 541, y: 124 },
+        top_t3: { x: 699, y: 118 },
+        top_inhib: { x: 742, y: 120 },
+        mid_t1: { x: 653, y: 354 },
+        mid_t2: { x: 730, y: 263 },
+        mid_t3: { x: 765, y: 222 },
+        mid_inhib: { x: 784, y: 195 },
+        bot_t1: { x: 885, y: 701 },
+        bot_t2: { x: 873, y: 477 },
+        bot_t3: { x: 878, y: 294 },
+        bot_inhib: { x: 879, y: 243 },
+        nexus_t1: { x: 819, y: 182 },
+        nexus_t2: { x: 837, y: 160 },
+        nexus: { x: 871, y: 137 }
       }
     };
 
@@ -10617,11 +10617,6 @@ class ArenaView {
             <stop offset="0%" stop-color="#4a0f1d" stop-opacity="0.9" />
             <stop offset="100%" stop-color="#180408" stop-opacity="0.2" />
           </radialGradient>
-          <linearGradient id="river-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#082235" />
-            <stop offset="50%" stop-color="#0e3a54" />
-            <stop offset="100%" stop-color="#082030" />
-          </linearGradient>
           <filter id="rift-glow-blue" x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="5" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -10632,89 +10627,36 @@ class ArenaView {
           </filter>
         </defs>
 
-        <!-- Terreno Global do Mapa (Dark Rift Grass) -->
-        <rect width="1000" height="1000" fill="#08140f" rx="12" />
+        <!-- Fundo Oficial Autêntico de Summoner's Rift -->
+        <image href="assets/map/minimap_rift.png" xlink:href="assets/map/minimap_rift.png" x="0" y="0" width="1000" height="1000" preserveAspectRatio="none" />
 
-        <!-- Selva Inferior Esquerda (Blue Jungle) -->
-        <path d="M 120 880 L 120 480 C 260 480, 360 580, 480 620 C 520 740, 520 840, 520 880 Z" fill="#0b1e17" stroke="#122d23" stroke-width="2" />
-        <path d="M 160 540 C 240 540, 300 600, 340 640 C 380 720, 440 780, 460 840" fill="none" stroke="#16382b" stroke-width="10" stroke-dasharray="10 8" />
-
-        <!-- Selva Superior Direita (Red Jungle) -->
-        <path d="M 880 120 L 880 520 C 740 520, 640 420, 520 380 C 480 260, 480 160, 480 120 Z" fill="#141a14" stroke="#1e2d21" stroke-width="2" />
-        <path d="M 840 460 C 760 460, 700 400, 660 360 C 620 280, 560 220, 540 160" fill="none" stroke="#223626" stroke-width="10" stroke-dasharray="10 8" />
-
-        <!-- Rio de Summoner's Rift -->
-        <path d="M 80 320 Q 250 360 440 480 T 650 680 Q 750 820 910 680 L 930 760 Q 730 890 560 720 T 360 520 Q 200 400 70 410 Z" fill="url(#river-grad)" stroke="#0ac8b9" stroke-opacity="0.35" stroke-width="3" />
-        <path d="M 100 360 Q 280 390 480 510 T 700 700 L 880 720" fill="none" stroke="#005a82" stroke-width="6" opacity="0.65" />
-
-        <!-- Covil do Barão Nashor (Parte Superior do Rio / Top River) -->
-        <g class="pit-marker baron-pit" id="pit-baron" transform="translate(330, 310)" data-pit="baron">
-          <path d="M -30 -30 A 42 42 0 1 1 30 30 L 15 15 A 24 24 0 1 0 -15 -15 Z" fill="#200d2c" stroke="#c084fc" stroke-width="2.5" />
-          <circle r="22" fill="#3b0764" stroke="#a855f7" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="16">👾</text>
+        <!-- Covil do Barão Nashor (Parte Superior do Rio) -->
+        <g class="pit-marker baron-pit" id="pit-baron" transform="translate(344, 336)" data-pit="baron" title="Covil do Barão Nashor">
+          <circle r="22" fill="#200d2c" fill-opacity="0.5" stroke="#c084fc" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="14">👾</text>
         </g>
 
-        <!-- Covil do Dragão Elemental (Parte Inferior do Rio / Bot River) -->
-        <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(680, 720)" data-pit="dragon">
-          <path d="M 30 30 A 42 42 0 1 1 -30 -30 L -15 -15 A 24 24 0 1 0 15 15 Z" fill="#301206" stroke="#fb923c" stroke-width="2.5" />
-          <circle r="22" fill="#7c2d12" stroke="#ea580c" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="16">🐲</text>
+        <!-- Covil do Dragão Elemental (Parte Inferior do Rio) -->
+        <g class="pit-marker dragon-pit" id="pit-dragon" transform="translate(684, 713)" data-pit="dragon" title="Covil do Dragão Elemental">
+          <circle r="22" fill="#301206" fill-opacity="0.5" stroke="#fb923c" stroke-width="2" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="14">🐲</text>
         </g>
-
-        <!-- Campos de Buff da Selva (Blue / Red Buffs) -->
-        <g class="camp-marker camp-blue-buff-blue" transform="translate(280, 630)">
-          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
-        </g>
-        <g class="camp-marker camp-red-buff-blue" transform="translate(480, 770)">
-          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
-        </g>
-        <g class="camp-marker camp-red-buff-red" transform="translate(520, 230)">
-          <circle r="13" fill="#331010" stroke="#c82a2a" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔴</text>
-        </g>
-        <g class="camp-marker camp-blue-buff-red" transform="translate(720, 370)">
-          <circle r="13" fill="#0c2338" stroke="#0070ba" stroke-width="1.5" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="9">🔷</text>
-        </g>
-
-        <!-- Base Azul (Bottom-Left) -->
-        <polygon points="30,970 30,780 120,760 240,880 220,970" fill="url(#blue-base-grad)" stroke="#0ac8b9" stroke-width="2.5" />
-        <text x="50" y="945" fill="#0ac8b9" font-size="14" font-weight="900" letter-spacing="1.5">BASE AZUL</text>
-
-        <!-- Base Vermelha (Top-Right) -->
-        <polygon points="970,30 970,220 880,240 760,120 780,30" fill="url(#red-base-grad)" stroke="#e84057" stroke-width="2.5" />
-        <text x="810" y="65" fill="#e84057" font-size="14" font-weight="900" letter-spacing="1.5">BASE RED</text>
-
-        <!-- Trilhas das 3 Rotas Principais (Top, Mid, Bot) -->
-        <!-- Top Lane -->
-        <path id="top-lane-track" d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M 120 880 L 120 160 Q 140 120 180 120 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
-
-        <!-- Mid Lane -->
-        <path id="mid-lane-track" d="M 150 850 L 850 150" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" />
-        <path d="M 150 850 L 850 150" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" />
-
-        <!-- Bot Lane -->
-        <path id="bot-lane-track" d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#172b22" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M 120 880 L 840 880 Q 880 860 880 820 L 880 120" fill="none" stroke="#254736" stroke-width="10" stroke-dasharray="14 10" stroke-linecap="round" stroke-linejoin="round" />
 
         <!-- Marcadores de Choque de Minions (Minion Clash Waves) -->
-        <g id="clash-top" class="minion-clash-wave" transform="translate(140, 140)">
-          <circle r="15" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7.5" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8.5">⚔️</text>
+        <g id="clash-top" class="minion-clash-wave" transform="translate(195, 195)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
-        <g id="clash-mid" class="minion-clash-wave" transform="translate(500, 500)">
-          <circle r="15" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7.5" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8.5">⚔️</text>
+        <g id="clash-mid" class="minion-clash-wave" transform="translate(527, 482)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
-        <g id="clash-bot" class="minion-clash-wave" transform="translate(860, 860)">
-          <circle r="15" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
-          <circle r="7.5" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="2" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="8.5">⚔️</text>
+        <g id="clash-bot" class="minion-clash-wave" transform="translate(780, 816)">
+          <circle r="14" fill="#f0b622" opacity="0.35" class="clash-wave-pulse" />
+          <circle r="7" fill="#f0e6d2" stroke="#c8aa6e" stroke-width="1.8" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="8">⚔️</text>
         </g>
 
         <!-- ESTRUTURAS DO MAPA (30 Estruturas Autênticas) -->
@@ -10733,7 +10675,7 @@ class ArenaView {
     const isNexus = struct.tier === "nexus" || struct.id === "nexus";
     const isInhib = struct.tier === "inhib" || struct.id.includes("inhib");
     const isT1 = struct.tier === 1 || struct.id.includes("t1");
-    const radius = isNexus ? 34 : (isInhib ? 24 : 20);
+    const radius = isNexus ? 24 : (isInhib ? 18 : 15);
     const pct = Math.max(0, Math.min(100, Math.round((struct.currentHp / struct.maxHp) * 100)));
     const circumference = Math.round(2 * Math.PI * radius);
     const strokeDash = Math.round((pct / 100) * circumference);
@@ -10753,7 +10695,7 @@ class ArenaView {
          data-tier="${struct.tier}"
          transform="translate(${coords.x}, ${coords.y})">
         <!-- Glow / Halo de hover e clique -->
-        <circle class="struct-halo" r="${radius + 6}" />
+        <circle class="struct-halo" r="${radius + 5}" />
         <!-- Fundo escuro do anel -->
         <circle class="struct-hp-bg" r="${radius}" />
         <!-- Anel de Vida Dinâmico (SVG Stroke Dash) -->
@@ -10765,7 +10707,7 @@ class ArenaView {
         <!-- Núcleo interno colorido -->
         <circle class="struct-core" r="${radius - 3}" />
         <!-- Ícone representativo -->
-        <text class="struct-icon" text-anchor="middle" dominant-baseline="central" font-size="${isNexus ? 16 : (isInhib ? 13 : 11)}">${iconSymbol}</text>
+        <text class="struct-icon" text-anchor="middle" dominant-baseline="central" font-size="${isNexus ? 14 : (isInhib ? 11 : 9.5)}">${iconSymbol}</text>
         <!-- Badge de Barricadas (Placas ativas da T1) -->
         ${isT1 && !struct.destroyed && struct.plates > 0 ? `
           <g class="struct-plates-badge" transform="translate(0, ${radius + 9})">
@@ -10775,8 +10717,8 @@ class ArenaView {
         ` : ''}
         <!-- Indicador de Ruína quando Destruído -->
         <g class="struct-ruined-indicator" style="display: ${struct.destroyed ? 'block' : 'none'};">
-          <circle r="${radius + 1}" fill="#0a0f14" opacity="0.85" />
-          <text text-anchor="middle" dominant-baseline="central" font-size="13">❌</text>
+          <circle r="${radius + 3}" fill="#080c10" stroke="#ff3344" stroke-width="1.5" opacity="0.92" />
+          <text text-anchor="middle" dominant-baseline="central" font-size="12" fill="#ff3344">❌</text>
         </g>
       </g>
     `;
@@ -11080,42 +11022,42 @@ class ArenaView {
     updatePressureBadge("mid", pressures.mid || 0);
     updatePressureBadge("bot", pressures.bot || 0);
 
-    // Movimentação dos pontos de colisão ao longo das rotas
-    // Top Lane: (120, 880) -> (120, 160) -> (140, 140) -> (160, 120) -> (880, 120)
+    // Movimentação dos pontos de colisão ao longo das rotas do mapa oficial
+    // Top Lane: (100, 326) <-> (195, 195) <-> (699, 118)
     const clashTop = this.containerEl.querySelector("#clash-top");
     if (clashTop) {
       const pTop = Math.max(-100, Math.min(100, pressures.top || 0));
-      let x = 140, y = 140;
+      let x = 195, y = 195;
       if (pTop >= 0) {
-        x = 160 + (pTop / 100) * 650;
-        y = 120;
+        x = 195 + (pTop / 100) * 450;
+        y = 195 - (pTop / 100) * 75;
       } else {
-        x = 120;
-        y = 160 + (-pTop / 100) * 650;
+        x = 195 - (-pTop / 100) * 85;
+        y = 195 + (-pTop / 100) * 450;
       }
       clashTop.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
-    // Mid Lane: Diagonal (150, 850) -> (500, 500) -> (850, 150)
+    // Mid Lane: Diagonal (401, 611) <-> (527, 482) <-> (653, 354)
     const clashMid = this.containerEl.querySelector("#clash-mid");
     if (clashMid) {
       const pMid = Math.max(-100, Math.min(100, pressures.mid || 0));
-      const x = 500 + (pMid / 100) * 310;
-      const y = 500 - (pMid / 100) * 310;
+      const x = 527 + (pMid / 100) * 230;
+      const y = 482 - (pMid / 100) * 230;
       clashMid.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
 
-    // Bot Lane: (120, 880) -> (840, 880) -> (860, 860) -> (880, 840) -> (880, 120)
+    // Bot Lane: (277, 917) <-> (780, 816) <-> (885, 701)
     const clashBot = this.containerEl.querySelector("#clash-bot");
     if (clashBot) {
       const pBot = Math.max(-100, Math.min(100, pressures.bot || 0));
-      let x = 860, y = 860;
+      let x = 780, y = 816;
       if (pBot >= 0) {
-        x = 880;
-        y = 840 - (pBot / 100) * 650;
+        x = 780 + (pBot / 100) * 95;
+        y = 816 - (pBot / 100) * 450;
       } else {
-        x = 840 - (-pBot / 100) * 650;
-        y = 880;
+        x = 780 - (-pBot / 100) * 450;
+        y = 816 + (-pBot / 100) * 95;
       }
       clashBot.setAttribute("transform", `translate(${Math.round(x)}, ${Math.round(y)})`);
     }
