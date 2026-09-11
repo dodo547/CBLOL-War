@@ -6396,43 +6396,84 @@ class MatchSimulator {
     this._checkGameEnd();
   }
 
-  _checkItemMilestones() {
-    const checkSide = (side, rosterState, teamObj) => {
-      const roles = ["top", "jungle", "mid", "adc", "support"];
-      roles.forEach(role => {
-        const member = rosterState[role];
-        if (!member) return;
-        if (!member.items) member.items = [];
+  _processMemberShoppingAtBase(member, role, side, teamObj) {
+    if (!member) return;
+    if (!member.items) member.items = [];
 
-        const champ = getChampionById(member.id);
-        const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
-        const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
-        const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
-        const nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
-        if (!nextItem) return;
+    const champ = getChampionById(member.id);
+    const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
+    const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
+    const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
 
-        member.nextItem = nextItem;
+    let boughtAny = false;
+    for (let purchaseAttempt = 0; purchaseAttempt < 3; purchaseAttempt++) {
+      const nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+      if (!nextItem) break;
+      member.nextItem = nextItem;
 
-        // Avalia o próximo passo na árvore de receitas do item
-        const step = getNextPurchaseStep(member.items, nextItem.id, member.goldCurrent || 0);
-        if (!step) return;
+      const step = getNextPurchaseStep(member.items, nextItem.id, member.goldCurrent || 0);
+      if (!step || (member.goldCurrent || 0) < step.cost) break;
 
-        if (step.type === "COMBINE") {
-          // Combinação: deduz combineCost e consome componentes
-          member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
-          if (step.consumeItems && step.consumeItems.length > 0) {
-            step.consumeItems.forEach(consumed => {
-              const idx = member.items.findIndex(it => it && it.id === consumed.id);
-              if (idx !== -1) member.items.splice(idx, 1);
+      if (step.type === "COMBINE") {
+        member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
+        if (step.consumeItems && step.consumeItems.length > 0) {
+          step.consumeItems.forEach(consumed => {
+            const idx = member.items.findIndex(it => it && it.id === consumed.id);
+            if (idx !== -1) member.items.splice(idx, 1);
+          });
+        }
+        member.items.push(step.item);
+
+        if (step.item.stats && teamObj && teamObj.stats) {
+          Object.keys(step.item.stats).forEach(stat => {
+            if (teamObj.stats[stat] !== undefined) {
+              teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 4);
+            }
+          });
+        }
+
+        this.onItemPurchased({
+          side,
+          champion: member,
+          item: step.item,
+          isCombined: true
+        });
+
+        this.onEvent({
+          type: "item",
+          side,
+          championName: member.name,
+          itemName: step.item.name,
+          text: `🛒 ${member.playerNick || member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) voltou à base e completou ${step.item.name} (${step.item.cost.toLocaleString()}g)!`,
+          time: this._formatTime()
+        });
+
+        boughtAny = true;
+      } else if (step.type === "COMPONENT" || step.type === "COMPLETE") {
+        if (member.items.length >= 6) {
+          const starterIdx = member.items.findIndex(it => it && (it.tier === "STARTER" || [1055, 1056, 1054, 1101, 3865].includes(it.id)));
+          if (starterIdx !== -1) {
+            const sold = member.items.splice(starterIdx, 1)[0];
+            const sellVal = Math.round((sold.cost || 400) * 0.4);
+            member.goldCurrent = (member.goldCurrent || 0) + sellVal;
+            this.onEvent({
+              type: "item_sell",
+              side,
+              championName: member.name,
+              text: `💰 ${member.playerNick || member.name} vendeu ${sold.name} (+${sellVal}g) na base para abrir espaço!`,
+              time: this._formatTime()
             });
           }
+        }
+
+        if (member.items.length < 6) {
+          member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
           member.items.push(step.item);
 
-          // Aplica bônus do item ao time
-          if (step.item.stats && teamObj.stats) {
+          if (step.item.stats && teamObj && teamObj.stats) {
             Object.keys(step.item.stats).forEach(stat => {
               if (teamObj.stats[stat] !== undefined) {
-                teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 4);
+                teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 6);
               }
             });
           }
@@ -6441,86 +6482,180 @@ class MatchSimulator {
             side,
             champion: member,
             item: step.item,
-            isCombined: true
+            isComponent: step.type === "COMPONENT"
           });
 
-          this.onEvent({
-            type: "item",
-            side,
-            championName: member.name,
-            itemName: step.item.name,
-            text: `🛒 ${member.playerNick || member.name} (${side === "blue" ? "Seu Time" : "CBLOL"}) completou ${step.item.name} (${step.item.cost.toLocaleString()}g)!`,
-            time: this._formatTime()
-          });
-
-          // Atualiza próximo item da build
-          member.nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
-        } else if (step.type === "COMPONENT" || step.type === "COMPLETE") {
-          // Se inventário cheio (6 slots), vende item inicial (Doran/Pet/Atlas) para liberar espaço no late game
-          if (member.items.length >= 6) {
-            const starterIdx = member.items.findIndex(it => it && (it.tier === "STARTER" || [1055, 1056, 1054, 1101, 3865].includes(it.id)));
-            if (starterIdx !== -1) {
-              const sold = member.items.splice(starterIdx, 1)[0];
-              const sellVal = Math.round((sold.cost || 400) * 0.4);
-              member.goldCurrent = (member.goldCurrent || 0) + sellVal;
-              this.onEvent({
-                type: "item_sell",
-                side,
-                championName: member.name,
-                text: `💰 ${member.playerNick || member.name} vendeu ${sold.name} (+${sellVal}g) para abrir espaço no inventário!`,
-                time: this._formatTime()
-              });
-            }
-          }
-
-          if (member.items.length < 6) {
-            member.goldCurrent = Math.max(0, (member.goldCurrent || 0) - step.cost);
-            member.items.push(step.item);
-
-            if (step.item.stats && teamObj.stats) {
-              Object.keys(step.item.stats).forEach(stat => {
-                if (teamObj.stats[stat] !== undefined) {
-                  teamObj.stats[stat] += Math.round((step.item.stats[stat] || 0) / 6);
-                }
-              });
-            }
-
-            this.onItemPurchased({
+          if (step.type === "COMPLETE") {
+            this.onEvent({
+              type: "item",
               side,
-              champion: member,
-              item: step.item,
-              isComponent: step.type === "COMPONENT"
+              championName: member.name,
+              itemName: step.item.name,
+              text: `🛒 ${member.playerNick || member.name} voltou à base e comprou ${step.item.name} (${step.cost.toLocaleString()}g)!`,
+              time: this._formatTime()
             });
-
-            if (step.type === "COMPLETE") {
-              this.onEvent({
-                type: "item",
-                side,
-                championName: member.name,
-                itemName: step.item.name,
-                text: `🛒 ${member.playerNick || member.name} comprou ${step.item.name} (${step.cost.toLocaleString()}g)!`,
-                time: this._formatTime()
-              });
-              member.nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
-            } else {
-              this.onEvent({
-                type: "item_component",
-                side,
-                championName: member.name,
-                itemName: step.item.name,
-                text: `📦 ${member.playerNick || member.name} comprou ${step.item.name} (${step.cost.toLocaleString()}g) para montar ${nextItem.name}!`,
-                time: this._formatTime()
-              });
-            }
+          } else {
+            this.onEvent({
+              type: "item_component",
+              side,
+              championName: member.name,
+              itemName: step.item.name,
+              text: `📦 ${member.playerNick || member.name} voltou à base e comprou ${step.item.name} (${step.cost.toLocaleString()}g) para montar ${nextItem.name}!`,
+              time: this._formatTime()
+            });
           }
+
+          boughtAny = true;
+        }
+      }
+    }
+
+    if (boughtAny) {
+      this._updateIndividualLeadsAndMvp();
+    }
+  }
+
+  _evaluateRecallTiming(member, role, side) {
+    if (!member || !member.alive) return;
+    if (member.recallState) return; // Já está em recall, na base ou voltando
+    if (this.gameSeconds < 90) return; // Early game antes do nascimento dos monstros
+
+    // Se o caçador está executando o gank dos 3 min (165s-200s), não interrompe
+    if (role === "jungle" && this.gameSeconds >= 165 && this.gameSeconds <= 200) return;
+
+    // Se objetivo neutro grande está em disputa imediata (< 20s), segura posição
+    const isDragonImminent = (this.nextDragonAt - this.gameSeconds > 0 && this.nextDragonAt - this.gameSeconds <= 20);
+    const isBaronImminent = (this.nextBaronAt - this.gameSeconds > 0 && this.nextBaronAt - this.gameSeconds <= 20);
+    if ((isDragonImminent || isBaronImminent) && (member.hpPct || 100) > 35) {
+      member.statusText = "Contestando Objetivo no Rio";
+      return;
+    }
+
+    // 1. Urgência de Vida / Recursos (Emergency Recall)
+    if (member.hpPct !== undefined && member.hpPct <= 28) {
+      member.recallState = "recalling";
+      member.recallEndsAt = this.gameSeconds + 8;
+      member.recallReason = "emergency_hp";
+      member.statusText = "Canalizando Retorno de Emergência (Pouca Vida)...";
+      return;
+    }
+
+    // 2. Avalia próximo item e ouro
+    const champ = getChampionById(member.id);
+    const oppMember = (side === "blue" ? this.redRosterState[role] : this.blueRosterState[role]);
+    const oppChamp = oppMember ? getChampionById(oppMember.id) : null;
+    const enemyTeamRoster = side === "blue" ? (this.redTeam ? this.redTeam.roster : null) : (this.blueTeam ? this.blueTeam.roster : null);
+    const nextItem = getRecommendedItemForChampion(champ, member.items, oppChamp, enemyTeamRoster);
+    if (!nextItem) return;
+
+    const step = getNextPurchaseStep(member.items, nextItem.id, member.goldCurrent || 0);
+    if (!step) return;
+
+    const goldCurrent = member.goldCurrent || 0;
+    if (goldCurrent < step.cost) return;
+
+    // 3. Avaliação da Onda de Tropas (Wave State & Pressure)
+    const lane = (role === "adc" || role === "support") ? "bot" : (role === "jungle" ? "mid" : role);
+    const rawPressure = this.lanePressures ? (this.lanePressures[lane] || 0) : 0;
+    const sidePressure = (side === "blue") ? rawPressure : -rawPressure;
+
+    // A) Mau Momento de Recall (Onda empurrada contra nossa torre):
+    // Se a onda está recuada sob nossa torre (sidePressure <= -6), sair agora perde 1-2 ondas e barricadas!
+    if (sidePressure <= -6 && (member.hpPct || 100) > 38) {
+      member.statusText = "Segurando a Rota (Limpando onda antes do B)";
+      return; // Permanece na rota para limpar a onda!
+    }
+
+    // B) Ganância por Item Maior vs Componente Menor:
+    // Se o ouro atual compra apenas um componente barato (< 500g) e o campeão está saudável (> 65% HP),
+    // ele prefere ficar na rota mais uma onda para juntar ouro para um spike maior!
+    if (step.cost < 500 && goldCurrent < 900 && (member.hpPct || 100) > 65) {
+      member.statusText = `Farmando na Rota (Aguardando Power Spike para ${nextItem.name})`;
+      return; // Permanece na rota!
+    }
+
+    // C) Momento Perfeito de Recall (Crash & Base) OU Spike Chave de Item:
+    member.recallState = "recalling";
+    member.recallEndsAt = this.gameSeconds + 8;
+    if (sidePressure >= 6) {
+      member.recallReason = "crash_and_base";
+      member.statusText = "Canalizando Retorno (Onda Crashada)...";
+    } else if (step.type === "COMBINE" || step.type === "COMPLETE") {
+      member.recallReason = "item_completed";
+      member.statusText = `Canalizando Retorno (${step.item.name} Pronto)...`;
+    } else {
+      member.recallReason = "component_spike";
+      member.statusText = `Canalizando Retorno (Comprar ${step.item.name})...`;
+    }
+  }
+
+  _updateChampionRecallsAndShopping(deltaSeconds = 2) {
+    const blueBase = { x: 188, y: 630 };
+    const redBase = { x: 812, y: 116 };
+
+    const updateRoster = (rosterState, side, teamObj) => {
+      if (!rosterState) return;
+      Object.keys(rosterState).forEach(role => {
+        const c = rosterState[role];
+        if (!c) return;
+
+        const baseCoords = (side === "blue") ? blueBase : redBase;
+
+        // Se está morto na base, pode comprar itens enquanto espera o renascimento
+        if (!c.alive) {
+          c.recallState = null;
+          c.recallEndsAt = 0;
+          this._processMemberShoppingAtBase(c, role, side, teamObj);
+          return;
+        }
+
+        // 1. Canalizando Recall (8 segundos)
+        if (c.recallState === "recalling") {
+          if (this.gameSeconds >= (c.recallEndsAt || 0)) {
+            // Concluiu o canal de retorno: surge na base!
+            c.recallState = "at_base";
+            c.x = baseCoords.x;
+            c.y = baseCoords.y;
+            c.hpPct = 100; // Curado na fonte
+            c.baseStayEndsAt = this.gameSeconds + 4; // Fica 4s na base comprando
+            c.statusText = "Na Base (Comprando Itens)";
+
+            // Compra na loja da base imediatamente
+            this._processMemberShoppingAtBase(c, role, side, teamObj);
+          }
+        }
+        // 2. Na Base Comprando & Curando
+        else if (c.recallState === "at_base") {
+          c.x = baseCoords.x;
+          c.y = baseCoords.y;
+          c.hpPct = 100;
+          if (this.gameSeconds >= (c.baseStayEndsAt || 0)) {
+            // Sai da base caminhando em direção à rota
+            c.recallState = "walking_back";
+            c.travelingBackUntil = this.gameSeconds + 12;
+            c.statusText = "Retornando para a Rota (com itens novos)";
+          }
+        }
+        // 3. Caminhando de Volta para a Rota
+        else if (c.recallState === "walking_back") {
+          if (this.gameSeconds >= (c.travelingBackUntil || 0)) {
+            c.recallState = null;
+            c.travelingBackUntil = 0;
+          }
+        }
+        // 4. Em Rota / Mapa: avalia decisão de recall
+        else {
+          this._evaluateRecallTiming(c, role, side);
         }
       });
     };
 
-    checkSide("blue", this.blueRosterState, this.blueTeam);
-    checkSide("red", this.redRosterState, this.redTeam);
+    updateRoster(this.blueRosterState, "blue", this.blueTeam);
+    updateRoster(this.redRosterState, "red", this.redTeam);
+  }
 
-    this._updateIndividualLeadsAndMvp();
+  _checkItemMilestones() {
+    this._updateChampionRecallsAndShopping(2);
   }
 
   _updateIndividualLeadsAndMvp() {
@@ -9193,6 +9328,8 @@ class MatchSimulator {
     killer.kills++;
     victim.deaths++;
     victim.alive = false;
+    victim.recallState = null;
+    victim.recallEndsAt = 0;
 
     // Dano e ouro individual realistas de combate do League
     const lethalDmg = 1800 + Math.floor(Math.random() * 1400) + Math.floor(this.gameSeconds * 1.6);
@@ -14196,19 +14333,29 @@ class MatchSimulator {
         c.hpPct = 0;
         return;
       }
-      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+      if (c.recallState === "at_base") {
         c.x = blueBase.x;
         c.y = blueBase.y;
-        c.statusText = "Na Base (Compras)";
+        c.statusText = c.statusText || "Na Base (Comprando Itens)";
         c.hpPct = 100;
         return;
       }
 
-      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+      if (c.hpPct === undefined) {
+        c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+      }
 
       let tx = blueBase.x, ty = blueBase.y, status = "Na Rota";
 
-      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+      if (c.recallState === "recalling") {
+        let safeX = 220, safeY = 320;
+        if (role === "mid") { safeX = 340; safeY = 480; }
+        else if (role === "adc") { safeX = 540; safeY = 640; }
+        else if (role === "support") { safeX = 520; safeY = 660; }
+        else if (role === "jungle") { safeX = 360; safeY = 540; }
+        tx = safeX; ty = safeY;
+        status = c.statusText || "Canalizando Retorno (B)...";
+      } else if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
         tx = 380 + (Math.random() * 30 - 15);
         ty = 250 + (Math.random() * 30 - 15);
         status = "Contestando Barão Na'Shor";
@@ -14219,19 +14366,19 @@ class MatchSimulator {
       } else if (role === "top") {
         tx = topClash.x - 20;
         ty = topClash.y + 14;
-        status = "Duelo no Topo";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Topo" : "Duelo no Topo";
       } else if (role === "mid") {
         tx = midClash.x - 16;
         ty = midClash.y + 16;
-        status = "Controle do Meio";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Meio" : "Controle do Meio";
       } else if (role === "adc") {
         tx = botClash.x - 14;
         ty = botClash.y + 10;
-        status = "Farmando no Bot";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Farmando no Bot";
       } else if (role === "support") {
         tx = botClash.x - 24;
         ty = botClash.y - 12;
-        status = "Proteção / Visão";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
         if (this.blueJungleCampLane) {
           const l = this.blueJungleCampLane;
@@ -14273,7 +14420,7 @@ class MatchSimulator {
           } else {
             tx = 382;
             ty = 480;
-            status = "Patrulhando a Selva";
+            status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para a Selva" : "Patrulhando a Selva";
           }
         }
       }
@@ -14313,19 +14460,29 @@ class MatchSimulator {
         c.hpPct = 0;
         return;
       }
-      if (this.gameSeconds < (c.travelingBackUntil || 0)) {
+      if (c.recallState === "at_base") {
         c.x = redBase.x;
         c.y = redBase.y;
-        c.statusText = "Na Base (Compras)";
+        c.statusText = c.statusText || "Na Base (Comprando Itens)";
         c.hpPct = 100;
         return;
       }
 
-      c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+      if (c.hpPct === undefined) {
+        c.hpPct = Math.max(20, Math.min(100, Math.round(95 - (c.deaths * 8) + (c.kills * 4))));
+      }
 
       let tx = redBase.x, ty = redBase.y, status = "Na Rota";
 
-      if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
+      if (c.recallState === "recalling") {
+        let safeX = 460, safeY = 130;
+        if (role === "mid") { safeX = 640; safeY = 280; }
+        else if (role === "adc") { safeX = 780; safeY = 480; }
+        else if (role === "support") { safeX = 790; safeY = 500; }
+        else if (role === "jungle") { safeX = 650; safeY = 220; }
+        tx = safeX; ty = safeY;
+        status = c.statusText || "Canalizando Retorno (B)...";
+      } else if (isBaronSpawningOrContested && ["jungle", "mid", "top"].includes(role)) {
         tx = 350 + (Math.random() * 30 - 15);
         ty = 210 + (Math.random() * 30 - 15);
         status = "Contestando Barão Na'Shor";
@@ -14336,19 +14493,19 @@ class MatchSimulator {
       } else if (role === "top") {
         tx = topClash.x + 20;
         ty = topClash.y - 14;
-        status = "Duelo no Topo";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Topo" : "Duelo no Topo";
       } else if (role === "mid") {
         tx = midClash.x + 16;
         ty = midClash.y - 16;
-        status = "Controle do Meio";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Meio" : "Controle do Meio";
       } else if (role === "adc") {
         tx = botClash.x + 14;
         ty = botClash.y - 10;
-        status = "Farmando no Bot";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Farmando no Bot";
       } else if (role === "support") {
         tx = botClash.x + 24;
         ty = botClash.y + 12;
-        status = "Proteção / Visão";
+        status = (c.recallState === "walking_back" || this.gameSeconds < (c.travelingBackUntil || 0)) ? "Retornando para o Bot" : "Proteção / Visão";
       } else if (role === "jungle") {
         if (this.redJungleCampLane) {
           const l = this.redJungleCampLane;
