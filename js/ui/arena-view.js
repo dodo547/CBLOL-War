@@ -2040,6 +2040,74 @@ export class ArenaView {
         `;
       }
 
+      let macroBriefingHtml = "";
+      if (decisionData.macroBriefing) {
+        const mb = decisionData.macroBriefing;
+        const f = mb.feasibility;
+        macroBriefingHtml = `
+          <div class="macro-briefing-panel ${f.pillClass || 'feasibility-med'}">
+            <div class="macro-briefing-header">
+              <div class="macro-briefing-badge-wrap">
+                <span class="macro-feasibility-pill ${f.pillClass}">${f.badge}</span>
+                <span class="macro-score-indicator">Índice Tático: <strong>${f.score > 0 ? '+' + f.score : f.score}</strong></span>
+              </div>
+              <span class="macro-briefing-time">📡 Briefing aos ${mb.formattedTime}</span>
+            </div>
+
+            <div class="macro-verdict-box">
+              <div class="macro-verdict-headline">
+                <span class="macro-verdict-tag">Veredito do Analista:</span>
+                <strong>${f.verdictTitle}:</strong> ${f.verdictDesc}
+              </div>
+              <div class="macro-verdict-recommendation">
+                🎯 <strong>Recomendação Competitiva:</strong> ${f.recommendation}
+              </div>
+            </div>
+
+            <div class="macro-tactical-grid">
+              <!-- Coluna 1: Mid Laner -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">🧙‍♂️</span>
+                  <span class="macro-col-title">Rota do Meio (Mid)</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.midPriority.color};">
+                  ${mb.midPriority.label}
+                </div>
+                <div class="macro-col-metric">⏱️ Rotação: <strong>${mb.midPriority.rotationTime}</strong></div>
+                <p class="macro-col-desc">${mb.midPriority.desc}</p>
+              </div>
+
+              <!-- Coluna 2: Rota Adjacente (Bot ou Top) -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">${mb.adjacentLane.lane === "bot" ? "🏹" : "🛡️"}</span>
+                  <span class="macro-col-title">${mb.adjacentLane.name}</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.adjacentLane.color};">
+                  ${mb.adjacentLane.label}
+                </div>
+                <div class="macro-col-metric">📍 Rio: <strong>${mb.adjacentLane.hasAdvantage ? "Prioridade Aliada" : (mb.adjacentLane.hasAdvantage === false ? "Vantagem Inimiga" : "Equilibrado")}</strong></div>
+                <p class="macro-col-desc">${mb.adjacentLane.desc}</p>
+              </div>
+
+              <!-- Coluna 3: Selva & Rotas Iniciais -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">🌲</span>
+                  <span class="macro-col-title">Rotas dos Caçadores</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.jungleContext.color};">
+                  ${mb.jungleContext.label}
+                </div>
+                <div class="macro-col-metric">${mb.jungleContext.smiteStatus}</div>
+                <p class="macro-col-desc">${mb.jungleContext.desc}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       statusBar.innerHTML = `
         <div class="decision-status-row">
           <div class="decision-team-stat blue-side">
@@ -2067,6 +2135,7 @@ export class ArenaView {
             </div>
           </div>
         </div>
+        ${macroBriefingHtml}
         ${campWarningBanner}
         ${scoutingHtml}
         <div class="decision-advice-pill">${advice}</div>

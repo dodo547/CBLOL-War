@@ -7007,6 +7007,283 @@ class MatchSimulator {
     }
   }
 
+  _generateObjectiveMacroBriefing(objectiveType, meta = {}) {
+    const goldDiff = this.blueScore.gold - this.redScore.gold;
+    const killDiff = this.blueScore.kills - this.redScore.kills;
+    const blueAlive = Object.values(this.blueRosterState).filter(c => c.alive).length;
+    const redAlive = Object.values(this.redRosterState).filter(c => c.alive).length;
+    const isBlueAhead = (goldDiff >= 1200) || (this.lanePressure >= 25);
+    const isBlueBehind = (goldDiff <= -1200) || (this.lanePressure <= -25);
+
+    // 1. Rota do Meio: Prioridade & Tempo de Rotação
+    const bMid = this.blueRosterState.mid;
+    const rMid = this.redRosterState.mid;
+    const midPressure = this.lanePressures ? Math.round(this.lanePressures.mid || 0) : 0;
+    const bMidNick = bMid ? (bMid.proPlayer?.nick || bMid.name) : "Mid Laner";
+    const rMidNick = rMid ? (rMid.proPlayer?.nick || rMid.name) : "Mid Rival";
+
+    let midPriority = {
+      status: "neutral",
+      label: "Disputa Neutra (±0)",
+      color: "#ffcc00",
+      rotationTime: "5-6s (Simultâneo)",
+      hasPrio: null,
+      desc: `Onda de tropas dividida no centro da rota. ${bMidNick} e ${rMidNick} disputam espaço e podem colapsar ao mesmo tempo no rio.`
+    };
+
+    if (!bMid || !bMid.alive) {
+      midPriority = {
+        status: "dead",
+        label: "Mid Abatido (Sem Roam)",
+        color: "#ff4d4d",
+        rotationTime: "Sem rotação (na base)",
+        hasPrio: false,
+        desc: `${bMidNick} está fora de combate. O time adversário terá superioridade numérica no rio!`
+      };
+    } else if (midPressure >= 6) {
+      midPriority = {
+        status: "strong_prio",
+        label: `Prioridade Total (+${midPressure})`,
+        color: "#00ff88",
+        rotationTime: "3-4s (Chega Primeiro)",
+        hasPrio: true,
+        desc: `${bMidNick} empurrou a onda contra ${rMidNick}. Tem roam livre para o covil sem perder tropas sob a torre!`
+      };
+    } else if (midPressure <= -6) {
+      midPriority = {
+        status: "pushed_in",
+        label: `Preso sob a Torre (-${Math.abs(midPressure)})`,
+        color: "#ff8800",
+        rotationTime: "8-10s (Atrasado)",
+        hasPrio: false,
+        desc: `${bMidNick} está limpando ondas sob a torre. Se rotacionar agora, o time perderá barricadas de torre e muito XP.`
+      };
+    }
+
+    // 2. Rota Adjacente: Bot Lane (Dragão/Elder) ou Top Lane (Arauto/Barão)
+    const isBotObjective = (objectiveType === "dragon" || objectiveType === "elder");
+    let adjacentLane = {};
+
+    if (isBotObjective) {
+      const bAdc = this.blueRosterState.adc;
+      const bSup = this.blueRosterState.support;
+      const botPressure = this.lanePressures ? Math.round(this.lanePressures.bot || 0) : 0;
+      const bAdcNick = bAdc ? (bAdc.proPlayer?.nick || bAdc.name) : "Atirador";
+      const bSupNick = bSup ? (bSup.proPlayer?.nick || bSup.name) : "Suporte";
+
+      if ((bAdc && !bAdc.alive) || (bSup && !bSup.alive)) {
+        adjacentLane = {
+          lane: "bot",
+          name: "Rota Inferior (BOT)",
+          status: "down",
+          label: "Baixa na Bot Lane",
+          color: "#ff4d4d",
+          hasAdvantage: false,
+          desc: "Um dos integrantes da bot lane está abatido. Iniciar o dragão sem o Atirador ou Suporte é suicídio."
+        };
+      } else if (botPressure >= 6) {
+        adjacentLane = {
+          lane: "bot",
+          name: "Rota Inferior (BOT)",
+          status: "dominant",
+          label: `Pressão Dominante (+${botPressure})`,
+          color: "#00ff88",
+          hasAdvantage: true,
+          desc: `${bAdcNick} e ${bSupNick} pressionam a rota inferior, garantem visão na entrada do rio e chegam antes no covil!`
+        };
+      } else if (botPressure <= -6) {
+        adjacentLane = {
+          lane: "bot",
+          name: "Rota Inferior (BOT)",
+          status: "pushed_in",
+          label: `Bot Sob Pressão (-${Math.abs(botPressure)})`,
+          color: "#ff8800",
+          hasAdvantage: false,
+          desc: `A dupla inimiga tem a iniciativa da rota e colocou sentinelas na boca do covil. Difícil aproximação.`
+        };
+      } else {
+        adjacentLane = {
+          lane: "bot",
+          name: "Rota Inferior (BOT)",
+          status: "even",
+          label: "Disputa Pareada (±0)",
+          color: "#ffcc00",
+          hasAdvantage: null,
+          desc: "Bot lanes em igualdade. Quem avançar para o rio precisará de auxílio do Suporte para abrir caminho."
+        };
+      }
+    } else {
+      // Arauto ou Barão (Top Lane)
+      const bTop = this.blueRosterState.top;
+      const topPressure = this.lanePressures ? Math.round(this.lanePressures.top || 0) : 0;
+      const bTopNick = bTop ? (bTop.proPlayer?.nick || bTop.name) : "Top Laner";
+
+      if (bTop && !bTop.alive) {
+        adjacentLane = {
+          lane: "top",
+          name: "Rota Superior (TOP)",
+          status: "down",
+          label: "Top Laner Abatido",
+          color: "#ff4d4d",
+          hasAdvantage: false,
+          desc: `${bTopNick} está fora de combate. O time adversário tem superioridade para dominar o rio norte.`
+        };
+      } else if (topPressure >= 6) {
+        adjacentLane = {
+          lane: "top",
+          name: "Rota Superior (TOP)",
+          status: "dominant",
+          label: `Top Dominante (+${topPressure})`,
+          color: "#00ff88",
+          hasAdvantage: true,
+          desc: `${bTopNick} tem vantagem de pressão no topo e pode descer para zoneamento com Teleporte pronto.`
+        };
+      } else if (topPressure <= -6) {
+        adjacentLane = {
+          lane: "top",
+          name: "Rota Superior (TOP)",
+          status: "pushed_in",
+          label: `Top Acuado (-${Math.abs(topPressure)})`,
+          color: "#ff8800",
+          hasAdvantage: false,
+          desc: `Top laner rival empurra a rota e tem a prioridade da folhagem do rio norte.`
+        };
+      } else {
+        adjacentLane = {
+          lane: "top",
+          name: "Rota Superior (TOP)",
+          status: "even",
+          label: "Topo Pareado (±0)",
+          color: "#ffcc00",
+          hasAdvantage: null,
+          desc: "Duelo isolado no topo. Ambos podem rotacionar com tempos semelhantes de caminhada."
+        };
+      }
+    }
+
+    // 3. Histórico e Rotas da Selva (Jungle Pathing & Early Game Context)
+    const bJg = this.blueRosterState.jungle;
+    const rJg = this.redRosterState.jungle;
+    const bJgNick = bJg ? (bJg.proPlayer?.nick || bJg.name) : "Caçador";
+    const rJgNick = rJg ? (rJg.proPlayer?.nick || rJg.name) : "Caçador Rival";
+    const smiteReady = bJg && bJg.alive;
+
+    let jungleContext = {
+      label: "Presença da Selva",
+      color: "#00b4d8",
+      smiteStatus: smiteReady ? "⚡ Golpe (Smite) Pronto" : "❌ Golpe Indisponível (Morto)",
+      desc: ""
+    };
+
+    if (!smiteReady) {
+      jungleContext.desc = `${bJgNick} está na base aguardando ressurgimento. Sem Golpe (Smite), o risco de roubo ou derrota é de 90%!`;
+      jungleContext.color = "#ff4d4d";
+    } else if (isBotObjective) {
+      if (this.blueJgStartChoice === "start_blue_buff") {
+        jungleContext.desc = `${bJgNick} iniciou no Buff Azul e fez rotação rumo ao Bot aos 03:00. Já estabeleceu controle de visão e presença territorial no quadrante sul!`;
+        jungleContext.label = "🔵 Pathing Rumo ao Bot (Posição Perfeita)";
+        jungleContext.color = "#00ff88";
+      } else if (this.blueJgStartChoice === "start_red_buff") {
+        jungleContext.desc = `${bJgNick} iniciou no Red Buff focando o Top no early game. Teve que descer o mapa para contestar este objetivo, exigindo sincronia com o time.`;
+        jungleContext.label = "🔴 Pathing Rumo ao Top (Reposicionando)";
+        jungleContext.color = "#ffaa00";
+      } else if (this.blueJgStartChoice === "invade_team") {
+        jungleContext.desc = `A invasão em equipe de Nível 1 conferiu vantagem em ouro e moral (+First Blood). ${bJgNick} dita o ritmo nos confrontos do rio.`;
+        jungleContext.label = "⚔️ Invasão Nível 1 (Liderança de Ritmo)";
+        jungleContext.color = "#00ff88";
+      } else if (this.blueJgStartChoice === "invade_vertical") {
+        jungleContext.desc = `O roubo furtivo vertical dividiu o mapa e garantiu 3 buffs para ${bJgNick}, que conta com vantagem de experiência para o objetivo.`;
+        jungleContext.label = "🥷 Selva Vertical (Vantagem de Nível)";
+        jungleContext.color = "#00ff88";
+      } else {
+        jungleContext.desc = `${bJgNick} está patrulhando o rio com Smite pronto para a contestação.`;
+      }
+    } else {
+      // Arauto ou Barão
+      if (this.blueJgStartChoice === "start_red_buff") {
+        jungleContext.desc = `${bJgNick} traçou rota sul-norte no early game e domina o quadrante do Arauto/Barão.`;
+        jungleContext.label = "🔴 Domínio do Quadrante Norte";
+        jungleContext.color = "#00ff88";
+      } else {
+        jungleContext.desc = `${bJgNick} tem Smite preparado e controla os acessos pelo rio norte.`;
+        jungleContext.label = "Controle de Selva Superior";
+      }
+    }
+
+    // 4. Cálculo Ponderado de Viabilidade e Veredito Competitivo
+    let score = 0;
+    if (isBlueAhead) score += 2;
+    if (isBlueBehind) score -= 2;
+
+    if (midPriority.status === "strong_prio") score += 2;
+    else if (midPriority.status === "pushed_in") score -= 2;
+    else if (midPriority.status === "dead") score -= 4;
+
+    if (adjacentLane.status === "dominant") score += 2;
+    else if (adjacentLane.status === "pushed_in") score -= 2;
+    else if (adjacentLane.status === "down") score -= 4;
+
+    if (smiteReady) {
+      if (isBotObjective && this.blueJgStartChoice === "start_blue_buff") score += 1;
+      if (!isBotObjective && this.blueJgStartChoice === "start_red_buff") score += 1;
+    } else {
+      score -= 5;
+    }
+
+    let feasibility = {
+      level: "medium",
+      score,
+      badge: "🟡 DISPUTA EQUILIBRADA • RISCO 50/50",
+      pillClass: "feasibility-med",
+      color: "#ffcc00",
+      verdictTitle: "Disputa Aberta: Janela de Risco Competitivo",
+      verdictDesc: "As rotas estão divididas ou sem prioridade clara. Qualquer pickoff ou atraso pode custar a luta de equipe.",
+      recommendation: "Mantenha sentinelas defensivas. Se o adversário iniciar sem visão, prepare o contra-ataque ou tente o roubo no Smite."
+    };
+
+    if (score >= 3) {
+      feasibility = {
+        level: "high",
+        score,
+        badge: "🟢 CONDIÇÕES IDEAIS • ALTA VIABILIDADE",
+        pillClass: "feasibility-high",
+        color: "#00ff88",
+        verdictTitle: "Janela Perfeita: Prioridade de Rotas e Suporte Total",
+        verdictDesc: "Seu time tem prioridade nas rotas adjacentes, superioridade de visão e chega primeiro no covil sem sacrificar tropas.",
+        recommendation: "ALTAMENTE RECOMENDADO: Iniciar o objetivo rapidamente ou forçar combate na aproximação do time adversário!"
+      };
+    } else if (score <= -1) {
+      feasibility = {
+        level: "low",
+        score,
+        badge: "🔴 DESFAVORÁVEL • RISCO DE EMBOSCADA",
+        pillClass: "feasibility-low",
+        color: "#ff4d4d",
+        verdictTitle: "Armadilha no Rio: Rotas Acuadas e Desvantagem",
+        verdictDesc: "Suas rotas estão pressionadas sob as torres e o time rival controla os acessos do rio. Forçar uma luta aqui pode gerar um wipe.",
+        recommendation: "RECOMENDAÇÃO COMPETITIVA: CEDA o objetivo deliberadamente e execute jogada de troca no mapa oposto (Cross-Map por barricadas/ouro no Top)!"
+      };
+    }
+
+    return {
+      objectiveType,
+      gameSeconds: this.gameSeconds,
+      formattedTime: this._formatTime(),
+      gameBalance: {
+        goldDiff,
+        killDiff,
+        blueAlive,
+        redAlive,
+        isAhead: isBlueAhead,
+        isBehind: isBlueBehind
+      },
+      midPriority,
+      adjacentLane,
+      jungleContext,
+      feasibility
+    };
+  }
+
   _checkNeutralObjectives() {
     // Não dispara novas decisões se uma estiver ativa ou se houve uma decisão recente (< 60s)
     if (this.activeDecision || (this.lastDecisionSec && (this.gameSeconds - this.lastDecisionSec) < 60)) {
@@ -7252,12 +7529,35 @@ class MatchSimulator {
         ];
       }
 
+      const macroBriefing = this._generateObjectiveMacroBriefing("elder");
+
+      if (macroBriefing && macroBriefing.feasibility) {
+        const fScore = macroBriefing.feasibility.score;
+        elderOptions.forEach(opt => {
+          if (opt.id === "base_race") {
+            if (fScore <= -1) opt.probability = Math.min(70, opt.probability + 8);
+          } else {
+            if (fScore >= 3) opt.probability = Math.min(92, opt.probability + 6);
+            else if (fScore <= -1) opt.probability = Math.max(35, opt.probability - 10);
+          }
+        });
+      }
+
+      this.onEvent({
+        type: "objective_briefing",
+        side: "blue",
+        icon: "🔥",
+        text: `🔥 DRAGÃO ANCIÃO (${this._formatTime()}): ${macroBriefing.feasibility.verdictTitle}! Mid: ${macroBriefing.midPriority.label} | Bot: ${macroBriefing.adjacentLane.label}`,
+        time: this._formatTime()
+      });
+
       const decisionData = {
         id: "elder",
         meta: {},
-        badge: "CLÍMAX • DRAGÃO ANCIÃO",
+        badge: `CLÍMAX • DRAGÃO ANCIÃO • ${this._formatTime()}`,
         title: "🔥 O DRAGÃO ANCIÃO SURGIU NO RIFT (DECISIVO)!",
-        subtitle: "O monstro mais letal do League concede Execução Instantânea. Qual a ordem final?",
+        subtitle: "Briefing decisivo de fim de jogo: analise o mapa e a viabilidade antes da luta final:",
+        macroBriefing,
         scouting: {
           intelTag: "📡 CLÍMAX DO RIFT • RECONHECIMENTO",
           enemyAction: elderEnemyAction
@@ -7409,12 +7709,35 @@ class MatchSimulator {
         ];
       }
 
+      const macroBriefing = this._generateObjectiveMacroBriefing("baron");
+
+      if (macroBriefing && macroBriefing.feasibility) {
+        const fScore = macroBriefing.feasibility.score;
+        baronOptions.forEach(opt => {
+          if (opt.id.includes("turn") || opt.id.includes("bait")) {
+            if (fScore >= 3) opt.probability = Math.min(92, opt.probability + 8);
+          } else {
+            if (fScore >= 3) opt.probability = Math.min(92, opt.probability + 6);
+            else if (fScore <= -1) opt.probability = Math.max(35, opt.probability - 10);
+          }
+        });
+      }
+
+      this.onEvent({
+        type: "objective_briefing",
+        side: "blue",
+        icon: "👑",
+        text: `👑 BARÃO NA'SHOR (${this._formatTime()}): ${macroBriefing.feasibility.verdictTitle}! Mid: ${macroBriefing.midPriority.label} | Top: ${macroBriefing.adjacentLane.label}`,
+        time: this._formatTime()
+      });
+
       const decisionData = {
         id: "baron",
         meta: {},
-        badge: "CONFRONTO LENDÁRIO",
+        badge: `CONFRONTO LENDÁRIO • ${this._formatTime()}`,
         title: "👑 O BARÃO NA'SHOR EMERGIU NO RIFT!",
-        subtitle: "O bônus de Mão do Barão fortalece tropas e destrói bases. Como o time vai agir?",
+        subtitle: "Briefing macro do objetivo lendário: avalie a viabilidade de forçar o monstro ou preparar emboscada:",
+        macroBriefing,
         scouting: {
           intelTag: "📡 TELEMETRIA DE BARÃO NA'SHOR",
           enemyAction: baronEnemyAction
@@ -7567,12 +7890,39 @@ class MatchSimulator {
         ];
       }
 
+      const macroBriefing = this._generateObjectiveMacroBriefing("dragon", { dType });
+
+      // Ajuste fino das probabilidades baseado no briefing macro
+      if (macroBriefing && macroBriefing.feasibility) {
+        const fScore = macroBriefing.feasibility.score;
+        dragonOptions.forEach(opt => {
+          if (opt.id === "cross_trade") {
+            if (fScore <= -1) opt.probability = Math.min(92, opt.probability + 10);
+            else if (fScore >= 3) opt.probability = Math.max(45, opt.probability - 6);
+          } else if (opt.id === "steal") {
+            if (fScore <= -1) opt.probability = Math.min(65, opt.probability + 6);
+          } else {
+            if (fScore >= 3) opt.probability = Math.min(92, opt.probability + 8);
+            else if (fScore <= -1) opt.probability = Math.max(35, opt.probability - 10);
+          }
+        });
+      }
+
+      this.onEvent({
+        type: "objective_briefing",
+        side: "blue",
+        icon: "🐲",
+        text: `🐲 DRAGÃO AOS ${this._formatTime()}: ${macroBriefing.feasibility.verdictTitle}! Mid: ${macroBriefing.midPriority.label} | Bot: ${macroBriefing.adjacentLane.label}`,
+        time: this._formatTime()
+      });
+
       const decisionData = {
         id: "dragon",
         meta: { dType },
-        badge: "OBJETIVO NEUTRO",
+        badge: `OBJETIVO NEUTRO • ${this._formatTime()}`,
         title: `🐲 DRAGÃO ${dType.toUpperCase()} NASCEU NO COVIL!`,
-        subtitle: `Ambas as equipes disputam o objetivo. Qual a decisão do seu time?`,
+        subtitle: `Análise macro completa do Rift para a disputa do Covil Inferior. Qual a decisão da sua equipe?`,
+        macroBriefing,
         scouting: {
           intelTag: "📡 RADAR DE OBJETIVO NEUTRO",
           enemyAction: dragonEnemyAction
@@ -7723,12 +8073,36 @@ class MatchSimulator {
         ];
       }
 
+      const macroBriefing = this._generateObjectiveMacroBriefing("herald");
+
+      if (macroBriefing && macroBriefing.feasibility) {
+        const fScore = macroBriefing.feasibility.score;
+        heraldOptions.forEach(opt => {
+          if (opt.id.includes("cross") || opt.id.includes("vision")) {
+            if (fScore <= -1) opt.probability = Math.min(92, opt.probability + 10);
+            else if (fScore >= 3) opt.probability = Math.max(45, opt.probability - 6);
+          } else {
+            if (fScore >= 3) opt.probability = Math.min(92, opt.probability + 8);
+            else if (fScore <= -1) opt.probability = Math.max(35, opt.probability - 10);
+          }
+        });
+      }
+
+      this.onEvent({
+        type: "objective_briefing",
+        side: "blue",
+        icon: "👁️",
+        text: `👁️ ARAUTO DO VALE (${this._formatTime()}): ${macroBriefing.feasibility.verdictTitle}! Mid: ${macroBriefing.midPriority.label} | Top: ${macroBriefing.adjacentLane.label}`,
+        time: this._formatTime()
+      });
+
       const decisionData = {
         id: "herald",
         meta: {},
-        badge: "PRESSÃO DE EARLY GAME",
+        badge: `PRESSÃO DE EARLY GAME • ${this._formatTime()}`,
         title: "👁️ O ARAUTO DO VALE SURGIU NO RIO SUPERIOR!",
-        subtitle: "O Olho do Arauto derruba barricadas de torre. Como vamos responder?",
+        subtitle: "Briefing macro do rio norte: avalie a viabilidade de disputar o monstro ou trocar recursos:",
+        macroBriefing,
         scouting: {
           intelTag: "📡 TELEMETRIA DE EARLY GAME",
           enemyAction: heraldEnemyAction
@@ -7748,11 +8122,11 @@ class MatchSimulator {
     if (this.isFinished || this.activeDecision) return false;
     if (this.gameSeconds < this.nextDynamicIncidentAt) return false;
 
-    // Evita sobreposição com objetivos neutros iminentes (janela de 45 segundos)
-    const isDragonNear = (this.nextDragonAt - this.gameSeconds > 0 && this.nextDragonAt - this.gameSeconds < 45);
-    const isBaronNear = (this.nextBaronAt - this.gameSeconds > 0 && this.nextBaronAt - this.gameSeconds < 45);
-    const isHeraldNear = (!this.heraldTaken && this.gameSeconds >= 450 && this.gameSeconds < 510);
-    const isElderNear = (this.nextElderAt - this.gameSeconds > 0 && this.nextElderAt - this.gameSeconds < 45);
+    // Evita sobreposição com objetivos neutros ativos ou iminentes (janela de 45 segundos)
+    const isDragonNear = (this.gameSeconds >= this.nextDragonAt && this.gameSeconds < 1680) || (this.nextDragonAt - this.gameSeconds > 0 && this.nextDragonAt - this.gameSeconds < 45);
+    const isBaronNear = (this.gameSeconds >= this.nextBaronAt) || (this.nextBaronAt - this.gameSeconds > 0 && this.nextBaronAt - this.gameSeconds < 45);
+    const isHeraldNear = (!this.heraldTaken && this.gameSeconds >= 450 && this.gameSeconds < 840);
+    const isElderNear = (this.gameSeconds >= this.nextElderAt) || (this.nextElderAt - this.gameSeconds > 0 && this.nextElderAt - this.gameSeconds < 45);
 
     if (isDragonNear || isBaronNear || isHeraldNear || isElderNear) {
       this.nextDynamicIncidentAt = this.gameSeconds + 60;
@@ -17767,6 +18141,74 @@ class ArenaView {
         `;
       }
 
+      let macroBriefingHtml = "";
+      if (decisionData.macroBriefing) {
+        const mb = decisionData.macroBriefing;
+        const f = mb.feasibility;
+        macroBriefingHtml = `
+          <div class="macro-briefing-panel ${f.pillClass || 'feasibility-med'}">
+            <div class="macro-briefing-header">
+              <div class="macro-briefing-badge-wrap">
+                <span class="macro-feasibility-pill ${f.pillClass}">${f.badge}</span>
+                <span class="macro-score-indicator">Índice Tático: <strong>${f.score > 0 ? '+' + f.score : f.score}</strong></span>
+              </div>
+              <span class="macro-briefing-time">📡 Briefing aos ${mb.formattedTime}</span>
+            </div>
+
+            <div class="macro-verdict-box">
+              <div class="macro-verdict-headline">
+                <span class="macro-verdict-tag">Veredito do Analista:</span>
+                <strong>${f.verdictTitle}:</strong> ${f.verdictDesc}
+              </div>
+              <div class="macro-verdict-recommendation">
+                🎯 <strong>Recomendação Competitiva:</strong> ${f.recommendation}
+              </div>
+            </div>
+
+            <div class="macro-tactical-grid">
+              <!-- Coluna 1: Mid Laner -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">🧙‍♂️</span>
+                  <span class="macro-col-title">Rota do Meio (Mid)</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.midPriority.color};">
+                  ${mb.midPriority.label}
+                </div>
+                <div class="macro-col-metric">⏱️ Rotação: <strong>${mb.midPriority.rotationTime}</strong></div>
+                <p class="macro-col-desc">${mb.midPriority.desc}</p>
+              </div>
+
+              <!-- Coluna 2: Rota Adjacente (Bot ou Top) -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">${mb.adjacentLane.lane === "bot" ? "🏹" : "🛡️"}</span>
+                  <span class="macro-col-title">${mb.adjacentLane.name}</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.adjacentLane.color};">
+                  ${mb.adjacentLane.label}
+                </div>
+                <div class="macro-col-metric">📍 Rio: <strong>${mb.adjacentLane.hasAdvantage ? "Prioridade Aliada" : (mb.adjacentLane.hasAdvantage === false ? "Vantagem Inimiga" : "Equilibrado")}</strong></div>
+                <p class="macro-col-desc">${mb.adjacentLane.desc}</p>
+              </div>
+
+              <!-- Coluna 3: Selva & Rotas Iniciais -->
+              <div class="macro-tactical-col">
+                <div class="macro-col-header">
+                  <span class="macro-col-icon">🌲</span>
+                  <span class="macro-col-title">Rotas dos Caçadores</span>
+                </div>
+                <div class="macro-col-status" style="color: ${mb.jungleContext.color};">
+                  ${mb.jungleContext.label}
+                </div>
+                <div class="macro-col-metric">${mb.jungleContext.smiteStatus}</div>
+                <p class="macro-col-desc">${mb.jungleContext.desc}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       statusBar.innerHTML = `
         <div class="decision-status-row">
           <div class="decision-team-stat blue-side">
@@ -17794,6 +18236,7 @@ class ArenaView {
             </div>
           </div>
         </div>
+        ${macroBriefingHtml}
         ${campWarningBanner}
         ${scoutingHtml}
         <div class="decision-advice-pill">${advice}</div>
