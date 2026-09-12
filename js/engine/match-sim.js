@@ -4630,6 +4630,37 @@ export class MatchSimulator {
 
     if (!victim || !victim.alive) return null;
 
+    // Evento de iniciação narrativa antes do kill (70% de chance, para não spam)
+    if (Math.random() < 0.70) {
+      const kName = killer ? (killer.proPlayer?.nick || killer.name) : "Campeão";
+      const vName = victim ? (victim.proPlayer?.nick || victim.name) : "Adversário";
+      const laneByRole = { top: "Rota Superior", mid: "Rota do Meio", adc: "Rota Inferior", support: "Rota Inferior", jungle: "Rio" };
+      const laneLabel = laneByRole[victimRole] || "Mapa";
+      const jgTemplates = [
+        `🎯 GANK PERFEITO! ${kName} apareceu pelo rio e fechou a pinça em ${vName} na ${laneLabel}!`,
+        `🌲 EMBOSCADA! ${kName} entrou pelo mato e iniciou o engage em ${vName}!`,
+        `⚡ FLASH FORWARD! ${kName} piscou para dentro e fechou o engage fatal em ${vName}!`
+      ];
+      const diveTemplates = [
+        `💥 DIVE LETAL! ${kName} mergulhou na backline e mirou direto em ${vName}!`,
+        `🗡️ ENGAGE BRUTAL! ${kName} avançou sobre ${vName} — sem saída na ${laneLabel}!`,
+        `⚔️ POWER SPIKE! ${kName} sentiu o momento e forçou a troca decisiva contra ${vName}!`
+      ];
+      const botTemplates = [
+        `🏹 ALL-IN! A dupla foi tudo em cima de ${vName} — combo devastador!`,
+        `🔥 ENGAGE DA DUPLA! ${kName} abriu o CC e ${vName} não tinha para onde correr!`,
+        `💥 COMBO PERFEITO! ${kName} conectou o engage e a dupla descarregou tudo em ${vName}!`
+      ];
+      const pool = killerRole === "jungle" ? jgTemplates : (victimRole === "adc" || victimRole === "support") ? botTemplates : diveTemplates;
+      this.onEvent({
+        type: "teamfight_start",
+        side: killerSide,
+        icon: killerRole === "jungle" ? "🌲" : "⚔️",
+        text: pool[Math.floor(Math.random() * pool.length)],
+        time: this._formatTime()
+      });
+    }
+
     killerScore.kills++;
     victimScore.deaths = (victimScore.deaths || 0) + 1;
     killerScore.gold += 300;
@@ -8487,6 +8518,12 @@ export class MatchSimulator {
     // Se não tinha Flash ou engage foi letal: Abate Confirmado!
     const noFlashNotice = (!hasFlash && victim.spells?.d) ? ` [Sem Flash disponível]` : ``;
     this._recordKill(winnerSide, victimSide, killerRole, victimRole, skillName, `${killText}${noFlashNotice}`);
+
+    // Transição pós-briga (40% de chance para skirmishes de rota — evita spam)
+    if (Math.random() < 0.40) {
+      const pressureLane = this.focusedLane || killerRole === "jungle" ? (this.blueJungleCampLane || "mid") : victimRole === "top" ? "top" : victimRole === "adc" ? "bot" : "mid";
+      this._triggerPostFightTransition(winnerSide, victimSide, 1, pressureLane);
+    }
     return true;
   }
 
@@ -8612,6 +8649,40 @@ export class MatchSimulator {
 
     const tacticBonus = (this.playerTactics === "aggressive") ? 5 : ((this.playerTactics === "defense") ? -4 : 0);
 
+    // Helper: emite evento de iniciação antes de um kill numa rota
+    const emitInitiation = (killSide, lane, killerRole, targetRole) => {
+      if (Math.random() > 0.85) return; // 85% de chance — spammar ligeiramente é melhor que não aparecer
+      const killerRoster = killSide === "blue" ? this.blueRosterState : this.redRosterState;
+      const victimRoster = killSide === "blue" ? this.redRosterState : this.blueRosterState;
+      const kChamp = killerRoster[killerRole];
+      const vChamp = victimRoster[targetRole];
+      const kName = kChamp ? (kChamp.proPlayer?.nick || kChamp.name) : "Campeão";
+      const vName = vChamp ? (vChamp.proPlayer?.nick || vChamp.name) : "Adversário";
+      const laneLabel = { top: "Rota Superior", mid: "Rota do Meio", bot: "Rota Inferior", jungle: "Rio" }[lane] || lane;
+
+      const templates = killerRole === "jungle" ? [
+        `🎯 GANK PERFEITO! ${kName} apareceu pelo rio e fechou a pinça em ${vName} na ${laneLabel}!`,
+        `🌲 EMBOSCADA! ${kName} entrou pelo mato e iniciou o engage em ${vName}!`,
+        `⚡ FLASH FORWARD DO CAÇADOR! ${kName} abriu no Flash e fechou sobre ${vName} — sem saída!`
+      ] : targetRole === "adc" || targetRole === "support" ? [
+        `🏹 ALL-IN NO 2v2! A dupla foi tudo em cima de ${vName}!`,
+        `🔥 ENGAGE DA DUPLA! ${kName} abriu o engage e o time seguiu!`,
+        `💥 COMBO PERFEITO! ${kName} conectou o CC e ${vName} não tinha para onde correr!`
+      ] : [
+        `⚡ POWER SPIKE! ${kName} sentiu que estava forte e forçou a troca contra ${vName}!`,
+        `🗡️ DUELO DE ROTA! ${kName} avançou sobre ${vName} com o engage perfeito!`,
+        `💥 DIVE NA TORRE! ${kName} mergulhou fundo e acertou o engage fatal em ${vName}!`
+      ];
+
+      this.onEvent({
+        type: "teamfight_start",
+        side: killSide,
+        icon: killerRole === "jungle" ? "🌲" : "⚔️",
+        text: templates[Math.floor(Math.random() * templates.length)],
+        time: this._formatTime()
+      });
+    };
+
     if (lane === "jungle") {
       if (!bJg || !bJg.alive || !rJg || !rJg.alive) return false;
       const bMidAlive = bMid && bMid.alive;
@@ -8679,10 +8750,13 @@ export class MatchSimulator {
       const rPower = (rTop.stats?.combat || 75) + (rTop.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
+          emitInitiation("blue", "top", "jungle", "top");
           this._handleSkirmishOutcome("blue", "red", "jungle", "top", "Punição sob a Torre", `🛡️ PUNIÇÃO SOB A TORRE NO TOPO! ${rTop.name} tentava pressionar debaixo da torre e ${bJg.name} puniu com um gank fulminante!`);
         } else if ((bTop.ultimateRank || 0) > (rTop.ultimateRank || 0)) {
+          emitInitiation("blue", "top", "top", "top");
           this._handleSkirmishOutcome("blue", "red", "top", "top", "Power Spike de Ultimate", `⚡ POWER SPIKE LETAL NO TOPO! ${bTop.name} usou a vantagem da Habilidade Suprema e destruiu ${rTop.name}!`);
         } else {
+          emitInitiation("blue", "top", "top", "top");
           this._handleSkirmishOutcome("blue", "red", "top", "top", "Solo Kill no Top", `⚡ SOLO KILL NO TOPO! ${bTop.name} superou ${rTop.name} na troca mecânica e garantiu o abate!`);
         }
         if (this.lanePressures) this.lanePressures.top = Math.min(100, (this.lanePressures.top || 0) + 18);
@@ -8692,10 +8766,13 @@ export class MatchSimulator {
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
+          emitInitiation("red", "top", "jungle", "top");
           this._handleSkirmishOutcome("red", "blue", "jungle", "top", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Topo e puniu a agressividade cega de ${bTop.name}!`);
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
+          emitInitiation("red", "top", "top", "top");
           this._handleSkirmishOutcome("red", "blue", "top", "top", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bTop.name} tentou forçar trocas em desvantagem de matchup contra ${rTop.name} e foi solado!`);
         } else if (blueOverextended && rJg && rJg.alive) {
+          emitInitiation("red", "top", "jungle", "top");
           this._handleSkirmishOutcome("red", "blue", "jungle", "top", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO TOPO! ${bTop.name} estava pressionando debaixo da torre e sofreu um flanco letal de ${rJg.name} pelas costas!`);
         } else if ((rTop.ultimateRank || 0) > (bTop.ultimateRank || 0)) {
           this._handleSkirmishOutcome("red", "blue", "top", "top", "Power Spike Inimigo", `🔴 POWER SPIKE RIVAL NO TOPO! ${rTop.name} atingiu a Ultimate primeiro e executou ${bTop.name}!`);
@@ -8750,8 +8827,10 @@ export class MatchSimulator {
       const rPower = (rMid.stats?.combat || 75) + (rMid.items?.length || 0) * 8 + rLevelPower + rGankBonus + rCampBonus + (Math.random() * 20);
       if (bPower > rPower + 8.5) {
         if (redOverextended && bJg && bJg.alive) {
+          emitInitiation("blue", "mid", "jungle", "mid");
           this._handleSkirmishOutcome("blue", "red", "jungle", "mid", "Punição sob a Torre", `⚡ PUNIÇÃO SOB A TORRE NO MEIO! ${rMid.name} avançou debaixo da torre e ${bJg.name} emboscou pela lateral!`);
         } else if ((bMid.ultimateRank || 0) > (rMid.ultimateRank || 0)) {
+          emitInitiation("blue", "mid", "mid", "mid");
           this._handleSkirmishOutcome("blue", "red", "mid", "mid", "Burst de Ultimate", `⚡ COMBO SUPREMO NO MID! Com vantagem de Ultimate Nível 6, ${bMid.name} explodiu ${rMid.name} num combo letal!`);
         } else {
           const isGank = bJg && bJg.alive && Math.random() < 0.35;
@@ -8759,6 +8838,7 @@ export class MatchSimulator {
           const kTxt = isGank
             ? `⚡ GANK PERFEITO NO MID! ${bJg.name} emboscou pela fumaça e abateu ${rMid.name}!`
             : `⚡ EXPLOSÃO NO MID! ${bMid.name} acertou todo o combo e abateu ${rMid.name}!`;
+          emitInitiation("blue", "mid", kRole, "mid");
           this._handleSkirmishOutcome("blue", "red", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         }
         if (this.lanePressures) this.lanePressures.mid = Math.min(100, (this.lanePressures.mid || 0) + 18);
@@ -8768,12 +8848,16 @@ export class MatchSimulator {
         return true;
       } else if (rPower > bPower + 8.5) {
         if (isCamped && this.playerTactics === "aggressive" && rJg && rJg.alive) {
+          emitInitiation("red", "mid", "jungle", "mid");
           this._handleSkirmishOutcome("red", "blue", "jungle", "mid", "Gank no Alvo Marcado", `⚠️ EMBOSCADA PREVISTA! O caçador adversário (${rJg.name}) acampava no Mid e puniu a agressividade forçada de ${bMid.name}!`);
         } else if (matchup && matchup.score < -0.5 && this.playerTactics === "aggressive") {
+          emitInitiation("red", "mid", "mid", "mid");
           this._handleSkirmishOutcome("red", "blue", "mid", "mid", "Solo Kill por Matchup", `⚠️ TROCA FORÇADA FATAL! ${bMid.name} tentou forçar trocas agressivas contra ${rMid.name} em desvantagem de matchup e foi explodido!`);
         } else if (blueOverextended && rJg && rJg.alive) {
+          emitInitiation("red", "mid", "jungle", "mid");
           this._handleSkirmishOutcome("red", "blue", "jungle", "mid", "Gank Punidor sob a Torre", `⚠️ GANK PUNIDOR NO MEIO! ${bMid.name} pressionava debaixo da torre inimiga e tomou um flanco letal de ${rJg.name}!`);
         } else if ((rMid.ultimateRank || 0) > (bMid.ultimateRank || 0)) {
+          emitInitiation("red", "mid", "mid", "mid");
           this._handleSkirmishOutcome("red", "blue", "mid", "mid", "Burst Rival de Ultimate", `🔴 OUTPLAY NO MID! ${rMid.name} atingiu a Ultimate primeiro e evaporou a barra de vida de ${bMid.name}!`);
         } else {
           const isGank = rJg && rJg.alive && Math.random() < 0.35;
@@ -8781,6 +8865,7 @@ export class MatchSimulator {
           const kTxt = isGank
             ? `🔴 GANK RIVAL NO MID! O caçador adversário apareceu pelas costas e abateu ${bMid.name}!`
             : `🔴 SOLO KILL NO MID! ${rMid.name} dominou a troca mágica e eliminou ${bMid.name}!`;
+          emitInitiation("red", "mid", kRole, "mid");
           this._handleSkirmishOutcome("red", "blue", kRole, "mid", isGank ? "Gank no Mid" : "Solo Kill no Mid", kTxt);
         }
         if (this.lanePressures) this.lanePressures.mid = Math.max(-100, (this.lanePressures.mid || 0) - 18);
@@ -8931,7 +9016,7 @@ export class MatchSimulator {
     const bJgName = winnerJg ? (winnerJg.proPlayer?.nick || winnerJg.name) : "Caçador";
     const bTopName = winnerTop ? (winnerTop.proPlayer?.nick || winnerTop.name) : "Top Laner";
 
-    if (!isForcedCounter && killsCount >= 2) {
+    if (!isForcedCounter && killsCount >= 1) {
       const rand = Math.random();
       if (rand < 0.28 && winnerJg && winnerJg.alive) {
         initiationType = "flank";
